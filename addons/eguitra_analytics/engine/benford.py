@@ -99,7 +99,7 @@ def first_digits(amounts, min_amount=1000):
         "p_value": _chi2_sf_even(chi2, 8) if chi2 is not None else None,
         "mad": mad_value, "conformity": code, "conformity_label": label,
         "suspicious": [r["d"] for r in rows if r["excess"]],
-        "warning": (f"Échantillon de {n} montant(s) : sous {MIN_SAMPLE} montants, le test n'est qu'indicatif."
+        "warning": (f"Échantillon de {n} montant{'s' if n > 1 else ''} : sous {MIN_SAMPLE} montants, le test n'est qu'indicatif."
                     if n < MIN_SAMPLE else None),
         "min_amount": min_amount,
     }
@@ -114,7 +114,7 @@ def first_two_digits(amounts, min_amount=1000):
         "n": n, "digits": rows, "chi2": chi2, "chi2_critical": None, "p_value": None,
         "mad": mad_value, "conformity": code, "conformity_label": label,
         "suspicious": [r["d"] for r in rows if r["excess"]],
-        "warning": (f"Échantillon de {n} montant(s) : le test des deux premiers chiffres demande plusieurs "
+        "warning": (f"Échantillon de {n} montant{'s' if n > 1 else ''} : le test des deux premiers chiffres demande plusieurs "
                     "centaines de montants." if n < 5 * MIN_SAMPLE else None),
         "min_amount": min_amount,
     }

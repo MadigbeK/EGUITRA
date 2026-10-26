@@ -95,9 +95,9 @@ class TestAxisproExpert(ApiCase):
         cls.policy.action_activate()
         cls.promoter = cls.env["res.partner"].create({"name": "Briqueterie du Fouta"})
         cls.bank = cls.env["res.partner"].create({"name": "Banque de démonstration", "is_company": True})
-        cls._create_user("expert", "cabinet", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
+        cls._create_user("expert", "cabinet", "associe", company_id=cls.cabinet.id, company_ids=[(6, 0, cls.cabinet.ids)])
         # Second consultant : verrouille la décision sur le modèle financier saisi par l'expert (quatre yeux).
-        cls._create_user("expert.relecteur", "cabinet", company_id=cls.cabinet.id,
+        cls._create_user("expert.relecteur", "cabinet", "associe", company_id=cls.cabinet.id,
                          company_ids=[(6, 0, cls.cabinet.ids)])
 
     def setUp(self):
@@ -194,6 +194,22 @@ class TestAxisproExpert(ApiCase):
         self.assertEqual((status, body["created"]), (200, 3), body)
         status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/actions/from-gaps", {}, token=self.token)
         self.assertEqual(body["created"], 0, "Pas de doublon d'une action encore ouverte")
+        # Le porteur lit le titre et la description : jamais l'intitulé ni l'aide d'un critère de la grille.
+        gaps = self.dossier.action_ids.filtered(lambda a: a.source == "gap")
+        criteria = self.dossier.policy_id.criterion_ids
+        visible = " ".join(gaps.mapped("name") + [d for d in gaps.mapped("description") if d])
+        for text in criteria.mapped("name") + [g for g in criteria.mapped("guidance") if g]:
+            self.assertNotIn(text, visible)
+        self.assertTrue(gaps.criterion_id and set(gaps.criterion_id.ids) <= set(criteria.ids),
+                        "Le cabinet garde le lien au critère")
+        self.dossier.evaluation_ids.filtered(lambda e: e.criterion_id == gaps[:1].criterion_id).deliverable = (
+            "Bilans certifiés des trois derniers exercices")
+        gaps[:1].state = "cancelled"
+        self.env["axispro.action"].from_gaps(self.dossier)
+        relance = self.dossier.action_ids.filtered(lambda a: a.source == "gap" and a.state == "todo"
+                                                   and a.criterion_id == gaps[:1].criterion_id)
+        self.assertEqual(relance.name, "Bilans certifiés des trois derniers exercices",
+                         "Titre : le document à produire saisi sur le critère")
         status, risks = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/risks",
                                   {"name": "Prix du ciment", "category": "market", "probability": 4, "impact": 5,
                                    "mitigation": "Contrat d'approvisionnement à prix ferme"}, token=self.token)
@@ -216,11 +232,10 @@ class TestAxisproExpert(ApiCase):
         internal = self.env["axispro.action"].create({"dossier_id": self.dossier.id, "name": "Note du cabinet",
                                                       "assignee": "cabinet"})
         ptoken = self.open_session("porteur.briques", app="portail")["access_token"]
-        status, view = self.call("GET", f"/portail/dossiers/{self.dossier.id}", token=ptoken)
-        self.assertEqual(status, 200, view)
-        task_ids = [t["id"] for t in view["tasks"]]
-        self.assertNotIn(internal.id, task_ids, "Les actions du cabinet restent internes")
-        self.assertEqual(len(task_ids), 4)
+        # Liste des actions du porteur (sans celles du cabinet) : /portail/dossiers/<id>/actions
+        # d'eguitra_portail (test_portail) ; l'ancienne vue du dossier est retirée.
+        status, _b = self.call("POST", f"/portail/actions/{internal.id}/report", {"comment": "Fait"}, token=ptoken)
+        self.assertEqual(status, 404, "Les actions du cabinet restent internes")
         status, _b = self.call("POST", f"/portail/actions/{foreign.id}/report", {"comment": "Fait"}, token=ptoken)
         self.assertEqual(status, 404, "Le porteur n'agit que sur son dossier")
         status, task = self.call("POST", f"/portail/actions/{action['id']}/report",

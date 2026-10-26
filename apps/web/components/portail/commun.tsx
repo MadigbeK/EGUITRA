@@ -53,52 +53,155 @@ export function iconeRubrique(nom: string | null | undefined): Icon {
   return ICONES_RUBRIQUE[nom] ?? (ICONES as Record<string, Icon>)[nom] ?? BookOpen;
 }
 
-/* ─── Dates ────────────────────────────────────────────────────────────── */
-
-const JOUR = 86_400_000;
-
-function debutDuJour(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+/**
+ * Lien d'une notification : une notification qui concerne un dossier ouvre la page sur ce dossier
+ * (?dossier=), même si son lien n'en dit rien ; sinon, un porteur à plusieurs dossiers arriverait sur
+ * celui qu'il avait choisi en dernier.
+ */
+export function lienNotification(n: { link: string | null; dossier: { id: number } | null }): string | null {
+  if (!n.link) return null;
+  if (!n.dossier || !n.link.startsWith("/portail") || /[?&]dossier=/.test(n.link)) return n.link;
+  const [avant, ancre] = n.link.split("#", 2);
+  const lien = `${avant}${avant!.includes("?") ? "&" : "?"}dossier=${n.dossier.id}`;
+  return ancre !== undefined ? `${lien}#${ancre}` : lien;
 }
 
-/** « aujourd'hui », « demain », « dans 5 jours », « il y a 3 jours », sinon la date. */
-export function quand(value: string | null | undefined): string {
+/* ─── Dates, à l'heure de Conakry ──────────────────────────────────────── */
+
+/**
+ * Fuseau de toutes les dates du portail : l'heure de Conakry, celle du cabinet et des rendez-vous, quel que
+ * soit le réglage de l'appareil (un porteur en déplacement, un poste réglé sur un autre pays). Le noyau
+ * envoie des instants UTC (suffixe Z) et des dates seules (AAAA-MM-JJ).
+ */
+export const FUSEAU = "Africa/Conakry";
+
+const JOUR = 86_400_000;
+const p2 = (n: number) => String(n).padStart(2, "0");
+const PARTIES = new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+/** Année, mois (1 à 12), jour, heure et minute d'un instant, à Conakry. */
+function parties(d: Date): { annee: number; mois: number; jour: number; heure: number; minute: number } {
+  const p: Record<string, string> = {};
+  for (const x of PARTIES.formatToParts(d)) p[x.type] = x.value;
+  return { annee: Number(p.year), mois: Number(p.month), jour: Number(p.day), heure: Number(p.hour) % 24, minute: Number(p.minute) };
+}
+
+/** Instant d'une date et heure lue à Conakry (sans hypothèse sur le décalage du fuseau). */
+function instantConakry(annee: number, mois: number, jour: number, h = 0, mi = 0): Date {
+  const essai = Date.UTC(annee, mois - 1, jour, h, mi);
+  const p = parties(new Date(essai));
+  return new Date(essai - (Date.UTC(p.annee, p.mois - 1, p.jour, p.heure, p.minute) - essai));
+}
+
+/** Instant d'une valeur de l'API ; une date seule (AAAA-MM-JJ) vaut midi, heure de Conakry. */
+export function instant(value: string): Date {
+  if (value.length === 10) {
+    const [a, m, j] = value.split("-").map(Number);
+    return instantConakry(a ?? 1970, m ?? 1, j ?? 1, 12);
+  }
+  return new Date(value);
+}
+
+/** Jour (AAAA-MM-JJ) à Conakry d'une valeur de l'API ou d'un instant ; une date seule reste telle quelle. */
+export function jourConakry(value: string | Date): string {
+  if (typeof value === "string" && value.length === 10) return value;
+  const p = parties(typeof value === "string" ? new Date(value) : value);
+  return `${p.annee}-${p2(p.mois)}-${p2(p.jour)}`;
+}
+
+/** Jour courant à Conakry (AAAA-MM-JJ). */
+export function aujourdhui(): string {
+  return jourConakry(new Date());
+}
+
+/**
+ * Date du calendrier (midi UTC) d'un jour AAAA-MM-JJ, pour l'arithmétique des grilles : on y lit le jour, le
+ * mois et le jour de la semaine en UTC (getUTCDate…), sans glissement d'un fuseau à l'autre.
+ */
+export function depuisCle(cle: string): Date {
+  const [a, m, j] = cle.split("-").map(Number);
+  return new Date(Date.UTC(a ?? 1970, (m ?? 1) - 1, j ?? 1, 12));
+}
+
+/** Jour AAAA-MM-JJ d'une date du calendrier (voir depuisCle). */
+export function cleDate(d: Date): string {
+  return `${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`;
+}
+
+/** Jour AAAA-MM-JJ décalé de n jours. */
+export function decalerJour(cle: string, n: number): string {
+  const d = depuisCle(cle);
+  d.setUTCDate(d.getUTCDate() + n);
+  return cleDate(d);
+}
+
+/** Écart en jours civils de a à b (deux jours AAAA-MM-JJ). */
+export function ecartJours(a: string, b: string): number {
+  return Math.round((depuisCle(b).getTime() - depuisCle(a).getTime()) / JOUR);
+}
+
+/** Date écrite à la française, à l'heure de Conakry (valeur de l'API, instant ou date du calendrier). */
+export function formatConakry(value: string | Date, options: Intl.DateTimeFormatOptions): string {
+  const d = typeof value === "string" ? instant(value) : value;
+  return d.toLocaleDateString("fr-FR", { ...options, timeZone: FUSEAU });
+}
+
+/** L'année n'est écrite que si elle n'est pas l'année en cours à Conakry. */
+function anneeSiAutre(value: string | Date): "numeric" | undefined {
+  return jourConakry(typeof value === "string" ? instant(value) : value).slice(0, 4) !== aujourdhui().slice(0, 4) ? "numeric" : undefined;
+}
+
+/**
+ * « aujourd'hui », « demain », « dans 5 jours », « il y a 3 jours », sinon la date (« 4 novembre »).
+ * avecLe : « le 4 novembre » pour une date, afin d'écrire « Dernier envoi le 4 novembre » comme
+ * « Dernier envoi hier ».
+ */
+export function quand(value: string | null | undefined, avecLe = false): string {
   if (!value) return "";
-  const d = new Date(value.length === 10 ? `${value}T12:00:00` : value);
-  const ecart = Math.round((debutDuJour(d) - debutDuJour(new Date())) / JOUR);
+  const ecart = ecartJours(aujourdhui(), jourConakry(value));
   if (ecart === 0) return "aujourd'hui";
   if (ecart === 1) return "demain";
   if (ecart === -1) return "hier";
   if (ecart > 1 && ecart < 30) return `dans ${ecart} jours`;
   if (ecart < -1 && ecart > -30) return `il y a ${-ecart} jours`;
-  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: ecart > 300 || ecart < -300 ? "numeric" : undefined });
+  const date = formatConakry(value, { day: "numeric", month: "long", year: ecart > 300 || ecart < -300 ? "numeric" : undefined });
+  return avecLe ? `le ${date}` : date;
 }
 
-/** « mardi 4 novembre, 10 h 30 » */
+/** « mardi 4 novembre, 10 h 30 » (l'année si ce n'est pas la courante), heure de Conakry. */
 export function dateLongue(value: string | null | undefined, avecHeure = true): string {
   if (!value) return "";
-  const d = new Date(value);
-  const jour = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-  if (!avecHeure) return jour;
-  return `${jour}, ${d.getHours()} h ${String(d.getMinutes()).padStart(2, "0")}`;
+  const jour = formatConakry(value, { weekday: "long", day: "numeric", month: "long", year: anneeSiAutre(value) });
+  return avecHeure ? `${jour}, ${heure(value)}` : jour;
 }
 
+/** « 10 h 30 », heure de Conakry. */
 export function heure(value: string | null | undefined): string {
   if (!value) return "";
-  const d = new Date(value);
-  return `${d.getHours()} h ${String(d.getMinutes()).padStart(2, "0")}`;
+  const p = parties(new Date(value));
+  return `${p.heure} h ${p2(p.minute)}`;
 }
 
-/** Valeur d'un champ datetime-local (heure locale) vers l'ISO UTC attendu par l'API, et retour. */
+/** « 25/10/2026, 14 h 05 », heure de Conakry. */
+export function dateHeure(value: string | null | undefined): string {
+  if (!value) return "–";
+  return `${formatConakry(value, { day: "2-digit", month: "2-digit", year: "numeric" })}, ${heure(value)}`;
+}
+
+/**
+ * Valeur d'un champ datetime-local, lue comme une heure de Conakry (et non celle de l'appareil), vers l'ISO
+ * UTC attendu par l'API ; null si le champ est vide ou illisible. Et l'inverse pour remplir le champ.
+ */
 export function versIso(local: string): string | null {
-  return local ? new Date(local).toISOString() : null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local);
+  if (!m) return null;
+  return instantConakry(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5])).toISOString();
 }
 
 export function versLocal(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  const p = parties(new Date(iso));
+  return `${p.annee}-${p2(p.mois)}-${p2(p.jour)}T${p2(p.heure)}:${p2(p.minute)}`;
 }
 
 export function taille(octets: number | null | undefined): string {
@@ -115,7 +218,33 @@ function icsDate(d: Date) {
 }
 
 function icsTexte(s: string) {
-  return s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/[,;]/g, (c) => `\\${c}`);
+  return s.replace(/\\/g, "\\\\").replace(/\r\n?|\n/g, "\\n").replace(/[,;]/g, (c) => `\\${c}`);
+}
+
+const OCTETS = new TextEncoder();
+
+/**
+ * Ligne d'un fichier .ics repliée à 75 octets (RFC 5545, § 3.1) : la suite passe à la ligne et commence par
+ * une espace, sans jamais couper un caractère accentué. Un titre ou un ordre du jour long ne rend plus le
+ * fichier illisible pour certains agendas.
+ */
+function plier(ligne: string): string {
+  const morceaux: string[] = [];
+  let courant = "";
+  let octets = 0;
+  for (const c of ligne) {
+    const n = OCTETS.encode(c).length;
+    // La première ligne a 75 octets ; les suivantes 74, après l'espace de continuation.
+    if (octets + n > (morceaux.length ? 74 : 75)) {
+      morceaux.push(courant);
+      courant = "";
+      octets = 0;
+    }
+    courant += c;
+    octets += n;
+  }
+  morceaux.push(courant);
+  return morceaux.join("\r\n ");
 }
 
 /** Télécharge un fichier .ics : le rendez-vous ou l'événement s'ajoute à l'agenda du téléphone. */
@@ -129,7 +258,7 @@ export function ajouterAuCalendrier({ titre, debut, fin, lieu, description, uid 
     "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", `DESCRIPTION:${icsTexte(titre)}`, "END:VALARM",
     "END:VEVENT", "END:VCALENDAR",
   ].filter(Boolean);
-  const url = URL.createObjectURL(new Blob([lignes.join("\r\n")], { type: "text/calendar;charset=utf-8" }));
+  const url = URL.createObjectURL(new Blob([`${lignes.map(plier).join("\r\n")}\r\n`], { type: "text/calendar;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = `${titre.replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 60) || "rendez-vous"}.ics`;

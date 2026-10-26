@@ -24,6 +24,7 @@ import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, Eye, Ey
 import { cx } from "@/lib/cx";
 import { Ondes } from "@/components/guilloche";
 import { tamponPlein, type TonEtat } from "@/lib/couleurs";
+import { ApiError, messageErreur } from "@/lib/erreurs";
 import { fmtAxe, fmtPct, fmtShort } from "@/lib/format";
 
 export { cx };
@@ -694,11 +695,16 @@ export function Squelette({ className }: { className?: string }) {
   return <div aria-hidden className={cx("n-squelette rounded-2xl", className)} />;
 }
 
-/** Erreur d'un appel, avec « Réessayer ». `titre` dit d'abord ce que l'échec laisse à l'écran. */
+/**
+ * Erreur d'un appel, avec « Réessayer ». `titre` dit d'abord ce que l'échec laisse à l'écran. Seul
+ * le message d'une réponse du service (ApiError), du délai dépassé ou de la coupure du réseau est
+ * montré : jamais celui du navigateur (« Failed to fetch », « Unexpected token… »), en anglais.
+ */
 export function ErrorBox({ error, onRetry, titre }: { error: unknown; onRetry?: () => void; titre?: ReactNode }) {
-  const message = error instanceof Error ? error.message : "Une erreur est survenue.";
+  // Une phrase déjà rédigée par l'écran passe telle quelle.
+  const message = typeof error === "string" && error.trim() ? error : messageErreur(error);
   // Refus de droits (403) : le motif du serveur, sous un titre qui le dit ; réessayer n'y changerait rien.
-  const refus = typeof error === "object" && error !== null && (error as { status?: unknown }).status === 403;
+  const refus = error instanceof ApiError && error.status === 403;
   const entete = titre ?? (refus ? "Non ouvert à votre profil" : null);
   return (
     <div role="alert" className="n-surgir flex items-start gap-3 rounded-xl border border-danger/15 bg-danger-doux px-4 py-3 text-sm text-danger">
@@ -921,13 +927,26 @@ export function Etapes({ steps }: { steps: Array<{ key: string; label: string; s
   );
 }
 
-/** Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire. */
+/**
+ * Bouton d'envoi de fichier : un libellé qui ouvre le sélecteur, à l'allure d'un bouton secondaire.
+ * Le champ est remis à zéro après chaque choix : après un refus, choisir à nouveau le même fichier
+ * (corrigé ou non) relance l'envoi, au lieu de ne rien faire.
+ */
 export function FileButton({ label, accept, onFile, small }: { label: string; accept?: string; onFile: (file: File) => void; small?: boolean }) {
   return (
     <label className={classesBouton("secondary", small ? "sm" : "md", "relative cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent-vif")}>
       <FileUpIcon className={small ? "h-3.5 w-3.5" : "h-4 w-4"} />
       {label}
-      <input type="file" className="sr-only" accept={accept} onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+      <input
+        type="file"
+        className="sr-only"
+        accept={accept}
+        onChange={(e) => {
+          const fichier = e.target.files?.[0];
+          e.target.value = "";
+          if (fichier) onFile(fichier);
+        }}
+      />
     </label>
   );
 }
@@ -978,7 +997,11 @@ export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: Array<
 /** Fenêtres ouvertes, de la plus ancienne à la plus récente : seule la dernière répond à Échap. */
 const PILE: string[] = [];
 
-export function Modal({ open, title, onClose, children, footer, wide }: { open: boolean; title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; wide?: boolean }) {
+/**
+ * Fenêtre modale. `alerte` : fenêtre qui exige une réponse (role « alertdialog »), décrite par
+ * l'élément d'identifiant `descriptionId` (lu à l'ouverture par les lecteurs d'écran).
+ */
+export function Modal({ open, title, onClose, children, footer, wide, alerte, descriptionId }: { open: boolean; title: string; onClose: () => void; children?: ReactNode; footer?: ReactNode; wide?: boolean; alerte?: boolean; descriptionId?: string }) {
   const fenetre = useRef<HTMLDivElement>(null);
   const titreId = useId();
   // onClose change à chaque rendu de l'écran : lu par référence, il ne relance pas l'effet (qui
@@ -991,8 +1014,8 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
     if (!open) return;
     const avant = document.activeElement as HTMLElement | null;
     const boite = fenetre.current;
-    // Le premier champ prend le focus ; à défaut, la fenêtre elle-même.
-    const premier = boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
+    // Le champ marqué data-autofocus, sinon le premier champ, prend le focus ; à défaut, la fenêtre elle-même.
+    const premier = boite?.querySelector<HTMLElement>("[data-autofocus]:not([disabled])") ?? boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
     (premier ?? boite)?.focus();
     PILE.push(titreId);
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -1021,8 +1044,10 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
   }, [open, titreId]);
   if (!open) return null;
   return (
-    <div className="n-apparaitre fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10">
-      <div ref={fenetre} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titreId} className={cx(PANNEAU, "n-surgir w-full outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
+    // Une fenêtre d'alerte (« Êtes-vous toujours là ? ») passe au-dessus de tout : recherche d'écran,
+    // panneau de discussion, autres fenêtres.
+    <div className={cx("n-apparaitre fixed inset-0 flex items-start justify-center overflow-y-auto bg-foret/45 p-4 md:p-10", alerte ? "z-[70]" : "z-50")}>
+      <div ref={fenetre} tabIndex={-1} role={alerte ? "alertdialog" : "dialog"} aria-modal="true" aria-labelledby={titreId} aria-describedby={descriptionId} className={cx(PANNEAU, "n-surgir w-full outline-none", wide ? "max-w-4xl" : "max-w-lg")}>
         <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-4">
           <h2 id={titreId} className="text-[19px] font-semibold leading-snug text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="-mr-1 grid h-9 w-9 place-items-center rounded-xl text-muted transition-colors hover:bg-panel-3 hover:text-ink" aria-label="Fermer">

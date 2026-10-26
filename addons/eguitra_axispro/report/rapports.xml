@@ -171,7 +171,8 @@
                 <t t-call="eguitra_axispro.report_axispro_style"/>
                 <h1>Pièces à fournir : <t t-esc="r['title']"/></h1>
                 <p class="muted small">Étape en cours : <t t-esc="r['gate']"/>. Consultant : <t t-esc="r['consultant']"/>.
-                    Liste établie le <t t-esc="r['generated']"/>. Déposez les pièces dans votre espace du portail.</p>
+                    Liste établie le <t t-esc="r['generated']"/> selon la politique d'évaluation
+                    <t t-esc="r['policy']"/>. Déposez les pièces dans votre espace du portail.</p>
 
                 <h2>Pièces attendues à cette étape</h2>
                 <table t-if="r['todo']">

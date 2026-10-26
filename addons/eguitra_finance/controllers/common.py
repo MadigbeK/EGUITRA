@@ -1,5 +1,6 @@
 """Outils communs aux routes de l'API Finance."""
 
+import math
 from datetime import date
 
 from odoo import fields
@@ -38,8 +39,9 @@ def without_settlement(data):
     """Profil Achats seul : la pièce sans son reste dû ni ses règlements, qui relèvent de la trésorerie ;
     son état de paiement (payée, partielle, non payée) reste lisible."""
     data["amount_residual"] = None
-    if "payments" in data:
-        data["payments"] = None
+    for key in ("payments", "payments_awaiting_approval"):
+        if key in data:
+            data[key] = None
     return data
 
 
@@ -83,10 +85,24 @@ def today():
 
 
 def as_float(value, name):
+    """Nombre reçu d'une application ; « NaN » et l'infini sont refusés comme tout nombre illisible."""
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError) as e:
         raise ApiError(400, "invalid_parameter", f"Nombre invalide : {name}.") from e
+    if not math.isfinite(number):
+        raise ApiError(400, "invalid_parameter", f"Nombre invalide : {name}.")
+    return number
+
+
+def as_int(value, name="identifiant"):
+    """Identifiant reçu d'une application : un entier, sinon refus (400) au lieu d'une erreur interne."""
+    if isinstance(value, bool):
+        raise ApiError(400, "invalid_parameter", f"Identifiant invalide : {name}.")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"Identifiant invalide : {name}.") from e
 
 
 def ref(record):
@@ -275,10 +291,25 @@ def move_summary(move):
     }
 
 
+def editable(move):
+    """Brouillon modifiable et supprimable dans les applications : facture, pièce d'achat, avoir, ou opération
+    diverse saisie dans les applications. Une écriture produite par le noyau (opération de banque ou de
+    caisse, règlement, virement, paie, dotation) se corrige par son propre écran : la réécrire ici la
+    détacherait de son origine."""
+    if move.state != "draft":
+        return False
+    if move.move_type != "entry":
+        return True
+    return bool(move.eguitra_manual_entry and not move.statement_line_id and not move.origin_payment_id)
+
+
 def move_detail(move):
     data = move_summary(move)
     lines = move.invoice_line_ids if move.is_invoice(include_receipts=True) else move.line_ids
     labels = analytic_labels(lines.mapped("analytic_distribution"))
+    # Règlement retenu par le circuit d'approbation : la pièce reste « à régler » au sens du noyau, mais un
+    # second règlement paierait deux fois ; « Régler » attend la décision.
+    awaiting = move._eguitra_payments_awaiting()
     data.update({
         "narration": move.narration or None,
         "lines": [
@@ -306,8 +337,13 @@ def move_detail(move):
             for a in request.env["ir.attachment"].search([("res_model", "=", "account.move"), ("res_id", "=", move.id)])
         ],
         "payments": move.invoice_payments_widget or None,
+        "payments_awaiting_approval": awaiting,
         "can_post": move.state == "draft",
-        "can_pay": move.state == "posted" and move.payment_state in ("not_paid", "partial") and move.is_invoice(),
+        "can_edit": editable(move),
+        # Seul un brouillon jamais validé se supprime ; sinon, il s'annule.
+        "can_delete": editable(move) and not move.posted_before,
+        "can_pay": (move.state == "posted" and move.payment_state in ("not_paid", "partial") and move.is_invoice()
+                    and not awaiting),
     })
     return data
 

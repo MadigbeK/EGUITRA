@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2 } from "@/components/icons";
 import { Badge, Card, DataTable, Etat, Field, Input, Kpi, Select } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
-import { fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
+import { fmtGNF, fmtInt, fmtMonth, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { INSECABLE, TauxMarge, fmtFixe, fmtVolume } from "./commun";
 import type { ProfitRow } from "./types";
 
@@ -54,6 +54,20 @@ interface Report {
   };
   structure: { companies: StructureDetail[] };
   controls: Control[];
+  fleet?: Flotte;
+}
+
+/** Indicateur de flotte du modèle du client : valeur, objectif, seuil d'alerte (%). */
+interface FleetKpi { value: number | null; target: number | null; alert: number | null; basis: number; below_alert: boolean }
+interface Flotte {
+  availability: FleetKpi; utilization: FleetKpi; fill_rate: FleetKpi; on_time: FleetKpi;
+  cancelled: number; fleet_age_years: number | null; vehicles: number; in_service: number;
+}
+
+/** Indicateur de flotte jugé contre l'objectif et le seuil d'alerte du client. */
+function KpiFlotte({ label, kpi, hint }: { label: string; kpi: FleetKpi; hint: string }) {
+  const tone = kpi.value === null || kpi.target === null ? "neutral" : kpi.below_alert ? "danger" : kpi.value < kpi.target ? "warn" : "ok";
+  return <Kpi label={label} value={fmtPct(kpi.value, 0)} tone={tone} hint={`${hint}${kpi.target !== null ? ` ; objectif ${fmtPct(kpi.target, 0)}, alerte sous ${fmtPct(kpi.alert, 0)}` : ""}`} />;
 }
 
 const GROUPS = [{ value: "vehicle", label: "Ensemble routier" }, { value: "route", label: "Route" }, { value: "driver", label: "Chauffeur" }, { value: "client", label: "Client" }, { value: "month", label: "Mois" }];
@@ -84,6 +98,21 @@ export function Rentabilite() {
           <Kpi label="Ensembles déficitaires" value={`${fmtInt(ind.deficit_vehicles)}${INSECABLE}/${INSECABLE}${fmtInt(ind.vehicles)}`} tone={ind.deficit_vehicles ? "danger" : "ok"} hint={ind.deficit_vehicles ? `Perte cumulée ${fmtShort(ind.deficit_loss)} après structure` : `Résultat net ${fmtShort(ind.net_result)}`} />
         </div>
       )}
+      {data?.fleet && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiFlotte label="Disponibilité de la flotte" kpi={data.fleet.availability} hint={`${fmtInt(data.fleet.in_service)} en service sur ${pluriel(data.fleet.vehicles, "ensemble")}, à ce jour`} />
+          <KpiFlotte label="Utilisation de la flotte" kpi={data.fleet.utilization} hint="Jours en rotation sur les jours de la période" />
+          <KpiFlotte label="Remplissage des citernes" kpi={data.fleet.fill_rate} hint={`Volume chargé sur capacité, ${pluriel(data.fleet.fill_rate.basis, "rotation")}`} />
+          <KpiFlotte label="Respect des délais" kpi={data.fleet.on_time} hint={data.fleet.on_time.basis ? `Retour dans la durée standard de la route, ${pluriel(data.fleet.on_time.basis, "rotation datée", "rotations datées")}` : "Dates de retour ou durées standard des routes à saisir"} />
+        </div>
+      )}
+      {data?.fleet && (
+        <p className="text-[13px] text-muted">
+          {pluriel(data.fleet.cancelled, "rotation annulée", "rotations annulées")} sur la période
+          {data.fleet.fleet_age_years !== null ? `, âge moyen de la flotte ${fmtFixe(data.fleet.fleet_age_years, 1)}${INSECABLE}ans` : ""}.
+          Objectifs et seuils repris du modèle d&apos;indicateurs du client.
+        </p>
+      )}
       {ind && (
         <p className="text-[13px] text-muted">
           Coûts déclarés {fmtShort(ind.declared_cost)}
@@ -94,7 +123,8 @@ export function Rentabilite() {
       <Card padded={false}>
         {!data ? <Etat error={error} onRetry={() => mutate()} /> : (
           <DataTable rows={data.rows} rowKey={(r, i) => `${r.key}-${i}`} empty="Aucune rotation validée sur la période." columns={[
-            { key: "label", label: GROUPS.find((g) => g.value === group)?.label ?? "Libellé" },
+            // Mois servis « 2026-01 » par le noyau : écrits « janv. 2026 », triés sur la clé.
+            { key: "label", label: GROUPS.find((g) => g.value === group)?.label ?? "Libellé", render: (r) => (group === "month" ? fmtMonth(r.label) : r.label), sortValue: (r) => r.label },
             { key: "rotations", label: "Rot.", align: "right", render: (r) => fmtInt(r.rotations) },
             { key: "km", label: "km", align: "right", render: (r) => fmtInt(r.km) },
             { key: "volume", label: "Volume (m³)", align: "right", render: (r) => fmtVolume(r.volume) },

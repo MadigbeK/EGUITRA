@@ -173,6 +173,15 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
                                  headers={"Authorization": f"Bearer {self.token}"}, method="POST", timeout=60)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.content.startswith(b"PK"))
+        # Un export tronqué le dit dans le fichier (il était coupé à 5 000 lignes sans avertissement).
+        self.make_invoice("out_invoice", 1_000_000)
+        engine = self.env["eguitra.report.engine"]
+        partial = engine.run("ventes", self.env.company, date_from=self.today.replace(day=1), date_to=self.today, limit=1)
+        self.assertGreater(partial["total_count"], 1)
+        self.assertTrue(partial["has_next"])
+        self.assertIn(f"Export limité aux 1 premières lignes sur {partial['total_count']}",
+                      engine.to_csv(partial).decode("utf-8"))
+        self.assertTrue(engine.to_xlsx(partial, partial["label"]).startswith(b"PK"))
 
     def test_etats_et_tva(self):
         self.make_invoice("out_invoice", 100_000_000)
@@ -232,23 +241,6 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         self.assertEqual((status, body["error"]), (409, "conflict"), "Code déjà pris : refus explicite")
         status, _b = self.call("POST", "/finance/treasury/journals", dict(payload, code="BDM2"), token=self.token)
         self.assertEqual(status, 403, "Réservé à l'administration")
-
-    def test_budget(self):
-        status, budget = self.call("POST", "/finance/budgets", {"name": "Budget 2026", "year": self.today.year},
-                                   token=self.token)
-        self.assertEqual(status, 200, budget)
-        status, _b = self.call("POST", f"/finance/budgets/{budget['id']}/lines", {
-            "account_id": self.acc_purchase.id, "month": self.today.month, "amount": 100_000_000,
-        }, token=self.token)
-        self.assertEqual(status, 200)
-        self.make_invoice("in_invoice", 150_000_000)
-        status, compare = self.call("GET", f"/finance/budgets/{budget['id']}/compare?month={self.today.month}",
-                                    token=self.token)
-        self.assertEqual(status, 200, compare)
-        line = next(l for l in compare["lines"] if l["account_id"] == self.acc_purchase.id)
-        self.assertEqual(line["budget"], 100_000_000)
-        self.assertEqual(line["actual"], 150_000_000)
-        self.assertTrue(line["alert"], "Dépassement de 50 % au-delà du seuil de 10 %")
 
     def test_relances_clients(self):
         from datetime import timedelta

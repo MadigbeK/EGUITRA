@@ -3,42 +3,60 @@
 import { useState } from "react";
 import { Download, FileSpreadsheet, FileText, Printer, ScrollText } from "@/components/icons";
 import { CachetDocument } from "@/components/brand";
-import { Badge, Button, Card, DataTable, Etat, Segmented } from "@/components/ui";
+import { Badge, Button, Card, DataTable, ErrorBox, Etat, Segmented } from "@/components/ui";
 import { apiDownload, useApi } from "@/lib/api-client";
 import { ACTION_STATE, FUNDING_STATE, GATE_DECISION, INSTRUMENTS, RECO, RISK_LEVEL, STATUS_LABELS, type ActionState, type DossierDetail, type FundingState, type Indicators, type JournalEntry, type RiskLevel, type StandardDoc } from "@/lib/axispro-types";
-import { fmtDate, fmtDateTime, fmtPct, fmtShort } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDateTime, fmtDec, fmtInt, fmtPct, fmtRatio } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { PuceCompartiment, arrondi, montant } from "./commun";
+import { PuceCompartiment, montant, scoreEcrit, useRetour } from "./commun";
 
-/** Journal du dossier : statuts des critères, dépôts, passages de gate, décisions, révisions, imports. */
+/** Plafond de lecture du journal : les 500 dernières inscriptions, puis jusqu'à 2 000 à la demande. */
+const JOURNAL_COURT = 500;
+const JOURNAL_LONG = 2000;
+
+/** Journal du dossier : statuts des critères, dépôts, passages de gate, décisions, révisions, imports,
+ * équipe, portail du porteur et état du dossier. */
 export function Journal({ d }: { d: DossierDetail }) {
   const [kind, setKind] = useState<"" | JournalEntry["kind"]>("");
-  const { data, error, mutate } = useApi<JournalEntry[]>(`/axispro/dossiers/${d.id}/journal?limit=500`);
-  if (!data) return <Etat error={error} onRetry={() => mutate()} />;
-  const rows = kind ? data.filter((j) => j.kind === kind) : data;
+  const [limite, setLimite] = useState(JOURNAL_COURT);
+  const { data, error, mutate } = useApi<JournalEntry[]>(`/axispro/dossiers/${d.id}/journal?limit=${limite}`);
   return (
-    <Card
-      title="Journal du dossier"
-      padded={false}
-      actions={
-        <Segmented label="Nature" value={kind} onChange={setKind} options={[
-          { key: "", label: "Tout" }, { key: "status", label: "Statuts" }, { key: "document", label: "Data room" },
-          { key: "gate", label: "Gates" }, { key: "decision", label: "Décisions" }, { key: "revision", label: "Révisions" }, { key: "import", label: "Imports" },
-          { key: "assignment", label: "Équipe" },
-        ]} />
-      }
-    >
-      <DataTable dense rows={rows} rowKey={(j) => j.id} empty="Aucune inscription." columns={[
-        { key: "date", label: "Date", render: (j) => <span className="whitespace-nowrap">{fmtDateTime(j.date)}</span> },
-        { key: "user", label: "Par" },
-        { key: "kind", label: "Nature", render: (j) => <Badge tone={j.kind === "decision" ? "accent" : j.kind === "gate" ? "ok" : "neutral"}>{j.kind_label}</Badge> },
-        {
-          key: "detail",
-          label: "Détail",
-          render: (j) => (j.kind === "status" ? <span><b>{j.criterion}</b> : {j.before} → {j.after}</span> : j.kind === "assignment" ? <span>{j.note} : {j.before} → <b>{j.after}</b></span> : <span>{j.note}</span>),
-        },
-      ]} />
-    </Card>
+    <Etat data={data} error={error} onRetry={() => void mutate()} label="Chargement du journal…">
+      {(entries: JournalEntry[]) => {
+        const rows = kind ? entries.filter((j) => j.kind === kind) : entries;
+        const borne = entries.length >= limite;
+        return (
+          <Card
+            title="Journal du dossier"
+            padded={false}
+            actions={
+              <Segmented label="Nature" value={kind} onChange={setKind} options={[
+                { key: "", label: "Tout" }, { key: "status", label: "Statuts" }, { key: "document", label: "Data room" },
+                { key: "gate", label: "Gates" }, { key: "decision", label: "Décisions" }, { key: "revision", label: "Révisions" }, { key: "import", label: "Imports" },
+                { key: "assignment", label: "Équipe" }, { key: "portal", label: "Portail" }, { key: "state", label: "État" },
+              ]} />
+            }
+          >
+            <DataTable dense rows={rows} rowKey={(j) => j.id} empty="Aucune inscription." columns={[
+              { key: "date", label: "Date", render: (j) => <span className="whitespace-nowrap">{fmtDateTime(j.date)}</span> },
+              { key: "user", label: "Par" },
+              { key: "kind", label: "Nature", render: (j) => <Badge tone={j.kind === "decision" ? "accent" : j.kind === "gate" ? "ok" : "neutral"}>{j.kind_label}</Badge> },
+              {
+                key: "detail",
+                label: "Détail",
+                render: (j) => (j.kind === "status" ? <span><b>{j.criterion}</b> : {j.before} → {j.after}</span> : j.kind === "assignment" || j.kind === "state" ? <span>{j.note ? `${j.note} : ` : ""}{j.before} → <b>{j.after}</b></span> : <span>{j.note}</span>),
+              },
+            ]} />
+            {borne && (
+              <p className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2 text-[12px] text-muted">
+                Les {fmtInt(entries.length)} inscriptions les plus récentes.
+                {limite < JOURNAL_LONG && <Button size="sm" variant="ghost" onClick={() => setLimite(JOURNAL_LONG)}>Afficher jusqu&apos;à {fmtInt(JOURNAL_LONG)} inscriptions</Button>}
+              </p>
+            )}
+          </Card>
+        );
+      }}
+    </Etat>
   );
 }
 
@@ -52,23 +70,30 @@ interface ReportData {
   fundings: Array<{ funder: string; instrument: string; amount_requested: number; amount_granted: number; state: FundingState }>;
   seal: { sealed: boolean; intact?: boolean; unchanged?: boolean | null; fingerprint?: string; date: string; decision: string } | null;
   gaps: DossierDetail["gaps"];
+  /** Dossier tel que le rapport l'a lu (scores à jour, même si la fiche affichée est plus ancienne). */
+  dossier?: { scoring: DossierDetail["scoring"] };
 }
 
 /** Rapport de décision : PDF scellé, classeur au plan du modèle du cabinet, fiche d'évaluation,
  * export JSON, data room compressée et liste des pièces à fournir ; aperçu à l'écran. */
 export function Rapport({ d }: { d: DossierDetail }) {
   const { data, error, mutate } = useApi<ReportData>(`/axispro/dossiers/${d.id}/report`);
-  if (!data) return <Etat error={error} onRetry={() => mutate()} />;
-  const s = d.scoring;
+  const { envoyer, enCours, occupe, bandeau } = useRetour();
+  if (!data) return <Etat error={error} onRetry={() => void mutate()} label="Préparation du rapport…" />;
+  // Les scores viennent du rapport lui-même, lu après la dernière écriture.
+  const s = data.dossier?.scoring ?? d.scoring;
+  const telecharger = (cle: string, path: string, nom: string) => void envoyer(() => apiDownload(path, nom), undefined, cle);
   const ref = d.reference.replace(/\//g, "-");
   const missing = data.documents.filter((x) => x.required && x.due && !x.available);
   return (
     <div className="space-y-4">
+      {error && <ErrorBox error={error} onRetry={() => void mutate()} titre="Rapport non mis à jour" />}
+      {bandeau}
       <div className="no-print flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => apiDownload(`/axispro/dossiers/${d.id}/report.pdf`, `${ref}_rapport_comite.pdf`)}><FileText className="h-4 w-4" /> Rapport du comité (PDF)</Button>
-        <Button onClick={() => apiDownload(`/axispro/dossiers/${d.id}/report.xlsx`, `${ref}_evaluation.xlsx`)}><FileSpreadsheet className="h-4 w-4" /> Classeur d&apos;évaluation</Button>
-        <Button onClick={() => apiDownload(`/axispro/dossiers/${d.id}/export.json`, `${ref}_evaluation.json`)}><Download className="h-4 w-4" /> Export JSON</Button>
-        <Button onClick={() => apiDownload(`/axispro/dossiers/${d.id}/pieces.pdf`, `${ref}_pieces_a_fournir.pdf`)}><ScrollText className="h-4 w-4" /> Pièces à fournir (PDF)</Button>
+        <Button variant="primary" loading={enCours === "pdf"} disabled={occupe} onClick={() => telecharger("pdf", `/axispro/dossiers/${d.id}/report.pdf`, `${ref}_rapport_comite.pdf`)}><FileText className="h-4 w-4" /> Rapport du comité (PDF)</Button>
+        <Button loading={enCours === "xlsx"} disabled={occupe} onClick={() => telecharger("xlsx", `/axispro/dossiers/${d.id}/report.xlsx`, `${ref}_evaluation.xlsx`)}><FileSpreadsheet className="h-4 w-4" /> Classeur d&apos;évaluation</Button>
+        <Button loading={enCours === "json"} disabled={occupe} onClick={() => telecharger("json", `/axispro/dossiers/${d.id}/export.json`, `${ref}_evaluation.json`)}><Download className="h-4 w-4" /> Export JSON</Button>
+        <Button loading={enCours === "pieces"} disabled={occupe} onClick={() => telecharger("pieces", `/axispro/dossiers/${d.id}/pieces.pdf`, `${ref}_pieces_a_fournir.pdf`)}><ScrollText className="h-4 w-4" /> Pièces à fournir (PDF)</Button>
         <Button onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimer l&apos;aperçu</Button>
       </div>
       <Card title="Rapport de décision pour le comité">
@@ -80,14 +105,14 @@ export function Rapport({ d }: { d: DossierDetail }) {
             <div><div className="text-xs text-muted">Besoin de financement</div>{montant(d, d.financing_need)}</div>
           </div>
           <div className="rounded-lg bg-panel-2 p-3">
-            <b>Recommandation : {RECO[s.recommendation].label}</b> ({s.classification}). Project Readiness {arrondi(s.readiness, 1)}, APD Readiness {arrondi(s.apd, 1)}, Bankability {arrondi(s.bankability, 1)} ; complétude {arrondi(s.completeness)} %, data room {arrondi(s.dataroom_completeness)} %. Knock-outs actifs : {s.knockouts.map((k) => `${k.code} ${k.name}`).join(", ") || "aucun"} ; critiques manquants hors knock-out : {s.critical_missing_excl_ko}.
+            <b>Recommandation : {RECO[s.recommendation].label}</b> ({s.classification}). Project Readiness {scoreEcrit(s.readiness)}, APD Readiness {scoreEcrit(s.apd)}, Bankability {scoreEcrit(s.bankability)} ; complétude {scoreEcrit(s.completeness)}{INSECABLE}%, data room {scoreEcrit(s.dataroom_completeness)}{INSECABLE}%. Knock-outs actifs : {s.knockouts.map((k) => `${k.code} ${k.name}`).join(", ") || "aucun"} ; critiques manquants hors knock-out : {fmtInt(s.critical_missing_excl_ko)}.
             <div className="mt-1 text-muted">{s.recommendation_detail}</div>
           </div>
           <div>
             <b>Stage gates.</b>
             <ul className="mt-1 grid grid-cols-1 gap-1 md:grid-cols-2">
               {s.gates.map((g) => (
-                <li key={g.code} className="flex items-start gap-2"><Badge tone={GATE_DECISION[g.decision].tone}>{GATE_DECISION[g.decision].label}</Badge><span><b>{g.code}</b> {g.name}{g.min_completeness ? ` (complétude minimale ${arrondi(g.min_completeness)} %)` : ""} : <span className="text-muted">{g.motifs.join(" ")}</span></span></li>
+                <li key={g.code} className="flex items-start gap-2"><Badge tone={GATE_DECISION[g.decision].tone}>{GATE_DECISION[g.decision].label}</Badge><span><b>{g.code}</b> {g.name}{g.min_completeness ? ` (complétude minimale ${fmtPct(g.min_completeness, 0)})` : ""} : <span className="text-muted">{g.motifs.join(" ")}</span></span></li>
               ))}
             </ul>
           </div>
@@ -104,14 +129,14 @@ export function Rapport({ d }: { d: DossierDetail }) {
           )}
           {data.financial && (
             <div>
-              <b>Modèle financier.</b> VAN {fmtShort(data.financial.indicators.npv)} au taux de {fmtPct(data.financial.params.discount_rate, 1)}, TRI du projet {fmtPct(data.financial.indicators.irr_project)}, TRI des fonds propres {fmtPct(data.financial.indicators.irr_equity)}, DSCR minimal {ratio(data.financial.indicators.dscr_min)} (exigé {ratio(data.financial.params.dscr_target)}), délai de récupération {annees(data.financial.indicators.payback)}, apport des promoteurs {fmtPct(data.financial.indicators.equity_share, 0)}. Plan de financement initial {data.financial.financing_plan.gap >= 0 ? "équilibré" : `déséquilibré de ${fmtShort(-data.financial.financing_plan.gap)}`}.
+              <b>Modèle financier.</b> VAN {montant(d, data.financial.indicators.npv)} au taux de {fmtPct(data.financial.params.discount_rate, 1)}, TRI du projet {fmtPct(data.financial.indicators.irr_project)}, TRI des fonds propres {fmtPct(data.financial.indicators.irr_equity)}, DSCR minimal {ratio(data.financial.indicators.dscr_min)} (exigé {ratio(data.financial.params.dscr_target)}), délai de récupération {annees(data.financial.indicators.payback)}, apport des promoteurs {fmtPct(data.financial.indicators.equity_share, 0)}. Plan de financement initial {data.financial.financing_plan.gap >= 0 ? "équilibré" : `déséquilibré de ${montant(d, -data.financial.financing_plan.gap)}`}.
               {data.financial.alerts.length > 0 && <ul className="ml-5 mt-1 list-disc text-danger">{data.financial.alerts.map((a) => <li key={a}>{a}</li>)}</ul>}
             </div>
           )}
           {data.risks.length > 0 && (
             <div>
               <b>Principaux risques.</b>
-              <ul className="ml-5 list-disc">{data.risks.slice(0, 6).map((r) => <li key={r.name}>{r.name} ({RISK_LEVEL[r.level].label.toLowerCase()}, criticité {r.score}){r.mitigation ? ` : ${r.mitigation}` : ""}</li>)}</ul>
+              <ul className="ml-5 list-disc">{data.risks.slice(0, 6).map((r) => <li key={r.name}>{r.name} ({RISK_LEVEL[r.level].label.toLowerCase()}, criticité {fmtInt(r.score)}){r.mitigation ? ` : ${r.mitigation}` : ""}</li>)}</ul>
             </div>
           )}
           {data.actions.length > 0 && (
@@ -136,7 +161,7 @@ export function Rapport({ d }: { d: DossierDetail }) {
             </div>
           )}
           <div className="border-t border-line pt-3 text-xs text-muted">
-            Politique appliquée : {data.policy.name}, version {data.policy.version}{data.policy.date_active ? ` en vigueur depuis le ${fmtDate(data.policy.date_active)}` : ""}. Seuils : BANKABLE {data.policy.thresholds.bankable}, APD READY {data.policy.thresholds.go}, CONDITIONAL GO {data.policy.thresholds.conditional}, HOLD {data.policy.thresholds.hold} ; DSCR {data.policy.thresholds.dscr}. {data.policy.notes ?? ""} Édité le {fmtDateTime(data.generated_at)}.
+            Politique appliquée : {data.policy.name}, version {data.policy.version}{data.policy.date_active ? ` en vigueur depuis le ${fmtDate(data.policy.date_active)}` : ""}. Seuils : BANKABLE {fmtDec(data.policy.thresholds.bankable)}, APD READY {fmtDec(data.policy.thresholds.go)}, CONDITIONAL GO {fmtDec(data.policy.thresholds.conditional)}, HOLD {fmtDec(data.policy.thresholds.hold)} ; DSCR {fmtRatio(data.policy.thresholds.dscr)}. {data.policy.notes ?? ""} Édité le {fmtDateTime(data.generated_at)}.
           </div>
           <CachetDocument emetteur="MB AxisPro Consulting" date={fmtDate(data.generated_at.slice(0, 10))} />
         </div>

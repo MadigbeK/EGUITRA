@@ -119,8 +119,12 @@ def document_row(doc, portal=False):
 
 
 def message_row(m):
+    """Message d'un dossier, pour le cabinet. Les pièces jointes (champ ajouté par le portail des
+    porteurs, eguitra_portail, quand il est installé) sont des pièces de la data room du dossier."""
+    documents = m.document_ids if "document_ids" in m._fields else m.env["axispro.document"]
     return {"id": m.id, "author": m.author_id.name, "from_promoter": m.author_id.share, "body": m.body,
-            "date": m.date, "internal": m.internal}
+            "date": m.date, "internal": m.internal,
+            "attachments": [{"id": d.id, "name": d.name} for d in documents]}
 
 
 def store_upload(dossier, document_type_id=None, name=None, portal_visible=True, quota=False, validity_date=None):

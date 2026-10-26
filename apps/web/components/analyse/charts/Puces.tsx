@@ -22,8 +22,9 @@ export interface PuceItem {
 /**
  * Graphique à puces (bullet) : une ligne par indicateur, trois zones qualitatives en fond, la
  * mesure en barre épaisse, la cible en trait. On voit en un regard qui dépasse et qui manque.
+ * `surligne` : clé de la ligne visée par un lien, posée sur un fond de l'accent.
  */
-export function Puces({ items, label, format, hauteurLigne = 44 }: { items: PuceItem[]; label: string; format: (v: number) => string; hauteurLigne?: number }) {
+export function Puces({ items, label, format, hauteurLigne = 44, surligne }: { items: PuceItem[]; label: string; format: (v: number) => string; hauteurLigne?: number; surligne?: string | null }) {
   const [focus, setFocus] = useState<number | null>(null);
   const [ref, largeur, mesure] = useLargeur<HTMLDivElement>(560);
   const gauche = Math.min(170, largeur * 0.34);
@@ -42,9 +43,11 @@ export function Puces({ items, label, format, hauteurLigne = 44 }: { items: Puce
               : [[0, it.ranges[0], COULEUR.mauvais], [it.ranges[0], it.ranges[1], COULEUR.alerte], [it.ranges[1], it.ranges[2], COULEUR.bon]];
             const bon = it.target === null ? null : it.inverse ? it.value <= it.target : it.value >= it.target;
             const actif = focus === i;
+            const vise = surligne !== undefined && surligne !== null && it.key === surligne;
             return (
               <g key={it.key} onPointerEnter={() => setFocus(i)} className="an-estompe" style={{ opacity: focus !== null && !actif ? 0.5 : 1 }}>
-                <text x={gauche - 12} y={y0 + hauteurLigne / 2} dy="0.35em" textAnchor="end" fontSize={12.5} fontWeight={actif ? 700 : 500} fill={actif ? "var(--ink)" : "var(--ink-2)"}>
+                {vise && <rect x={0} y={y0 + 2} width={largeur} height={hauteurLigne - 4} rx={9} fill={COULEUR.accent} fillOpacity={0.12} stroke={COULEUR.accent} strokeWidth={1.5} />}
+                <text x={gauche - 12} y={y0 + hauteurLigne / 2} dy="0.35em" textAnchor="end" fontSize={12.5} fontWeight={actif || vise ? 700 : 500} fill={vise ? "var(--accent)" : actif ? "var(--ink)" : "var(--ink-2)"}>
                   {it.label.length > Math.floor(gauche / 7) ? `${it.label.slice(0, Math.floor(gauche / 7) - 1)}…` : it.label}
                 </text>
                 {zones.map(([a, b, c], k) => (

@@ -45,6 +45,9 @@ ACTIVITY = (
     "AND module = 'eguitra_base' AND name = 'analytic_plan_activite')), '')"
 )
 MAX_LIMIT = 5000
+# Exports (CSV, XLSX) : bien au-delà de l'écran ; au-delà encore, le fichier le signale (TRUNCATED).
+MAX_EXPORT = 100000
+TRUNCATED = "Export limité aux {shown} premières lignes sur {total} : affinez la période ou les filtres."
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,19 @@ class Report:
     base_where: str = ""
     filters: list = field(default_factory=list)
 
+
+def labelled(expr, labels):
+    """Expression SQL qui écrit une valeur codée en clair (« not_paid » : « Non payée ») à l'écran comme dans
+    les exports ; les libellés viennent du registre, jamais de la saisie."""
+    cases = " ".join(f"WHEN '{code}' THEN '{label.replace(chr(39), chr(39) * 2)}'" for code, label in labels)
+    return f"(CASE {expr} {cases} ELSE {expr} END)"
+
+
+PAYMENT_LABELS = (
+    ("not_paid", "Non payée"), ("partial", "Partielle"), ("in_payment", "En paiement"), ("paid", "Payée"),
+    ("reversed", "Extournée"), ("invoicing_legacy", "Historique"), ("blocked", "Bloquée"),
+)
+TAX_USE_LABELS = (("sale", "Collectée"), ("purchase", "Déductible"), ("none", "Autre"))
 
 PAY_STATE = Filter("paiement", "État de paiement", "am.payment_state = %(f_paiement)s", options=(
     ("not_paid", "Non payée"), ("partial", "Partielle"), ("paid", "Payée"), ("in_payment", "En paiement"),
@@ -177,7 +193,7 @@ _reg(Report(
         Column("ht", "Montant HT", "am.amount_untaxed_signed", "money", "sum", align="right"),
         Column("ttc", "Montant TTC", "am.amount_total_signed", "money", "sum", align="right"),
         Column("reste", "Reste dû", "am.amount_residual_signed", "money", "sum", align="right"),
-        Column("paiement", "Paiement", "am.payment_state"),
+        Column("paiement", "Paiement", labelled("am.payment_state", PAYMENT_LABELS)),
     ],
 ))
 _reg(Report(
@@ -204,7 +220,7 @@ _reg(Report(
         Column("ht", "Montant HT", "-am.amount_untaxed_signed", "money", "sum", align="right"),
         Column("ttc", "Montant TTC", "-am.amount_total_signed", "money", "sum", align="right"),
         Column("reste", "Reste à payer", "-am.amount_residual_signed", "money", "sum", align="right"),
-        Column("paiement", "Paiement", "am.payment_state"),
+        Column("paiement", "Paiement", labelled("am.payment_state", PAYMENT_LABELS)),
     ],
 ))
 _reg(Report(
@@ -267,7 +283,7 @@ _reg(Report(
     filters=[Filter("usage", "Type", "tax.type_tax_use = %(f_usage)s", options=(("sale", "Collectée"), ("purchase", "Déductible")))],
     columns=[
         Column("taxe", "Taxe", "COALESCE(tax.name->>'fr_FR', tax.name->>'en_US')"),
-        Column("usage", "Type", "tax.type_tax_use"),
+        Column("usage", "Type", labelled("tax.type_tax_use", TAX_USE_LABELS)),
         Column("compte", "Compte", ACC_CODE),
         Column("montant", "Montant de taxe", "-aml.balance", "money", "sum", align="right"),
     ],
@@ -315,12 +331,12 @@ class EguitraReportEngine(models.AbstractModel):
 
     @api.model
     def run(self, key, companies, date_from=None, date_to=None, columns=None, filters=None, sort=None,
-            sort_dir="desc", limit=200, offset=0):
+            sort_dir="desc", limit=200, offset=0, max_limit=MAX_LIMIT):
         report = REPORTS.get(key)
         if report is None:
             raise ValueError(f"Rapport inconnu : {key}")
         filters = filters or {}
-        limit = max(1, min(int(limit or 200), MAX_LIMIT))
+        limit = max(1, min(int(limit or 200), max_limit))
         offset = max(0, int(offset or 0))
         by_key = {c.key: c for c in report.columns}
         selected = [by_key[k] for k in (columns or []) if k in by_key] or [c for c in report.columns if c.default]
@@ -414,6 +430,8 @@ class EguitraReportEngine(models.AbstractModel):
         if result["totals"]:
             writer.writerow(["TOTAL" if i == 0 else _cell(result["totals"].get(c["key"]), c["type"])
                              for i, c in enumerate(cols)])
+        if result["has_next"]:
+            writer.writerow([TRUNCATED.format(shown=len(result["rows"]), total=result["total_count"])])
         return buf.getvalue().encode("utf-8")
 
     @api.model
@@ -438,12 +456,16 @@ class EguitraReportEngine(models.AbstractModel):
                     sheet.write_datetime(r, c_idx, value, day)
                 else:
                     sheet.write_string(r, c_idx, "" if value is None else str(value))
+        last = len(result["rows"]) + 1
         if result["totals"]:
-            last = len(result["rows"]) + 1
             sheet.write(last, 0, "TOTAL", total)
             for c_idx, col in enumerate(cols):
                 if col["key"] in result["totals"]:
                     sheet.write_number(last, c_idx, result["totals"][col["key"]], total)
+            last += 1
+        if result["has_next"]:
+            sheet.write(last + 1, 0, TRUNCATED.format(shown=len(result["rows"]), total=result["total_count"]),
+                        book.add_format({"bold": True, "font_color": "#B00020"}))
         sheet.freeze_panes(1, 0)
         for c_idx, col in enumerate(cols):
             sheet.set_column(c_idx, c_idx, 16 if col["type"] in ("money", "date") else 28)

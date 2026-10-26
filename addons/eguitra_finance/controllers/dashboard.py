@@ -17,7 +17,7 @@ from ..models.alert import (
     ZERO_DISABLES,
 )
 from ..models.analytic import ACTIVITY_PLAN, MANAGED_AXES, PLANS, axes_for, plan_key
-from .common import FIN_READ, FIN_WRITE, account_ref, companies, parse_date, ref, today
+from .common import FIN_READ, FIN_WRITE, account_ref, as_float, companies, parse_date, ref, today
 from .statements_export import income_with_month
 
 # Profils qui choisissent un compte analytique à la saisie (chantiers, immobilier, parc).
@@ -257,7 +257,11 @@ class EguitraFinanceThresholds(http.Controller):
         data = read_json()
         values = {}
         if "value" in data:
-            values["value"] = float(data["value"] or 0)
+            # Une valeur absente ou illisible est refusée : lue 0, elle éteindrait la règle en silence.
+            if data["value"] in (None, ""):
+                raise ApiError(400, "missing_fields", "Valeur du seuil manquante : saisissez 0 pour éteindre la règle.",
+                               fields=["value"])
+            values["value"] = as_float(data["value"], "value")
         if data.get("severity") in SEVERITY_ORDER:
             values["severity"] = data["severity"]
         if "active" in data:

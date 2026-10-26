@@ -89,13 +89,20 @@ class EguitraApprovals(http.Controller):
 
     @api_route("/approvals/requests", profiles=FOLLOWERS)
     def requests(self, **kw):
+        """Demandes visibles, de la plus récente à la plus ancienne, par pages (limit, offset). Avec paged=1,
+        la réponse est {"items", "total", "offset", "limit"} : l'écran dit combien il en reste au-delà de la
+        page ; sans, une liste (appels antérieurs)."""
         domain = _visible(request.env.user)
         if kw.get("state"):
             domain.append(("state", "in", kw["state"].split(",")))
         if kw.get("mine") == "1":
             domain.append(("requested_by", "=", request.env.user.id))
-        recs = request.env["eguitra.approval.request"].sudo().search(domain, limit=int_arg(kw, "limit", 100, 1, 500))
-        return [_row(r) for r in recs]
+        Request = request.env["eguitra.approval.request"].sudo()
+        limit, offset = int_arg(kw, "limit", 100, 1, 500), int_arg(kw, "offset", 0, 0)
+        rows = [_row(r) for r in Request.search(domain, limit=limit, offset=offset)]
+        if kw.get("paged") == "1":
+            return {"items": rows, "total": Request.search_count(domain), "offset": offset, "limit": limit}
+        return rows
 
     @api_route("/approvals/<int:request_id>", profiles=FOLLOWERS)
     def get(self, request_id, **_kw):

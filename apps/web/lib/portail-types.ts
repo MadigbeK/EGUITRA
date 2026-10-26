@@ -80,7 +80,19 @@ export interface Tableau {
   timeline: TimelineItem[];
   announcements: AnnouncementRow[];
   articles: ArticleRow[];
-  fundings: { count: number; requested: number; granted: number; currency: string };
+  fundings: ResumeFinancements;
+}
+
+/**
+ * Résumé des financements, calculé par le noyau et identique à l'accueil et dans « Mon projet » : pistes
+ * actives (ni refusées ni abandonnées), montants de ces seules pistes, dans la devise des financements.
+ */
+export interface ResumeFinancements {
+  count: number;
+  closed: number;
+  requested: number;
+  granted: number;
+  currency: string;
 }
 
 export interface FundingRow {
@@ -90,6 +102,8 @@ export interface FundingRow {
   instrument_label: string;
   amount_requested: number;
   amount_granted: number;
+  /** Devise des montants du financement (qui peut différer de celle du dossier). */
+  currency: string | null;
   state: "identified" | "submitted" | "review" | "agreed" | "signed" | "disbursed" | "rejected" | "withdrawn";
   state_label: string;
   state_date: string | null;
@@ -111,6 +125,7 @@ export interface Projet {
   };
   team: Array<Person & { role: string }>;
   fundings: FundingRow[];
+  fundings_summary: ResumeFinancements;
   timeline: TimelineItem[];
 }
 
@@ -160,7 +175,9 @@ export interface ActionRow {
   porteur_comment: string | null;
   overdue: boolean;
   done_date: string | null;
-  source: string | null;
+  /** Origine dans les mots du porteur : jamais la clé interne (écart de la grille, saisie libre…). */
+  origin: "consultant" | "committee" | "risk";
+  origin_label: string;
   create_date: string;
 }
 
@@ -186,6 +203,8 @@ export interface Fil {
   consultant: Person | null;
   closed: boolean;
   messages: MessageRow[];
+  /** Des messages plus anciens restent à charger (?before=). */
+  more: boolean;
 }
 
 export type MeetingMode = "office" | "video" | "phone" | "site";
@@ -319,7 +338,8 @@ export interface AgendaItem {
 }
 
 export type NotificationKind =
-  | "message" | "document" | "action" | "gate" | "decision" | "meeting" | "announcement" | "event" | "funding" | "resource";
+  | "message" | "document" | "action" | "gate" | "decision" | "meeting" | "announcement" | "event" | "funding" | "resource"
+  | "feedback";
 
 export interface NotificationRow {
   id: number;
@@ -334,6 +354,8 @@ export interface NotificationRow {
 
 export interface Notifications {
   unread: number;
+  /** Nombre total de notifications du porteur : la liste reçue n'en est qu'une page (limit, offset). */
+  total: number;
   items: NotificationRow[];
 }
 
@@ -358,6 +380,8 @@ export interface FeedbackRow {
   recommend: number | null;
   comment: string | null;
   date: string;
+  /** Réponse à un avis donné : le consultant du dossier a-t-il été prévenu ? */
+  consultant_notified?: boolean;
 }
 
 /* ─── Cabinet ─────────────────────────────────────────────────────────── */

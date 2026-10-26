@@ -54,6 +54,9 @@ COMPTES = [
     ("test.chantiers", "Test - Conducteur de travaux", ["chantiers"], ["groupe"]),
     ("test.immobilier", "Test - Gestionnaire immobilier", ["immobilier"], ["groupe"]),
     ("test.consultant", "Test - Consultant du cabinet", ["cabinet"], ["cabinet"]),
+    # Associé du cabinet : scelle les décisions du comité, force un gate, rouvre une révision (avec la
+    # direction), toujours à deux personnes au moins ; le consultant garde le reste.
+    ("test.associe", "Test - Associé du cabinet", ["cabinet", "associe"], ["cabinet"]),
     ("test.rh", "Test - Gestionnaire RH", ["rh"], ["groupe", "cabinet"]),
     # Sans profil : le salarié qui n'a que « Mon espace » (lié à un dossier par donnees_demo_rh.py).
     ("test.salarie", "Test - Salarié", [], ["groupe"]),
@@ -102,6 +105,11 @@ for login, nom, profils, entites in COMPTES:
         dossier = env["axispro.dossier"].sudo().search([("name", "=", DOSSIER_PORTEUR)], limit=1)
         if dossier:
             dossier.portal_user_ids = [Command.link(user.id)]
+            # test.consultant en est le responsable : il reçoit les notifications du porteur (cloche
+            # d'AxisPro Suite), comme le fait aussi donnees_demo.py.
+            consultant = env["res.users"].sudo().search([("login", "=", "test.consultant")], limit=1)
+            if consultant and dossier.consultant_id != consultant:
+                dossier.with_context(axispro_unlocked=True).write({"consultant_id": consultant.id})
     if password and not COMMUN:
         print(f"COMPTE\t{login}\t{password}\t{nom}")
     print(f"RESUME\t{login}\t{'créé' if nouveau else ('réinitialisé' if password else 'inchangé')}\t"

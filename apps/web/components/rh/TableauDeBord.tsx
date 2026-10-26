@@ -5,9 +5,9 @@ import { useState } from "react";
 import { AlertTriangle, ArrowRight, Calendar, Info, ShieldAlert, Users, Wallet } from "@/components/icons";
 import { AreaChart, Badge, Button, Card, Empty, ErrorBox, Kpi, RankBars, Repartition, Squelette, SERIES, type Tone } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtGNF, fmtMonth, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDate, fmtDec, fmtGNF, fmtInt, fmtMonth, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import type { AlertSeverity, RhAlert, Summary } from "@/lib/rh-types";
-import { EtatPaie, FiltreSociete, PastilleSociete, avecSociete, moisLong, nomCourt, periode, useMeta } from "./commun";
+import { EtatPaie, FiltreSociete, PastilleSociete, accord, avecSociete, moisLong, nomCourt, periode, useMeta } from "./commun";
 
 const TON_ALERTE: Record<AlertSeverity, Tone> = { danger: "danger", warn: "warn", info: "accent" };
 const RANG: Record<AlertSeverity, number> = { danger: 0, warn: 1, info: 2 };
@@ -61,13 +61,13 @@ function Contenu({ societe }: { societe: number | null }) {
         <Kpi
           label="Taux d'absence (30 jours)"
           value={fmtPct(data.absenteeism_rate)}
-          hint={`${data.pending_leaves} demande(s) à valider`}
+          hint={pluriel(data.pending_leaves, "demande à valider", "demandes à valider")}
           tone={data.absenteeism_rate !== null && data.absenteeism_rate > 5 ? "warn" : data.pending_leaves ? "accent" : "neutral"}
         />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-12">
-        <Card className="xl:col-span-7" title="Échéancier" actions={<Badge tone={alertes.some((a) => a.severity === "danger") ? "danger" : alertes.length ? "warn" : "ok"}>{alertes.length ? `${alertes.length} point(s)` : "Rien à signaler"}</Badge>}>
+        <Card className="xl:col-span-7" title="Échéancier" actions={<Badge tone={alertes.some((a) => a.severity === "danger") ? "danger" : alertes.length ? "warn" : "ok"}>{alertes.length ? pluriel(alertes.length, "point") : "Rien à signaler"}</Badge>}>
           {alertes.length === 0 ? (
             <Empty title="Aucune échéance proche" hint="Fins d'essai et de contrat, documents, soldes de congés et fiches complètes : tout est à jour." />
           ) : (
@@ -75,7 +75,7 @@ function Contenu({ societe }: { societe: number | null }) {
               {alertes.slice(0, 14).map((a, i) => (
                 <AlerteLigne key={`${a.kind}-${a.employee?.id ?? "x"}-${i}`} a={a} />
               ))}
-              {alertes.length > 14 && <li className="px-2 pt-3 text-[13px] text-muted">Et {alertes.length - 14} autre(s) point(s).</li>}
+              {alertes.length > 14 && <li className="px-2 pt-3 text-[13px] text-muted">Et {pluriel(alertes.length - 14, "autre point", "autres points")}.</li>}
             </ul>
           )}
         </Card>
@@ -97,9 +97,9 @@ function Contenu({ societe }: { societe: number | null }) {
                       </span>
                       <span className="mt-1 flex flex-wrap justify-between gap-x-3 text-[12.5px] text-muted">
                         <span>
-                          {p.totals.headcount} bulletin(s), coût employeur {fmtShort(p.totals.employer_cost)}
+                          {pluriel(p.totals.headcount, "bulletin")}, coût employeur {fmtShort(p.totals.employer_cost)}
                         </span>
-                        <span className={p.anomalies ? "text-warn" : ""}>{p.anomalies} anomalie(s)</span>
+                        <span className={p.anomalies ? "text-warn" : ""}>{pluriel(p.anomalies, "anomalie")}</span>
                       </span>
                     </Link>
                   </li>
@@ -158,7 +158,7 @@ function Contenu({ societe }: { societe: number | null }) {
         </Card>
         <Card className="xl:col-span-4" title="Le personnel">
           <dl className="space-y-2.5 text-sm">
-            <Chiffre icone={Users} label="Ancienneté moyenne" value={data.average_seniority === null ? "–" : `${fmtDec(data.average_seniority)} an(s)`} />
+            <Chiffre icone={Users} label="Ancienneté moyenne" value={data.average_seniority === null ? "–" : `${fmtDec(data.average_seniority)} ${accord(data.average_seniority, "an")}`} />
             <Chiffre icone={Users} label="Âge moyen" value={data.average_age === null ? "–" : `${fmtDec(data.average_age)} ans`} />
             <Chiffre icone={Users} label="Part des femmes" value={fmtPct(data.women_share, 0)} />
             <Chiffre icone={Calendar} label="Demandes d'absence à valider" value={String(data.pending_leaves)} />
@@ -180,7 +180,7 @@ function Contenu({ societe }: { societe: number | null }) {
                 <li key={c.company.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-panel-2 px-4 py-3">
                   <PastilleSociete company={c.company} />
                   <span className="text-sm text-ink-2">
-                    <b className="tabular text-ink">{c.headcount}</b> salarié(s), masse salariale <b className="tabular text-ink">{fmtShort(c.monthly_payroll_estimate)}</b> par mois
+                    <b className="tabular text-ink">{fmtInt(c.headcount)}</b> {accord(c.headcount, "salarié")}, masse salariale <b className="tabular text-ink">{fmtShort(c.monthly_payroll_estimate)}</b> par mois
                   </span>
                 </li>
               ))}

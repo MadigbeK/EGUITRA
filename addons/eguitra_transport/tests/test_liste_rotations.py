@@ -61,6 +61,18 @@ class TestListeRotations(TransportCase):
         status, row = self.call("GET", f"/transport/rotations/{empty.id}", token=token)
         self.assertEqual((status, row["estimated_margin_rate"]), (200, None), row)
 
+    def test_marge_estimee_avec_les_taxes_du_bareme(self):
+        """I-T4 : une taxe du barème ne fait pas croire à des frais saisis, et entre dans la marge estimée."""
+        self.env["eguitra.transport.tax"].create({"name": "Taxe de roulage", "nature": "road", "base": "delivered",
+                                                  "rate": 5_000})
+        rot = self._rotation(fuel_cost=0, toll_cost=0, driver_fees=0)
+        tax = 39.8 * 5_000
+        self.assertAlmostEqual(rot.specific_taxes, tax)
+        self.assertTrue(rot.margin_estimated, "Aucun frais saisi : la taxe du barème n'en est pas un")
+        self.assertAlmostEqual(rot.estimated_margin, rot.revenue - 20_000_000 - tax)
+        rot.fuel_cost = 1_000_000
+        self.assertFalse(rot.margin_estimated, "Un frais saisi : marge déclarée")
+
     def test_tri_inconnu_et_profils(self):
         token = self.open_session("ibrahima")["access_token"]
         status, body = self.call("GET", "/transport/rotations?sort=total_cost;drop", token=token)

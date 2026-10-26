@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type R
 import { scaleLinear } from "d3-scale";
 import { cx } from "@/lib/cx";
 import { SERIES } from "@/lib/couleurs";
-import { fmtAxe as axeMontant, fmtDec, fmtGNF, fmtInt, fmtJours, fmtPct, fmtRatio, fmtShort, MONTHS_FR } from "@/lib/format";
+import { fmtAxe as axeMontant, fmtDec, fmtGNF, fmtInt, fmtJours, fmtPct, fmtRatio, fmtShort, INSECABLE, MONTHS_FR } from "@/lib/format";
 import type { Unit } from "@/lib/analyse-types";
 
 /* ─── Mesure ───────────────────────────────────────────────────────────── */
@@ -47,7 +47,7 @@ export function fmtValeur(value: number | null | undefined, unit: Unit, court = 
   if (value === null || value === undefined || !Number.isFinite(value)) return "–";
   switch (unit) {
     case "gnf":
-      return court ? `${fmtShort(value)} GNF` : fmtGNF(value);
+      return court ? `${fmtShort(value)}${INSECABLE}GNF` : fmtGNF(value);
     case "pct":
       return fmtPct(value, Math.abs(value) >= 100 ? 0 : 1);
     case "days":
@@ -55,11 +55,11 @@ export function fmtValeur(value: number | null | undefined, unit: Unit, court = 
     case "ratio":
       return fmtRatio(value);
     case "km":
-      return `${fmtInt(value)} km`;
+      return `${fmtInt(value)}${INSECABLE}km`;
     case "liters":
-      return `${fmtDec(Math.round(value * 10) / 10)} L`;
+      return `${fmtDec(Math.round(value * 10) / 10)}${INSECABLE}L`;
     case "hours":
-      return `${fmtDec(Math.round(value * 10) / 10)} h`;
+      return `${fmtDec(Math.round(value * 10) / 10)}${INSECABLE}h`;
     case "score":
       return `${fmtInt(value)} / 100`;
     default:
@@ -76,11 +76,11 @@ export function fmtAxe(value: number, unit: Unit): string {
     case "gnf":
       return axeMontant(value);
     case "pct":
-      return `${fmtDec(Math.round(value * 10) / 10)} %`;
+      return `${fmtDec(Math.round(value * 10) / 10)}${INSECABLE}%`;
     case "days":
-      return `${fmtInt(value)} j`;
+      return `${fmtInt(value)}${INSECABLE}j`;
     case "hours":
-      return `${fmtInt(value)} h`;
+      return `${fmtInt(value)}${INSECABLE}h`;
     case "ratio":
       return fmtDec(value);
     default:

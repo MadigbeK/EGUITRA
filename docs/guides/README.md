@@ -32,3 +32,22 @@ finance disposent aussi de la vue « Groupe consolidé » qui réunit les deux.
 Téléphone perdu ou changé : demander à l'administrateur de réinitialiser la double
 authentification. Mot de passe oublié : l'administrateur en remet un nouveau, provisoire.
 Les sessions expirent d'elles-mêmes au bout de quelques heures ; toutes les connexions sont journalisées.
+
+## Comptes internes : la discussion
+
+Pour échanger entre collègues sans quitter la plateforme (jamais avec les porteurs de projets, qui
+écrivent à leur consultant depuis le portail).
+
+- L'icône à bulles, en haut de l'écran, ouvre le panneau de discussion ; le chiffre sur l'icône
+  compte les messages non lus. « Pleine page » ouvre la même discussion en grand.
+- « Nouvelle » : « À deux » (choisir un collègue) ou « Groupe » (un nom, des collègues). Seuls les
+  collègues qui partagent au moins une société avec vous sont proposés. Le créateur d'un groupe en
+  est le responsable : lui seul y ajoute ou en retire des membres ; chacun peut le quitter.
+- Sur une fiche (dossier AxisPro, chantier, rotation, bien), le bouton « Discussion » ouvre la
+  conversation de la fiche, ouverte à tous ceux qui peuvent lire la fiche.
+- Écrire : Entrée envoie, Maj + Entrée passe à la ligne ; le trombone joint jusqu'à cinq fichiers
+  (PDF, JPEG, PNG, Word .docx ou Excel .xlsx, 20 Mo chacun). « Répondre » cite un message ;
+  « Retirer » efface pour tous un message que vous avez envoyé (« Message retiré » reste affiché).
+- Les nouveaux messages arrivent d'eux-mêmes en quelques secondes. Ils ne vous gardent pas connecté :
+  sans geste de votre part, la déconnexion après inactivité s'applique.
+- Confidentialité : une conversation n'est lue que par ses membres, l'administration comprise.

@@ -23,6 +23,19 @@ def _asset(asset_id):
     return asset
 
 
+def _id(value, label):
+    """Identifiant reçu de l'écran : un entier, sinon 400 (et non une erreur 500)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"{label} invalide.") from e
+
+
+def _held(assets):
+    """Biens encore à l'actif : un bien sorti (cédé ou mis au rebut) reste au registre, hors des totaux."""
+    return assets.filtered(lambda a: a.state != "removed")
+
+
 def _activity(asset):
     """Activité analytique du bien (axe Activité de sa répartition)."""
     plan = request.env.ref("eguitra_base.analytic_plan_activite", raise_if_not_found=False)
@@ -92,7 +105,7 @@ def _analytic_values(data):
     if "activity_id" in data:
         activity_id = data.get("activity_id")
         if activity_id:
-            account = request.env["account.analytic.account"].browse(int(activity_id)).exists()
+            account = request.env["account.analytic.account"].browse(_id(activity_id, "Activité")).exists()
             if not account:
                 raise ApiError(422, "business_rule", "Activité analytique inconnue.")
             values["analytic_distribution"] = {str(account.id): 100}
@@ -111,13 +124,14 @@ class EguitraFinanceAssets(http.Controller):
         if kw.get("state"):
             domain.append(("state", "in", kw["state"].split(",")))
         assets = request.env["account.asset"].search(domain, order="date_start desc, id desc")
-        rows = [_row(a) for a in assets]
+        held = _held(assets)
         return {
-            "items": rows,
+            "items": [_row(a) for a in assets],
+            # Biens encore à l'actif : un bien sorti reste listé, sans gonfler la valeur du patrimoine.
             "totals": {
-                "purchase_value": sum(r["purchase_value"] for r in rows),
-                "depreciated": sum(r["depreciated"] for r in rows),
-                "residual": sum(r["residual"] for r in rows),
+                "purchase_value": sum(held.mapped("purchase_value")),
+                "depreciated": sum(held.mapped("value_depreciated")),
+                "residual": sum(held.mapped("value_residual")),
             },
         }
 
@@ -169,10 +183,10 @@ class EguitraFinanceAssets(http.Controller):
             raise ApiError(400, "missing_fields", "Durée d'amortissement requise (en années).", fields=["method_number"])
         profile = request.env["account.asset.profile"].create({
             "name": name,
-            "account_asset_id": int(asset_acc),
-            "account_depreciation_id": int(dep_acc),
-            "account_expense_depreciation_id": int(exp_acc),
-            "journal_id": int(journal_id),
+            "account_asset_id": _id(asset_acc, "Compte d'immobilisation"),
+            "account_depreciation_id": _id(dep_acc, "Compte d'amortissement"),
+            "account_expense_depreciation_id": _id(exp_acc, "Compte de dotation"),
+            "journal_id": _id(journal_id, "Journal"),
             "method": data.get("method", "linear"),
             "method_number": number,
             "method_time": "year",
@@ -192,7 +206,7 @@ class EguitraFinanceAssets(http.Controller):
         data = read_json()
         name, profile_id, value = require(data, "name", "profile_id", "purchase_value")
         company = request.env.company
-        profile = request.env["account.asset.profile"].browse(int(profile_id)).exists()
+        profile = request.env["account.asset.profile"].browse(_id(profile_id, "Catégorie")).exists()
         if not profile or profile.company_id != company:
             raise ApiError(422, "business_rule", "Catégorie d'immobilisation inconnue dans cette société.")
         date_start = parse_date(data, "date_start", today())
@@ -215,7 +229,7 @@ class EguitraFinanceAssets(http.Controller):
         if data.get("code"):
             values["code"] = str(data["code"])[:32]
         if data.get("partner_id"):
-            values["partner_id"] = int(data["partner_id"])
+            values["partner_id"] = _id(data["partner_id"], "Fournisseur")
         if data.get("salvage_value"):
             values["salvage_value"] = as_float(data["salvage_value"], "salvage_value")
         if data.get("method_number"):
@@ -236,7 +250,12 @@ class EguitraFinanceAssets(http.Controller):
 
     @api_route("/finance/assets/<int:asset_id>/confirm", methods=("POST",), profiles=FIN_WRITE)
     def confirm(self, asset_id, **_kw):
+        """Mise en service d'un bien en brouillon. Un bien en service, totalement amorti ou sorti ne se
+        remet pas en service : une seconde sortie solderait de nouveau ses comptes 2x et 28x."""
         asset = _asset(asset_id)
+        if asset.state != "draft":
+            raise ApiError(422, "business_rule", f"{asset.name} est {STATES.get(asset.state, asset.state).lower()} : "
+                                                 "seul un bien en brouillon se met en service.")
         asset.compute_depreciation_board()
         asset.validate()
         return _row(asset, board=True)
@@ -249,7 +268,7 @@ class EguitraFinanceAssets(http.Controller):
         data = read_json()
         partner = None
         if data.get("partner_id"):
-            partner = request.env["res.partner"].browse(int(data["partner_id"])).exists()
+            partner = request.env["res.partner"].browse(_id(data["partner_id"], "Acquéreur")).exists()
             if not partner:
                 raise ApiError(422, "business_rule", "Acquéreur inconnu.")
         sale = asset.eguitra_dispose(parse_date(data, "date", today()), as_float(data.get("sale_value") or 0, "sale_value"),
@@ -258,13 +277,20 @@ class EguitraFinanceAssets(http.Controller):
 
     @api_route("/finance/assets/depreciate", methods=("POST",), profiles=FIN_WRITE)
     def depreciate(self, **_kw):
-        """Comptabilise les dotations aux amortissements jusqu'à la date donnée."""
+        """Comptabilise les dotations aux amortissements jusqu'à la date donnée, au plus tard aujourd'hui
+        (une date future passerait aujourd'hui les dotations à venir). Une dotation en erreur annule tout
+        le passage et l'erreur est rendue (422), au lieu d'être tue."""
         end = parse_date(read_json(), "date", today())
+        if end > today():
+            raise ApiError(422, "business_rule", "Les dotations se passent jusqu'à aujourd'hui au plus tard : "
+                                                 "celles des mois à venir le seront à leur échéance.")
         assets = request.env["account.asset"].search([
             ("company_id", "=", request.env.company.id), ("state", "=", "open"),
         ])
-        created = assets._compute_entries(end, check_triggers=True)
-        return {"status": "ok", "entries": len(created) if hasattr(created, "__len__") else None, "date": end}
+        moves, errors = request.env["account.asset"].eguitra_compute_entries(assets, end)
+        if errors:
+            raise ApiError(422, "business_rule", "Dotations non passées : " + errors[:1500])
+        return {"status": "ok", "entries": len(moves), "date": end}
 
     @api_route("/finance/assets/takeover-control", profiles=FIN_READ)
     def takeover_control(self, **kw):
@@ -296,14 +322,17 @@ class EguitraFinanceAssets(http.Controller):
                 asset.eguitra_custodian or "", asset.eguitra_takeover_amount if asset.eguitra_takeover_date else None,
                 asset.eguitra_takeover_date or None,
             ])
-        totals = ["TOTAL", "", "", "", None, sum(r[5] for r in rows), None, "", None, None, sum(r[10] for r in rows),
-                  sum(r[11] for r in rows), "", "", "", "", None, None]
+        # Total des biens encore à l'actif : un bien sorti (cédé ou mis au rebut) est listé pour mémoire, hors total.
+        held = [row for asset, row in zip(assets, rows, strict=True) if asset.state != "removed"]
+        totals = ["TOTAL DES BIENS À L'ACTIF", "", "", "", None, sum(r[5] for r in held), None, "", None, None,
+                  sum(r[10] for r in held), sum(r[11] for r in held), "", "", "", "", None, None]
         stamp = today()
         fy_start, fy_end = request.env["eguitra.finance.metrics"].fiscal_year_bounds(company, stamp)
         sheet = {
             "title": "Registre des immobilisations",
             "meta": export_meta(company, [("Exercice", f"{fy_start:%d/%m/%Y} au {fy_end:%d/%m/%Y}"),
-                                          ("Arrêté au", stamp), ("Immobilisations", len(rows))]),
+                                          ("Arrêté au", stamp), ("Immobilisations à l'actif", len(held)),
+                                          ("Sorties de l'actif (listées, hors total)", len(rows) - len(held))]),
             "columns": columns, "rows": rows, "totals": totals,
         }
         return table_response(f"registre_immobilisations_{stamp:%Y%m%d}", [sheet], kw.get("format", "xlsx"))

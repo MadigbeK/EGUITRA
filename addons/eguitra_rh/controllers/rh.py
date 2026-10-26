@@ -13,8 +13,9 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
-from ..engine import fmt_days
+from ..engine import fmt_days, fmt_gnf, pluriel
 from ..models.employee import CATEGORIES, CONTRACTS, DOCUMENT_KINDS, EXIT_REASONS, MARITAL, PAYMENT_METHODS
+from ..models.hsseq import PPE_ITEMS
 from ..models.leave import InsufficientBalance
 from ..models.payroll import of_month
 from .common import (
@@ -49,12 +50,18 @@ from .common import (
 MAX_FILE = 20 * 1024 * 1024
 EMPLOYEE_TEXT = ("job_title", "birth_place", "nationality", "id_number", "cnss_number", "phone", "email", "address",
                  "emergency_contact", "emergency_phone", "bank_name", "bank_account", "mobile_money")
-SELECTIONS = {"gender": ("homme", "femme"), "marital_status": dict(MARITAL), "category": dict(CATEGORIES),
+SELECTIONS = {"medical_fitness": ("apte", "apte_reserve", "inapte"), "gender": ("homme", "femme"), "marital_status": dict(MARITAL), "category": dict(CATEGORIES),
               "contract_type": dict(CONTRACTS), "payment_method": dict(PAYMENT_METHODS)}
 
 
 def options(pairs):
     return [{"code": code, "label": label} for code, label in pairs]
+
+
+# Libellés des références d'un dossier salarié dans les messages (jamais le nom technique du champ).
+REFERENCE_LABELS = {"department_id": "Département", "manager_id": "Responsable hiérarchique",
+                    "driver_id": "Chauffeur du transport", "activity_id": "Activité d'imputation",
+                    "user_id": "Compte NIMOVA"}
 
 
 def _check_reference(key, record_id, company):
@@ -80,7 +87,7 @@ def _check_reference(key, record_id, company):
         record = env["res.users"].sudo().browse(record_id).exists()
         valid = record and not record.share and company in record.company_ids
     if not valid:
-        raise ApiError(422, "business_rule", f"Référence invalide pour cette société : {key}.")
+        raise ApiError(422, "business_rule", f"{REFERENCE_LABELS.get(key, key)} : choix invalide pour cette société.")
 
 
 def approve(leave, force=False):
@@ -197,6 +204,28 @@ class EguitraRh(http.Controller):
                 add("contract_end", "danger" if late else "warn", emp.contract_end, emp,
                     f"{'Contrat échu' if late else 'Fin de contrat'} de {emp.name} : renouveler, embaucher ou "
                     "enregistrer la sortie.", href)
+            # Habilitations et aptitude : alerte à J-30, urgente à J-7, puis expirée (verrou V04 d'HSSEQ).
+            for row in emp._qualification_rows(day):
+                if row["expiry"]:
+                    left = (row["expiry"] - day).days
+                    if left < 0:
+                        add("qualification", "danger", row["expiry"], emp, f"{row['name']} de {emp.name} expirée.", href)
+                    elif left <= settings.qualification_urgent_days:
+                        add("qualification", "danger", row["expiry"], emp,
+                            f"{row['name']} de {emp.name} expire dans {left} jour(s).", href)
+                    elif left <= settings.qualification_alert_days:
+                        add("qualification", "warn", row["expiry"], emp, f"{row['name']} de {emp.name} à renouveler.", href)
+                elif row["state"] == "absente":
+                    add("qualification", "danger", None, emp, f"{row['name']} absente pour le conducteur {emp.name}.", href)
+            fitness = emp._fitness_state(day)
+            if emp.driver_id and fitness in ("inapte", "echue", "inconnu"):
+                label = {"inapte": "inapte", "echue": "échue", "inconnu": "non renseignée"}[fitness]
+                add("fitness", "warn" if fitness == "inconnu" else "danger", emp.medical_fitness_until or None, emp,
+                    f"Aptitude médicale de {emp.name} : {label}.", href)
+            elif fitness in ("apte", "apte_reserve") and emp.medical_fitness_until and \
+                    (emp.medical_fitness_until - day).days <= settings.qualification_alert_days:
+                add("fitness", "warn", emp.medical_fitness_until, emp,
+                    f"Visite d'aptitude de {emp.name} à programmer.", href)
             for doc in emp.document_ids.filtered("expiry_date"):
                 if doc.expiry_date < day:
                     add("document", "danger", doc.expiry_date, emp, f"{doc.name} de {emp.name} expiré.", href)
@@ -220,8 +249,15 @@ class EguitraRh(http.Controller):
                     else emp.hire_date.replace(year=day.year, day=28)
                 if day <= anniversary <= day + timedelta(days=7):
                     years = day.year - emp.hire_date.year
-                    add("anniversary", "info", anniversary, emp, f"{emp.name} fête ses {years} an(s) dans l'entreprise.",
-                        href)
+                    add("anniversary", "info", anniversary, emp, f"{emp.name} fête ses {pluriel(years, 'an')} dans "
+                        "l'entreprise.", href)
+            if emp.exit_date and emp.exit_date <= day + timedelta(days=settings.contract_alert_days):
+                due = sum(a._remaining() for a in request.env["eguitra.rh.advance"].sudo().search(
+                    [("employee_id", "=", emp.id), ("state", "=", "open")]))
+                if due:
+                    add("advance_exit", "warn", emp.exit_date, emp, f"{emp.name} quitte l'entreprise le "
+                        f"{emp.exit_date:%d/%m/%Y} avec {fmt_gnf(due)} d'avances ou de prêts encore dus : retenez-les "
+                        "sur le solde de tout compte.", href)
         previous = (day.replace(day=1) - relativedelta(months=1))
         Payroll = request.env["eguitra.rh.payroll"]
         for company in companies:
@@ -229,6 +265,19 @@ class EguitraRh(http.Controller):
             if current.filtered(lambda e, c=company: e.company_id == c) and (not last or last.state == "draft"):
                 add("payroll", "warn", None, None, f"La paie {of_month(previous)} de {company.name} n'est pas "
                     "validée.", f"/rh/paie/{last.id}" if last else "/rh/paie")
+        # Fêtes religieuses à date mobile : à saisir chaque année (aucune n'est connue d'avance).
+        Holiday = request.env["eguitra.rh.holiday"].sudo()
+        for year in (day.year, day.year + 1) if day.month >= 10 else (day.year,):
+            if not Holiday.search_count([("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31")]):
+                add("holidays", "warn", None, None, f"Aucun jour férié saisi pour {year} : ajoutez-les dans les "
+                    "paramètres RH (fêtes religieuses à date mobile comprises).", "/rh/parametres")
+            elif year == day.year and not Holiday.search_count([
+                    ("date", ">=", f"{year}-01-01"), ("date", "<=", f"{year}-12-31"), "|", "|", "|",
+                    ("name", "ilike", "aïd"), ("name", "ilike", "tabaski"), ("name", "ilike", "maouloud"),
+                    ("name", "ilike", "ramadan")]):
+                add("holidays", "info", None, None, f"Aucune fête religieuse à date mobile saisie pour {year} "
+                    "(Aïd el-Fitr, Tabaski, Maouloud) : les jours ouvrables les comptent comme travaillés.",
+                    "/rh/parametres")
         order = {"danger": 0, "warn": 1, "info": 2}
         alerts.sort(key=lambda a: (order[a["severity"]], str(a["date"] or "9999")))
         return alerts
@@ -259,6 +308,11 @@ class EguitraRh(http.Controller):
             "categories": options(CATEGORIES), "contract_types": options(CONTRACTS),
             "marital_statuses": options(MARITAL), "payment_methods": options(PAYMENT_METHODS),
             "exit_reasons": options(EXIT_REASONS), "document_kinds": options(DOCUMENT_KINDS),
+            "qualification_types": [{"id": t.id, "code": t.code, "name": t.name, "validity_months": t.validity_months,
+                                     "mandatory_for_drivers": t.mandatory_for_drivers, "needs_document": t.needs_document,
+                                     "active": t.active}
+                                    for t in env["eguitra.rh.qualification.type"].with_context(active_test=False).search([])],
+            "ppe_items": options(PPE_ITEMS),
             "employees": [dict(emp_ref(e), company_id=e.company_id.id) for e in actives],
             "users": [{"id": u.id, "name": u.name, "login": u.login,
                        "company_ids": [c for c in u.company_ids.ids if c in companies.ids]} for u in users],
@@ -300,7 +354,8 @@ class EguitraRh(http.Controller):
                 if value and value not in allowed:
                     raise ApiError(400, "invalid_parameter", f"Valeur inconnue : {key}.")
                 values[key] = value
-        for key in ("hire_date", "contract_end", "trial_end", "birth_date", "leave_initial_date"):
+        for key in ("hire_date", "contract_end", "trial_end", "birth_date", "leave_initial_date",
+                    "medical_fitness_date", "medical_fitness_until"):
             if key in data:
                 values[key] = date_value(data, key)
         for key in ("base_salary", "leave_initial"):
@@ -526,13 +581,15 @@ class EguitraRh(http.Controller):
         settings = Settings._get(company)
         values, own = {}, {}
         for key in ("cnss_employee_rate", "cnss_employer_rate", "cnss_ceiling", "smig", "allowance_exempt_cap",
-                    "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours", "rotation_bonus"):
+                    "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours", "rotation_bonus",
+                    "intern_exemption"):
             if key in data:
                 target = own if key == "training_tax_rate" else values
                 target[key] = number(data, key)
                 if target[key] < 0:
                     raise ApiError(422, "business_rule", "Les taux et montants des paramètres sont positifs.")
-        for key in ("trial_alert_days", "contract_alert_days", "document_alert_days"):
+        for key in ("trial_alert_days", "contract_alert_days", "document_alert_days", "qualification_alert_days",
+                    "qualification_urgent_days"):
             if key in data:
                 values[key] = int(number(data, key))
         for key in ("training_tax_label", "cnss_employer_number"):
@@ -618,8 +675,11 @@ class EguitraRh(http.Controller):
         data = read_json()
         require(data, "employee_id", "type_id", "date_from", "date_to")
         emp = get("eguitra.rh.employee", int_or_false(data, "employee_id"), "Salarié")
+        leave_type = request.env["eguitra.rh.leave.type"].browse(int_or_false(data, "type_id")).exists()
+        if not leave_type or not leave_type.active:
+            raise ApiError(422, "business_rule", "Type d'absence inconnu ou archivé.")
         leave = request.env["eguitra.rh.leave"].create({
-            "employee_id": emp.id, "type_id": int_or_false(data, "type_id"), "date_from": date_value(data, "date_from"),
+            "employee_id": emp.id, "type_id": leave_type.id, "date_from": date_value(data, "date_from"),
             "date_to": date_value(data, "date_to"), "half_day": bool(data.get("half_day")),
             "note": (data.get("note") or "").strip() or False,
         })
@@ -705,6 +765,18 @@ class EguitraRh(http.Controller):
         })
         return advance_row(advance)
 
+    @api_route("/rh/advances/<int:advance_id>/postpone", methods=("POST",), profiles=WRITE)
+    def postpone_advance(self, advance_id, **_kw):
+        """Reporte la retenue d'une avance ou d'un prêt : plus rien n'est retenu avant le mois suivant celui
+        indiqué (net trop faible ce mois-là). Le reste dû est inchangé."""
+        advance = get("eguitra.rh.advance", advance_id, "Avance")
+        refuse_own(advance.employee_id)
+        data = read_json()
+        require(data, "month")
+        month = date_value(data, "month").replace(day=1)
+        advance.action_postpone(month)
+        return advance_row(advance)
+
     @api_route("/rh/advances/<int:advance_id>/cancel", methods=("POST",), profiles=WRITE)
     def cancel_advance(self, advance_id, **_kw):
         advance = get("eguitra.rh.advance", advance_id, "Avance")
@@ -721,8 +793,10 @@ def _settings_row(s):
         "rts_brackets": [{"from": b.threshold, "rate": b.rate} for b in s.bracket_ids],
         "vf_rate": s.vf_rate, "training_tax_rate": s.training_tax_rate,
         "training_tax_label": s.training_tax_label or "", "leave_days_per_month": s.leave_days_per_month,
-        "monthly_hours": s.monthly_hours, "rotation_bonus": s.rotation_bonus, "trial_alert_days": s.trial_alert_days,
+        "monthly_hours": s.monthly_hours, "rotation_bonus": s.rotation_bonus, "intern_exemption": s.intern_exemption,
+        "trial_alert_days": s.trial_alert_days,
         "contract_alert_days": s.contract_alert_days, "document_alert_days": s.document_alert_days,
+        "qualification_alert_days": s.qualification_alert_days, "qualification_urgent_days": s.qualification_urgent_days,
         "cnss_employer_number": s.cnss_employer_number or None,
         "accounts": {"salary": s.account_salary or "", "social_charges": s.account_social_charges or "",
                      "payroll_taxes": s.account_payroll_taxes or "", "training_tax": s.account_training_tax or "",
@@ -738,6 +812,6 @@ def _payroll_row(p):
     slips = p.payslip_ids
     return {
         "id": p.id, "name": p.name, "company": company_ref(p.company_id), "month": p.month, "state": p.state, "totals": p._totals(),
-        "anomalies": sum(len(s._anomalies()) for s in slips),
+        "anomalies": sum(len(s._anomalies()) for s in slips), "needs_compute": p.needs_compute,
         "move": {"id": move.id, "name": move.name, "state": move.state} if move.exists() else None,
     }

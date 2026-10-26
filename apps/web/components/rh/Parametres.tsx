@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
+import { INSECABLE, fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
-import { ChampMontant, PastilleSociete, avecSociete, messageErreur, nombre, nomCourt, useMeta } from "./commun";
+import { ChampMontant, PastilleSociete, avecSociete, erreurNombre, messageErreur, nombre, nomCourt, useMeta } from "./commun";
+import { TypesHabilitation } from "./Securite";
 
-type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "feries" | "departements";
+type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "habilitations" | "feries" | "departements";
 
 /**
  * Paramètres RH : paie, alertes, comptes, rubriques, absences, fériés, départements. Les règles sont
@@ -49,6 +50,7 @@ export function ParametresRh() {
           { key: "comptes", label: "Comptes" },
           { key: "rubriques", label: "Rubriques", count: meta.rubrics.length },
           { key: "absences", label: "Types d'absence", count: meta.leave_types.length },
+          { key: "habilitations", label: "Habilitations", count: meta.qualification_types.length },
           { key: "feries", label: "Jours fériés" },
           { key: "departements", label: "Départements", count: meta.departments.length },
         ]}
@@ -56,6 +58,7 @@ export function ParametresRh() {
       {(onglet === "paie" || onglet === "alertes" || onglet === "comptes") && <FormulaireParametres key={`${onglet}-${settings.company.id}`} onglet={onglet} settings={settings} ecrit={ecrit} onSaved={(s) => void mutate(s, { revalidate: false })} />}
       {onglet === "rubriques" && <Rubriques meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
       {onglet === "absences" && <TypesAbsence meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
+      {onglet === "habilitations" && <TypesHabilitation meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
       {onglet === "feries" && <Feries ecrit={ecrit} />}
       {onglet === "departements" && <Departements meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
     </div>
@@ -75,7 +78,8 @@ const COMPTES: Array<{ cle: keyof Settings["accounts"]; label: string; aide: str
 ];
 
 function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "paie" | "alertes" | "comptes"; settings: Settings; ecrit: boolean; onSaved: (s: Settings) => void }) {
-  const t = (v: number) => String(v);
+  // Valeurs écrites à la française dans les champs (« 2,5 », et non « 2.5 »).
+  const t = (v: number) => String(v).replace(".", ",");
   const [f, setF] = useState({
     cnss_employee_rate: t(settings.cnss_employee_rate),
     cnss_employer_rate: t(settings.cnss_employer_rate),
@@ -88,9 +92,13 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
     leave_days_per_month: t(settings.leave_days_per_month),
     monthly_hours: t(settings.monthly_hours),
     rotation_bonus: t(settings.rotation_bonus),
+    // Exonération de VF des stagiaires (CGI, art. 203 ter), paramétrable depuis eguitra_rh 19.0.1.1.0.
+    intern_exemption: t((settings as Settings & { intern_exemption?: number }).intern_exemption ?? 1_200_000),
     trial_alert_days: t(settings.trial_alert_days),
     contract_alert_days: t(settings.contract_alert_days),
     document_alert_days: t(settings.document_alert_days),
+    qualification_alert_days: t(settings.qualification_alert_days),
+    qualification_urgent_days: t(settings.qualification_urgent_days),
     cnss_employer_number: settings.cnss_employer_number ?? "",
   });
   const [bareme, setBareme] = useState(settings.rts_brackets.map((b) => ({ from: t(b.from), rate: t(b.rate) })));
@@ -99,6 +107,17 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
   const [ok, setOk] = useState(false);
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  // Nombres lus à la française : illisibles ou vides, ils restent en erreur sous leur champ et rien n'est
+  // envoyé (un plafond CNSS illisible valait 0, soit une assiette nulle à la paie suivante).
+  const requis: Array<keyof typeof f> = onglet === "paie"
+    ? ["cnss_employee_rate", "cnss_employer_rate", "cnss_ceiling", "smig", "allowance_exempt_cap", "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours"]
+    : onglet === "alertes" ? ["trial_alert_days", "contract_alert_days", "document_alert_days", "qualification_alert_days", "qualification_urgent_days"] : [];
+  const erreurs: Partial<Record<keyof typeof f, string>> = {};
+  for (const k of requis) erreurs[k] = erreurNombre(f[k], true);
+  if (onglet === "paie") erreurs.rotation_bonus = erreurNombre(f.rotation_bonus);
+  if (onglet === "paie") erreurs.intern_exemption = erreurNombre(f.intern_exemption, true);
+  const baremeIllisible = onglet === "paie" && bareme.some((b) => Boolean(erreurNombre(b.from, true) || erreurNombre(b.rate, true)));
+  const bloque = Object.values(erreurs).some(Boolean) || baremeIllisible;
 
   async function enregistrer() {
     setBusy(true);
@@ -119,11 +138,18 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
         leave_days_per_month: nombre(f.leave_days_per_month),
         monthly_hours: nombre(f.monthly_hours),
         rotation_bonus: nombre(f.rotation_bonus),
+        ...({ intern_exemption: nombre(f.intern_exemption) } as Partial<Settings>),
         cnss_employer_number: f.cnss_employer_number.trim() || null,
         rts_brackets: brackets,
       };
     } else if (onglet === "alertes") {
-      body = { trial_alert_days: nombre(f.trial_alert_days), contract_alert_days: nombre(f.contract_alert_days), document_alert_days: nombre(f.document_alert_days) };
+      body = {
+        trial_alert_days: nombre(f.trial_alert_days),
+        contract_alert_days: nombre(f.contract_alert_days),
+        document_alert_days: nombre(f.document_alert_days),
+        qualification_alert_days: nombre(f.qualification_alert_days),
+        qualification_urgent_days: nombre(f.qualification_urgent_days),
+      };
     } else {
       body = { accounts: comptes };
     }
@@ -140,7 +166,8 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
   const pied = ecrit && (
     <div className="mt-5 flex items-center justify-end gap-3">
       {ok && <span className="text-sm text-ok">Paramètres enregistrés.</span>}
-      <Button variant="primary" loading={busy} onClick={enregistrer}>
+      {bloque && <span className="text-sm text-danger">Un nombre est illisible ou manquant : corrigez le champ signalé en rouge.</span>}
+      <Button variant="primary" loading={busy} disabled={bloque} onClick={enregistrer}>
         Enregistrer
       </Button>
     </div>
@@ -151,14 +178,20 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
       <Card title="Échéancier du tableau de bord">
         {erreur && <Notice tone="danger">{erreur}</Notice>}
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Fin de période d'essai, prévenir (jours avant)">
+          <Field label="Fin de période d'essai, prévenir (jours avant)" error={erreurs.trial_alert_days}>
             <Input inputMode="numeric" disabled={!ecrit} value={f.trial_alert_days} onChange={set("trial_alert_days")} />
           </Field>
-          <Field label="Fin de CDD ou de stage (jours avant)">
+          <Field label="Fin de CDD ou de stage (jours avant)" error={erreurs.contract_alert_days}>
             <Input inputMode="numeric" disabled={!ecrit} value={f.contract_alert_days} onChange={set("contract_alert_days")} />
           </Field>
-          <Field label="Échéance d'un document (jours avant)">
+          <Field label="Échéance d'un document (jours avant)" error={erreurs.document_alert_days}>
             <Input inputMode="numeric" disabled={!ecrit} value={f.document_alert_days} onChange={set("document_alert_days")} />
+          </Field>
+          <Field label="Habilitation ou aptitude à renouveler (jours avant)" hint="Alerte orange dans l'échéancier" error={erreurs.qualification_alert_days}>
+            <Input inputMode="numeric" disabled={!ecrit} value={f.qualification_alert_days} onChange={set("qualification_alert_days")} />
+          </Field>
+          <Field label="Habilitation ou aptitude, alerte urgente (jours avant)" hint="Alerte rouge, comme une échéance dépassée" error={erreurs.qualification_urgent_days}>
+            <Input inputMode="numeric" disabled={!ecrit} value={f.qualification_urgent_days} onChange={set("qualification_urgent_days")} />
           </Field>
         </div>
         {pied}
@@ -193,38 +226,41 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           </div>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="CNSS, part salariale (%)">
+          <Field label="CNSS, part salariale (%)" error={erreurs.cnss_employee_rate}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.cnss_employee_rate} onChange={set("cnss_employee_rate")} />
           </Field>
-          <Field label="CNSS, part patronale (%)">
+          <Field label="CNSS, part patronale (%)" error={erreurs.cnss_employer_rate}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.cnss_employer_rate} onChange={set("cnss_employer_rate")} />
           </Field>
-          <Field label="Plafond mensuel de la CNSS (GNF)">
+          <Field label="Plafond mensuel de la CNSS (GNF)" error={erreurs.cnss_ceiling}>
             <ChampMontant disabled={!ecrit} value={f.cnss_ceiling} onChange={(v) => setF({ ...f, cnss_ceiling: v })} />
           </Field>
-          <Field label="SMIG mensuel (GNF)" hint="Plancher de l'assiette CNSS, contrôle des salaires">
+          <Field label="SMIG mensuel (GNF)" error={erreurs.smig} hint="Plancher de l'assiette CNSS, contrôle des salaires">
             <ChampMontant disabled={!ecrit} value={f.smig} onChange={(v) => setF({ ...f, smig: v })} />
           </Field>
-          <Field label="Indemnités forfaitaires exonérées de RTS (% du brut)" hint="CGI, art. 55 : 25 %">
+          <Field label="Indemnités forfaitaires exonérées de RTS (% du brut)" error={erreurs.allowance_exempt_cap} hint="CGI, art. 55 : 25 %">
             <Input inputMode="decimal" disabled={!ecrit} value={f.allowance_exempt_cap} onChange={set("allowance_exempt_cap")} />
           </Field>
-          <Field label="Versement forfaitaire (%)" hint="CGI, art. 201 : 6 %">
+          <Field label="Versement forfaitaire (%)" error={erreurs.vf_rate} hint="CGI, art. 201 : 6 %">
             <Input inputMode="decimal" disabled={!ecrit} value={f.vf_rate} onChange={set("vf_rate")} />
           </Field>
-          <Field label="Congés acquis par mois (jours ouvrables)">
+          <Field label="Congés acquis par mois (jours ouvrables)" error={erreurs.leave_days_per_month}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.leave_days_per_month} onChange={set("leave_days_per_month")} />
           </Field>
-          <Field label="Heures mensuelles (taux horaire)">
+          <Field label="Heures mensuelles (taux horaire)" error={erreurs.monthly_hours}>
             <Input inputMode="decimal" disabled={!ecrit} value={f.monthly_hours} onChange={set("monthly_hours")} />
           </Field>
-          <Field label="Prime par rotation validée (GNF)" hint="Chauffeurs liés au transport ; 0 : pas de prime automatique">
+          <Field label="Rémunération des stagiaires exonérée de VF et de taxe de formation (GNF)" error={erreurs.intern_exemption} hint="CGI, art. 203 ter : 1 200 000 ; à faire valider par l'expert-comptable">
+            <ChampMontant disabled={!ecrit} value={f.intern_exemption} onChange={(v) => setF({ ...f, intern_exemption: v })} />
+          </Field>
+          <Field label="Prime par rotation validée (GNF)" error={erreurs.rotation_bonus} hint="Chauffeurs liés au transport ; 0 : pas de prime automatique">
             <ChampMontant disabled={!ecrit} value={f.rotation_bonus} onChange={(v) => setF({ ...f, rotation_bonus: v })} />
           </Field>
         </div>
       </Card>
       <Card title={<span className="flex flex-wrap items-center gap-2">Propre à <PastilleSociete company={settings.company} /></span>}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Taxe de formation (%)" hint="2 % (apprentissage, moins de 30 salariés) ou 1,5 %">
+          <Field label="Taxe de formation (%)" error={erreurs.training_tax_rate} hint="2 % (apprentissage, moins de 30 salariés) ou 1,5 %">
             <Input inputMode="decimal" disabled={!ecrit} value={f.training_tax_rate} onChange={set("training_tax_rate")} />
           </Field>
           <Field label="Libellé de la taxe de formation">
@@ -254,7 +290,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
                   <ChampMontant disabled={!ecrit} value={b.from} onChange={(v) => setBareme(bareme.map((x, j) => (j === i ? { ...x, from: v } : x)))} />
                 </td>
                 <td className="w-24 py-1 pr-2">
-                  <Input inputMode="decimal" disabled={!ecrit} value={b.rate} onChange={(e) => setBareme(bareme.map((x, j) => (j === i ? { ...x, rate: e.target.value } : x)))} />
+                  <Input inputMode="decimal" aria-invalid={erreurNombre(b.rate, true) ? true : undefined} disabled={!ecrit} value={b.rate} onChange={(e) => setBareme(bareme.map((x, j) => (j === i ? { ...x, rate: e.target.value } : x)))} />
                 </td>
                 <td className="w-10 py-1">
                   {ecrit && (
@@ -267,13 +303,14 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
             ))}
           </tbody>
         </table>
+        {baremeIllisible && <p role="alert" className="mt-2 text-[12.5px] font-medium text-danger">Seuil ou taux illisible ou vide dans une tranche : écrivez par exemple 1 000 000 ou 2,5.</p>}
         {ecrit && (
           <Button size="sm" className="mt-2" onClick={() => setBareme([...bareme, { from: "", rate: "" }])}>
             <Plus className="h-3.5 w-3.5" /> Ajouter une tranche
           </Button>
         )}
         <p className="mt-3 text-[12.5px] text-muted">
-          Tranches actuelles : {settings.rts_brackets.map((b) => `${fmtInt(b.from)} → ${fmtDec(b.rate)} %`).join(" ; ")}.
+          Tranches actuelles : {settings.rts_brackets.map((b) => `${fmtInt(b.from)} → ${fmtDec(b.rate)}${INSECABLE}%`).join(" ; ")}.
         </p>
       </Card>
     </div>
@@ -301,7 +338,7 @@ function Rubriques({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; onC
           { key: "code", label: "Code", render: (r) => <span className="font-mono text-xs">{r.code}</span>, sortValue: (r) => r.code },
           { key: "name", label: "Rubrique", render: (r) => r.name, sortValue: (r) => r.name },
           { key: "kind", label: "Nature", render: (r) => (r.kind === "gain" ? "Gain" : "Retenue") },
-          { key: "input", label: "Saisie", render: (r) => (r.input === "hours" ? `Heures (+${fmtDec(r.overtime_rate)} %)` : "Montant") },
+          { key: "input", label: "Saisie", render: (r) => (r.input === "hours" ? `Heures (+${fmtDec(r.overtime_rate)}${INSECABLE}%)` : "Montant") },
           {
             key: "regles",
             label: "Règles",
@@ -348,7 +385,7 @@ function EditionRubrique({ rubrique, onClose, onDone }: { rubrique: Rubric | nul
     name: rubrique?.name ?? "",
     kind: rubrique?.kind ?? "gain",
     input: rubrique?.input ?? "amount",
-    overtime_rate: String(rubrique?.overtime_rate ?? 0),
+    overtime_rate: String(rubrique?.overtime_rate ?? 0).replace(".", ","),
     cnss: rubrique?.cnss ?? true,
     taxable: rubrique?.taxable ?? true,
     exempt_allowance: rubrique?.exempt_allowance ?? false,
@@ -382,7 +419,7 @@ function EditionRubrique({ rubrique, onClose, onDone }: { rubrique: Rubric | nul
       title={rubrique ? `Rubrique ${rubrique.code}` : "Nouvelle rubrique"}
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim()} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim() || Boolean(f.input === "hours" && erreurNombre(f.overtime_rate))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -405,7 +442,7 @@ function EditionRubrique({ rubrique, onClose, onDone }: { rubrique: Rubric | nul
         <Field label="Saisie">
           <Select value={f.input} onChange={(e) => setF({ ...f, input: e.target.value as Rubric["input"] })} options={[{ value: "amount", label: "Montant" }, { value: "hours", label: "Heures (taux horaire majoré)" }]} />
         </Field>
-        <Field label="Majoration des heures (%)">
+        <Field label="Majoration des heures (%)" error={f.input === "hours" ? erreurNombre(f.overtime_rate) : undefined}>
           <Input inputMode="decimal" disabled={f.input !== "hours"} value={f.overtime_rate} onChange={(e) => setF({ ...f, overtime_rate: e.target.value })} />
         </Field>
         <Field label="Compte" hint={f.kind === "gain" ? "Charge : 6611, 6612 primes…" : "Tiers : 421 avances…"} className="sm:col-span-2">
@@ -447,7 +484,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
           { key: "paid", label: "Rémunérée", render: (t) => (t.paid ? "Oui" : <span className="text-warn">Non : retenue</span>) },
           { key: "balance", label: "Décompte du solde", render: (t) => (t.deducts_balance ? "Oui" : "Non") },
           { key: "doc", label: "Justificatif", render: (t) => (t.needs_document ? "Exigé" : "–") },
-          { key: "max", label: "Durée maximale", align: "right", render: (t) => (t.max_days ? `${fmtDec(t.max_days)} j` : "–") },
+          { key: "max", label: "Durée maximale", align: "right", render: (t) => (t.max_days ? `${fmtDec(t.max_days)}${INSECABLE}j` : "–") },
           { key: "active", label: "", render: (t) => (!t.active ? <Badge>Archivé</Badge> : null) },
           {
             key: "x",
@@ -477,7 +514,7 @@ function TypesAbsence({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
 }
 
 function EditionTypeAbsence({ type, onClose, onDone }: { type: LeaveType | null; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ code: type?.code ?? "", name: type?.name ?? "", paid: type?.paid ?? true, deducts_balance: type?.deducts_balance ?? false, needs_document: type?.needs_document ?? false, max_days: String(type?.max_days ?? 0), active: type?.active ?? true });
+  const [f, setF] = useState({ code: type?.code ?? "", name: type?.name ?? "", paid: type?.paid ?? true, deducts_balance: type?.deducts_balance ?? false, needs_document: type?.needs_document ?? false, max_days: String(type?.max_days ?? 0).replace(".", ","), active: type?.active ?? true });
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   async function enregistrer() {
@@ -505,7 +542,7 @@ function EditionTypeAbsence({ type, onClose, onDone }: { type: LeaveType | null;
       title={type ? type.name : "Nouveau type d'absence"}
       onClose={onClose}
       footer={
-        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim()} onClick={enregistrer}>
+        <Button variant="primary" loading={busy} disabled={!f.code.trim() || !f.name.trim() || Boolean(erreurNombre(f.max_days))} onClick={enregistrer}>
           Enregistrer
         </Button>
       }
@@ -519,7 +556,7 @@ function EditionTypeAbsence({ type, onClose, onDone }: { type: LeaveType | null;
         <Field label="Code">
           <Input className="font-mono uppercase" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} />
         </Field>
-        <Field label="Durée maximale par demande (jours ouvrables, 0 : sans limite)">
+        <Field error={erreurNombre(f.max_days)} label="Durée maximale par demande (jours ouvrables, 0 : sans limite)">
           <Input inputMode="decimal" value={f.max_days} onChange={(e) => setF({ ...f, max_days: e.target.value })} />
         </Field>
         <Field label="Libellé" className="sm:col-span-2">
@@ -542,9 +579,13 @@ function Feries({ ecrit }: { ecrit: boolean }) {
   const [date, setDate] = useState("");
   const [nom, setNom] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
+  // Envoi en cours (ajout, ou identifiant du jour retiré) : un double clic n'ajoute pas deux fois le jour.
+  const [envoi, setEnvoi] = useState<"ajout" | number | null>(null);
   useEffect(() => setErreur(null), [annee]);
   async function ajouter() {
+    if (envoi !== null) return;
     setErreur(null);
+    setEnvoi("ajout");
     try {
       await apiSend("POST", "/rh/holidays", { date, name: nom.trim() });
       setDate("");
@@ -552,15 +593,21 @@ function Feries({ ecrit }: { ecrit: boolean }) {
       void mutate();
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setEnvoi(null);
     }
   }
   async function supprimer(h: Holiday) {
     if (!(await demanderConfirmation(`Retirer le jour férié « ${h.name} » du ${fmtDate(h.date)} ?`, { action: "Retirer", danger: true }))) return;
+    setErreur(null);
+    setEnvoi(h.id);
     try {
       await apiSend("DELETE", `/rh/holidays/${h.id}`);
       void mutate();
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setEnvoi(null);
     }
   }
   return (
@@ -600,7 +647,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
               align: "right",
               render: (h) =>
                 ecrit ? (
-                  <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void supprimer(h)}>
+                  <Button variant="ghost" size="sm" aria-label="Retirer" loading={envoi === h.id} disabled={envoi !== null} onClick={() => void supprimer(h)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 ) : null,
@@ -616,7 +663,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
           <Field label="Fête">
             <Input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Tabaski" />
           </Field>
-          <Button variant="primary" disabled={!date || !nom.trim()} onClick={ajouter}>
+          <Button variant="primary" loading={envoi === "ajout"} disabled={!date || !nom.trim() || envoi !== null} onClick={ajouter}>
             <Plus className="h-4 w-4" /> Ajouter
           </Button>
         </div>
@@ -645,7 +692,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
         empty="Aucun département."
         columns={[
           { key: "name", label: "Département", render: (d) => d.name, sortValue: (d) => d.name },
-          { key: "company", label: "Société", render: (d) => (d.company ? <PastilleSociete company={d.company} /> : <span className="text-[12.5px] text-muted">Les deux sociétés</span>), sortValue: (d) => d.company?.name ?? "" },
+          { key: "company", label: "Société", render: (d) => (d.company ? <PastilleSociete company={d.company} /> : <span className="text-[12.5px] text-muted" title={meta.companies.length > 1 ? undefined : "Géré par un compte ouvert aux deux sociétés"}>Les deux sociétés</span>), sortValue: (d) => d.company?.name ?? "" },
           { key: "manager", label: "Responsable", render: (d) => d.manager?.name ?? "–" },
           { key: "headcount", label: "Effectif", align: "right", render: (d) => String(d.headcount), sortValue: (d) => d.headcount },
           { key: "active", label: "", render: (d) => (!d.active ? <Badge>Archivé</Badge> : null) },
@@ -654,7 +701,7 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
             label: "",
             align: "right",
             render: (d) =>
-              ecrit ? (
+              ecrit && (d.company || meta.companies.length > 1) ? (
                 <Button variant="ghost" size="sm" aria-label="Modifier" onClick={() => setEdition(d)}>
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
@@ -680,7 +727,9 @@ function Departements({ meta, ecrit, onChanged }: { meta: Meta; ecrit: boolean; 
 function EditionDepartement({ meta, departement, onClose, onDone }: { meta: Meta; departement: Department | null; onClose: () => void; onDone: () => void }) {
   const [nom, setNom] = useState(departement?.name ?? "");
   const [responsable, setResponsable] = useState(departement?.manager ? String(departement.manager.id) : "");
-  const [societe, setSociete] = useState(departement?.company ? String(departement.company.id) : "");
+  // Un compte ouvert à une seule société crée les départements de cette société : un département
+  // commun (sans société) ne se gère que par un compte ouvert aux deux (refus 403 du noyau).
+  const [societe, setSociete] = useState(departement?.company ? String(departement.company.id) : meta.companies.length === 1 ? String(meta.companies[0]!.id) : "");
   const [actif, setActif] = useState(departement?.active ?? true);
   const [erreur, setErreur] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

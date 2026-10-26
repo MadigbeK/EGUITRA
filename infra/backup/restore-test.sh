@@ -10,6 +10,9 @@
 #   backup/restore-test.sh --target "…" --report            écrit aussi un compte rendu à remettre au
 #                                                           client (logs/restore-reports/, Markdown,
 #                                                           converti en Word par docs/outils/md-docx.js)
+#   backup/restore-test.sh --offsite [--target "…"]         restaure depuis la copie hors site
+#                                                           (reprise après perte du serveur) : la
+#                                                           durée mesurée comprend le téléchargement
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
@@ -19,6 +22,10 @@ NAME=eguitra-restore-test
 target=""
 keep=0
 report=0
+offsite=0
+remote=""
+work=""
+download=""
 started=$(date +%s)
 started_label=$(date '+%d/%m/%Y %H:%M')
 while (( $# )); do
@@ -26,17 +33,47 @@ while (( $# )); do
     --target) target="$2"; shift 2 ;;
     --keep) keep=1; shift ;;
     --report) report=1; shift ;;
+    --offsite) offsite=1; shift ;;
     *) echo "Option inconnue : $1" >&2; exit 2 ;;
   esac
 done
 
+cleanup() {
+  if (( keep == 0 )); then
+    docker rm -f "$NAME" >/dev/null 2>&1 || true
+    sudo rm -rf ${work:+"$work"} ${download:+"$download"}
+  fi
+}
+trap cleanup EXIT
+
 # Sauvegarde de base : la plus récente, ou la plus récente antérieure à la cible.
 limit="99999999T9999"
 [[ -n "$target" ]] && limit=$(date -d "$target" +%Y%m%dT%H%M)
-base=$(sudo find "$BACKUP_DIR/base" -mindepth 1 -maxdepth 1 -type d -name '2*' ! -name '*.partial' | sort \
-  | while read -r dir; do [[ "$(basename "$dir")" > "$limit" ]] || echo "$dir"; done | tail -1)
+pick() { while read -r name; do [[ "$name" > "$limit" ]] || echo "$name"; done | tail -1; }
+wal_dir="$BACKUP_DIR/wal"
+if (( offsite )); then
+  # Reprise après perte du serveur : sauvegarde et journaux téléchargés depuis la copie hors site,
+  # déchiffrés par rclone dans le conteneur des sauvegardes (configuration de backup.env), dans un
+  # dossier jetable.
+  remote=$(sed -n 's/^RCLONE_REMOTE=//p' backup.env 2>/dev/null | tail -1 | tr -d "\"' ") || true
+  [[ -n "$remote" ]] || { echo "Copie hors site non configurée (RCLONE_REMOTE dans infra/backup.env)." >&2; exit 1; }
+  remote=${remote%/}
+  download=$(sudo mktemp -d /srv/eguitra/restore-offsite.XXXXXX)
+  offsite_rclone() { docker compose run --rm --no-deps -T -v "$download:/restore" --entrypoint rclone backup "$@"; }
+  name=$(offsite_rclone lsf --dirs-only "$remote/base" | tr -d '/' | grep '^2' | sort | pick)
+  [[ -n "$name" ]] || { echo "Aucune sauvegarde de base hors site utilisable." >&2; exit 1; }
+  echo "Téléchargement depuis la copie hors site : sauvegarde $name et journaux de transactions."
+  offsite_rclone copy "$remote/base/$name" "/restore/base/$name"
+  offsite_rclone copy "$remote/wal" /restore/wal
+  base="$download/base/$name"
+  wal_dir="$download/wal"
+else
+  base=$(sudo find "$BACKUP_DIR/base" -mindepth 1 -maxdepth 1 -type d -name '2*' ! -name '*.partial' -printf '%f\n' \
+    | sort | pick)
+  [[ -n "$base" ]] && base="$BACKUP_DIR/base/$base"
+fi
 [[ -n "$base" ]] || { echo "Aucune sauvegarde de base utilisable." >&2; exit 1; }
-echo "Sauvegarde de base : $(basename "$base")${target:+, cible $target}"
+echo "Sauvegarde de base : $(basename "$base")${target:+, cible $target}${remote:+ (copie hors site)}"
 
 # Compte rendu (option --report) : écrit à la fin, en cas de réussite comme d'échec.
 checks=()
@@ -57,6 +94,7 @@ write_report() {
     echo "| Serveur | $(hostname) |"
     echo "| Base | $ODOO_DB |"
     echo "| Sauvegarde de base utilisée | $(basename "$base") |"
+    echo "| Source | ${remote:+copie hors site, téléchargée puis restaurée}${remote:-sauvegardes du serveur} |"
     echo "| Instant visé | ${target:-état le plus récent} (heure de Conakry) |"
     echo "| Durée de la restauration | $(( ($(date +%s) - started) / 60 )) min $(( ($(date +%s) - started) % 60 )) s |"
     echo "| Résultat | $result |"
@@ -78,13 +116,6 @@ write_report() {
 
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 work=$(sudo mktemp -d /srv/eguitra/restore-test.XXXXXX)
-cleanup() {
-  if (( keep == 0 )); then
-    docker rm -f "$NAME" >/dev/null 2>&1 || true
-    sudo rm -rf "$work"
-  fi
-}
-trap cleanup EXIT
 
 sudo tar -xzf "$base/base.tar.gz" -C "$work"
 sudo tar -xzf "$base/pg_wal.tar.gz" -C "$work/pg_wal"
@@ -98,7 +129,7 @@ sudo chown -R 999:999 "$work"
 sudo chmod 700 "$work"
 
 docker run -d --name "$NAME" -p 127.0.0.1:5433:5432 \
-  -v "$work:/var/lib/postgresql/data" -v "$BACKUP_DIR/wal:/backup/wal:ro" postgres:16 >/dev/null
+  -v "$work:/var/lib/postgresql/data" -v "$wal_dir:/backup/wal:ro" postgres:16 >/dev/null
 echo "Rejeu des WAL en cours…"
 state=""
 for _ in $(seq 1 360); do
@@ -142,5 +173,5 @@ mkdir -p ../logs && date +%s > ../logs/restore-test.ok
 if (( report )) && [[ -n "$target" ]]; then date +%s > ../logs/restore-pitr.ok; fi
 if (( keep )); then
   echo "Instance laissée en marche sur 127.0.0.1:5433 (conteneur $NAME, données dans $work)."
-  echo "Pour l'arrêter : docker rm -f $NAME && sudo rm -rf $work"
+  echo "Pour l'arrêter : docker rm -f $NAME && sudo rm -rf $work${download:+ $download}"
 fi

@@ -53,3 +53,14 @@ def days(value):
 def ratio(value):
     """Ratio sans unité à deux décimales : 2.9 -> « 2,90 »."""
     return number(value, 2)
+
+
+def accord(n, un, plusieurs=None):
+    """Forme accordée au nombre, sans le nombre : singulier jusqu'à 1 (« 0 alerte », « 1 alerte »,
+    « 2 alertes »), comme pluriel() de l'écran (lib/format.ts) ; jamais « alerte(s) »."""
+    return un if abs(n) < 2 else (plusieurs or un + "s")
+
+
+def pluriel(n, un, plusieurs=None):
+    """Nombre suivi de sa forme accordée : « 1 rotation », « 3 rotations »."""
+    return f"{number(n, 0)} {accord(n, un, plusieurs)}"

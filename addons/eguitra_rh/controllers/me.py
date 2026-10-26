@@ -10,8 +10,9 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, read_json, require
 
-from ..engine import fmt_days
+from ..engine import jours
 from .common import MANAGERS, date_value, int_or_false, internal_only, leave_row, leave_type_row, ref, today
+from .hsseq import fitness_row
 from .paie import payslip_detail
 
 
@@ -35,7 +36,8 @@ class EguitraRhMe(http.Controller):
         types = env["eguitra.rh.leave.type"].sudo().search([])
         if not emp:
             return {"employee": None, "balance": None, "leaves": [], "payslips": [], "team_pending": [],
-                    "team_upcoming": [], "leave_types": [leave_type_row(t) for t in types], "manages_rh": manages}
+                    "team_upcoming": [], "leave_types": [leave_type_row(t) for t in types], "manages_rh": manages,
+                    "qualifications": [], "fitness": None}
         day = today()
         Leave = env["eguitra.rh.leave"].sudo()
         team = env["eguitra.rh.employee"].sudo().search([("manager_id", "=", emp.id)])
@@ -52,6 +54,9 @@ class EguitraRhMe(http.Controller):
             "leaves": [leave_row(leave) for leave in Leave.search([("employee_id", "=", emp.id)], limit=50)],
             "payslips": [{"id": s.id, "month": s.month, "net": s.net} for s in slips],
             "leave_types": [leave_type_row(t) for t in types],
+            # Le conducteur consulte ses propres habilitations et son statut d'aptitude (jamais un détail).
+            "qualifications": emp._qualification_rows(day),
+            "fitness": fitness_row(emp, day),
             "team_pending": [leave_row(leave) for leave in Leave.search(
                 [("employee_id", "in", team.ids), ("state", "=", "submitted")], order="date_from")],
             "team_upcoming": [leave_row(leave) for leave in Leave.search(
@@ -77,9 +82,10 @@ class EguitraRhMe(http.Controller):
         if leave_type.deducts_balance:
             balance = emp._leave_balance(leave.date_from)
             if balance["balance"] - balance["pending"] < 0:
+                pending = balance["pending"] - leave.days
                 raise ApiError(422, "insufficient_balance",
-                               f"Solde insuffisant : {fmt_days(balance['balance'])} jour(s) acquis, dont "
-                               f"{fmt_days(balance['pending'] - leave.days)} déjà demandé(s).")
+                               f"Solde insuffisant : {jours(balance['balance'])} acquis, dont {jours(pending)} déjà "
+                               f"{'demandés' if abs(pending) >= 2 else 'demandé'}.")
         return leave_row(leave)
 
     @api_route("/rh/me/leaves/<int:leave_id>/cancel", methods=("POST",), profiles=None)

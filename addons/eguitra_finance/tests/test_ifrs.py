@@ -46,11 +46,18 @@ class TestIfrs(FinanceDataMixin, TransactionCase):
         self.assertEqual(self.Policy.expected_credit_loss(self.company, self.today)["ecl"], 20_500_000,
                          "Matrice paramétrable par société")
 
+    def _opening_adjustment(self):
+        """Ajustement non comptabilisé à la veille de l'exercice (une facture de test peut tomber dans
+        l'exercice précédent quand les tests tournent en début d'année)."""
+        fy_start = self.env["eguitra.finance.metrics"].fiscal_year_bounds(self.company, self.today)[0]
+        return self.Policy.expected_credit_loss(self.company, fy_start - timedelta(days=1))["adjustment"]
+
     def test_passerelle_puis_comptabilisation(self):
         self._invoice(100_000_000, self.today - timedelta(days=100))  # plus de 90 jours : 50 %
         bridge = self.Policy.restatements(self.company, self.today)
         ifrs9 = next(line for line in bridge["restatements"] if line["standard"] == "IFRS 9")
-        self.assertEqual(ifrs9["amount"], -50_000_000, "Par défaut, retraitement hors des livres")
+        self.assertEqual(ifrs9["amount"], -(50_000_000 - self._opening_adjustment()),
+                         "Par défaut, retraitement hors des livres")
         self.assertAlmostEqual(bridge["net_result_ifrs"], bridge["net_result_syscohada"] + bridge["total_restatements"], 2)
         self.assertFalse(next(line for line in bridge["restatements"] if line["standard"] == "IAS 12")["quantified"])
 
@@ -64,7 +71,30 @@ class TestIfrs(FinanceDataMixin, TransactionCase):
             self.Policy.post_expected_credit_loss(self.company, self.today)
         bridge = self.Policy.restatements(self.company, end)
         ifrs9 = next(line for line in bridge["restatements"] if line["standard"] == "IFRS 9")
-        self.assertEqual(ifrs9["amount"], 0, "Comptabilisée : plus de retraitement")
+        self.assertEqual(ifrs9["amount"], self._opening_adjustment(), "Comptabilisée : plus de retraitement de l'exercice")
+
+    def test_recalcul_apres_extourne(self):
+        """L'extourne de la pièce ECL permet de la recalculer, comme le dit le refus."""
+        self._invoice(100_000_000, self.today - timedelta(days=100))
+        move = self.Policy.post_expected_credit_loss(self.company, self.today)
+        move._reverse_moves([{"date": move.date, "ref": f"Extourne {move.ref}"}]).action_post()
+        self.assertFalse(self.Policy.expected_credit_loss(self.company, self.today)["posted"])
+        again = self.Policy.post_expected_credit_loss(self.company, self.today)
+        self.assertNotEqual(again, move)
+        self.assertEqual(again.line_ids.filtered(lambda line: line.account_id.code.startswith("491")).credit, 50_000_000)
+
+    def test_passerelle_en_variation_de_l_exercice(self):
+        """Une créance déjà ouverte à l'ouverture de l'exercice : seul le surcroît de perte attendue de
+        l'exercice retraite son résultat, la part de l'ouverture relève des exercices antérieurs."""
+        fy_start = self.env["eguitra.finance.metrics"].fiscal_year_bounds(self.company, self.today)[0]
+        opening = fy_start - timedelta(days=1)
+        self._invoice(100_000_000, fy_start - timedelta(days=10))  # 9 jours de retard à l'ouverture : 3 %
+        at_opening = self.Policy.expected_credit_loss(self.company, opening)["adjustment"]
+        self.assertEqual(at_opening, 3_000_000)
+        at_day = self.Policy.expected_credit_loss(self.company, self.today)["adjustment"]
+        bridge = self.Policy.restatements(self.company, self.today)
+        ifrs9 = next(line for line in bridge["restatements"] if line["standard"] == "IFRS 9")
+        self.assertEqual(ifrs9["amount"], -(at_day - at_opening), "Variation de l'exercice, pas le solde")
 
     def test_periode_close_refusee(self):
         self._invoice(10_000_000, self.today - timedelta(days=40))
@@ -78,4 +108,6 @@ class TestIfrs(FinanceDataMixin, TransactionCase):
         bridge = self.Policy.restatements(self.company, self.today)
         ias12 = next(line for line in bridge["restatements"] if line["standard"] == "IAS 12")
         self.assertTrue(ias12["quantified"])
-        self.assertEqual(ias12["amount"], 12_500_000, "25 % du retraitement de -50 M")
+        quantified = sum(line["amount"] for line in bridge["restatements"]
+                         if line["quantified"] and line["standard"] != "IAS 12")
+        self.assertAlmostEqual(ias12["amount"], -quantified * 0.25, 2, "25 % du retraitement (-50 M en cours d'exercice)")

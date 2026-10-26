@@ -9,6 +9,9 @@ const DIR = __dirname;
 const OUT = path.join(DIR, 'word');
 const readme = fs.readFileSync(path.join(DIR, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
 const common = readme.slice(readme.indexOf('## Pour tous : se connecter'));
+// La discussion interne n'est pas ouverte aux porteurs de projets : leur guide s'arrête avant elle.
+const DISCUSSION = common.indexOf('## Comptes internes : la discussion');
+const commonPorteur = DISCUSSION >= 0 ? common.slice(0, DISCUSSION).trimEnd() + '\n' : common;
 fs.mkdirSync(OUT, { recursive: true });
 
 const guides = fs.readdirSync(DIR).filter((f) => /^guide-.+\.md$/.test(f)).sort();
@@ -19,7 +22,7 @@ const guides = fs.readdirSync(DIR).filter((f) => /^guide-.+\.md$/.test(f)).sort(
     const title = first.replace(/^#\s*/, '');
     const name = `Guide_${file.replace(/^guide-|\.md$/g, '')}.docx`;
     await build({
-      markdown: [`${first}\n`, common, rest.join('\n')],
+      markdown: [`${first}\n`, file === 'guide-porteur.md' ? commonPorteur : common, rest.join('\n')],
       out: path.join(OUT, name),
       title,
       footer: `E-VOLUTION XP · ${title}`,

@@ -140,6 +140,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [
         { href: "/transport/flotte", label: "Flotte et chauffeurs", icon: "Gauge" },
         { href: "/transport/routes", label: "Routes et tarifs", icon: "Route" },
+        { href: "/transport/bareme", label: "Barème officiel", icon: "Scale" },
         { href: "/transport/parametres", label: "Paramètres", icon: "SlidersHorizontal" },
       ],
     },
@@ -193,6 +194,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/rh/salaries", label: "Salariés", icon: "Users", profiles: RH_GESTION },
         { href: "/rh/conges", label: "Absences et congés", icon: "Calendar", profiles: RH_GESTION },
         { href: "/rh/avances", label: "Avances et prêts", icon: "HandCoins", profiles: RH_GESTION },
+        { href: "/rh/habilitations", label: "Habilitations et sécurité", icon: "ShieldCheck", profiles: RH_GESTION },
       ],
     },
     {
