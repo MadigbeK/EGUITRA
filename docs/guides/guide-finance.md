@@ -42,7 +42,7 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 | Chaque semaine | Importer les relevés bancaires et rapprocher les lignes ; traiter les validations et les relances. |
 | Chaque fin de mois | Vérifier les alertes et les contrôles (pastilles de la navigation), puis lancer la clôture ; imprimer le rapport mensuel. |
 | Chaque trimestre | Actualiser les taux de change, revoir les seuils d'alerte avec la direction, contrôler les immobilisations totalement amorties. |
-| Chaque année | Reprise des à-nouveaux, révision du budget, inventaire de la flotte et des stocks. |
+| Chaque année | Clôture de l'exercice (voir plus bas) : douze mois clôturés, affectation du résultat après l'assemblée, verrouillage définitif ; révision du budget, inventaire de la flotte et des stocks. Aucun à-nouveau à passer : l'exercice suivant s'ouvre de lui-même. |
 
 ## Pilotage (Pilotage > Tableau de bord, Alertes, Rapport mensuel)
 
@@ -278,6 +278,42 @@ chargée depuis le fichier fourni à la reprise ; la plateforme recalcule les 26
 (équilibre, produits, charges, EBITDA, résultat, trésorerie, stocks, créances et dettes dont échues,
 CA et achats TTC, transport, bilan, capitaux propres) et donne l'écart de chacun. Le résultat
 « n/26 », horodaté, s'imprime en annexe du procès-verbal de bascule.
+
+## Clôture de l'exercice (Comptabilité > Clôtures et contrôles)
+
+Choisir l'exercice en haut de l'écran : le bloc « Clôture de l'exercice » donne l'état des douze
+mois, le résultat de l'exercice, ce qui est déjà affecté et ce qui reste à affecter, puis le
+verrouillage définitif.
+
+1. **Rien à passer pour ouvrir l'exercice suivant.** Les comptes de charges et de produits (classes
+   6 à 8) repartent d'eux-mêmes de zéro au 1er janvier ; le résultat de l'exercice clos figure au
+   bilan en « Report à nouveau » (CH) tant qu'il n'est pas affecté, et « Résultat net de
+   l'exercice » (CJ) ne porte que l'exercice en cours. La balance, le grand livre et le fichier
+   SAF-T de l'exercice suivant reprennent ce résultat à l'ouverture du compte 999999
+   « Affectation du résultat ». Ne saisissez pas d'à-nouveaux.
+2. **Clôturer les douze mois**, dans l'ordre, comme chaque mois (section précédente).
+3. **Affecter le résultat après l'assemblée.** Profil finance (ou administration), avec le droit
+   « Saisie libre des comptes ». Saisir la date de l'assemblée (après la fin de l'exercice, dans un
+   mois encore ouvert : passez l'affectation avant de clôturer le mois de l'assemblée), puis une
+   ligne par décision : réserve légale (111), réserves statutaires (112) ou autres réserves (118),
+   report à nouveau (121 créditeur, 129 débiteur), dividendes à payer (465, avec l'associé si
+   besoin). Le total doit être égal au résultat restant à affecter. Une perte s'impute sur les
+   réserves ou se reporte à nouveau (129), jamais en dividendes. Rappel à faire confirmer par
+   l'expert-comptable : la réserve légale reçoit au moins un dixième du bénéfice (diminué des pertes
+   antérieures) tant qu'elle n'atteint pas le cinquième du capital.
+4. **Valider l'OD.** La plateforme crée l'OD « Affectation du résultat AAAA » en brouillon, dans le
+   journal des opérations diverses, en contrepartie du compte 999999. Ouvrez-la (dans le bloc ou
+   dans Journaux et OD), joignez le procès-verbal de l'assemblée, puis « Valider » : elle suit le
+   circuit d'approbation des OD. Une fois validée, le report à nouveau du bilan passe en réserves,
+   en report à nouveau décidé et en dividendes à payer, sans déséquilibre. Pour corriger un
+   brouillon, supprimez-le et recommencez ; une seconde OD n'est acceptée que pour un reste à
+   affecter. Passez toujours l'affectation par ce bloc, jamais par une OD libre.
+5. **Verrouiller définitivement l'exercice.** Réservé à la direction et à l'administration, une
+   fois l'exercice terminé, les douze mois clôturés et aucune pièce en brouillon jusqu'au 31
+   décembre : le bloc dit ce qui manque. Le verrouillage est **irréversible** : plus aucune écriture
+   ne peut être passée, modifiée ou supprimée jusqu'au 31 décembre, même par l'administration, et
+   aucun mois de l'exercice ne peut plus être rouvert. Il est tracé au registre des clôtures. Il
+   n'empêche pas l'affectation du résultat, passée à la date de l'assemblée dans l'exercice suivant.
 
 ## Balance et états (Comptabilité > Balance et états)
 
