@@ -268,7 +268,7 @@ function CockpitCabinet() {
                   <p className="mt-2 text-[12.5px] leading-snug text-muted">Chaque marche est large comme les dossiers en cours dans le gate ; le montant à droite est leur besoin de financement ; entre deux marches, la pastille donne la part des dossiers parvenus au premier gate qui ont atteint le second.</p>
                 </>
               ) : (
-                <Vide titre="Aucun dossier ouvert" hint="Les dossiers apparaissent ici dès leur création dans AxisPro." />
+                <Vide titre="Aucun dossier ouvert" hint="Les dossiers apparaissent ici dès leur création dans MB AxisPro Consulting." />
               )}
             </Card>
             <Card title="Maturité des projets" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Aire : besoin de financement · seuils {seuils?.readiness ?? 65} / {seuils?.bankability ?? 80}</span>}>

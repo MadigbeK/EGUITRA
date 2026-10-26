@@ -151,7 +151,7 @@ function Corps() {
                   largeurLibelles={150}
                 />
               ) : (
-                <Vide titre="Aucun temps saisi" hint="Les feuilles de temps d'AxisPro alimentent cette carte." />
+                <Vide titre="Aucun temps saisi" hint="Les feuilles de temps de MB AxisPro Consulting alimentent cette carte." />
               )}
               {d.time.by_service.length > 0 && (
                 <div className="mt-4 grid gap-2.5 sm:grid-cols-5">

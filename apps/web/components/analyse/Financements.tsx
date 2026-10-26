@@ -62,7 +62,7 @@ function Corps() {
       {d && (
         <div className="space-y-5">
           <Card title="Des secteurs aux financeurs, des financeurs aux décisions" actions={<span className="text-[12.5px] text-muted">Montants demandés · survoler un flux ou un nœud</span>}>
-            {d.flows?.links?.length && d.flows.nodes.length ? <Sankey label="Flux des financements : secteur, type de financeur, état" nodes={d.flows.nodes} links={d.flows.links} hauteur={Math.max(300, Math.min(480, d.flows.nodes.length * 44))} /> : <Vide titre="Aucune démarche de financement" hint="Les démarches se saisissent dans l'onglet Financements de chaque dossier AxisPro." />}
+            {d.flows?.links?.length && d.flows.nodes.length ? <Sankey label="Flux des financements : secteur, type de financeur, état" nodes={d.flows.nodes} links={d.flows.links} hauteur={Math.max(300, Math.min(480, d.flows.nodes.length * 44))} /> : <Vide titre="Aucune démarche de financement" hint="Les démarches se saisissent dans l'onglet Financements de chaque dossier MB AxisPro Consulting." />}
           </Card>
 
           <div className="grid gap-5 xl:grid-cols-12">

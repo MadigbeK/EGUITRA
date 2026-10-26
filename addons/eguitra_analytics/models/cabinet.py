@@ -2252,7 +2252,8 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                  and t.invoice_id.state != "draft"]
         if stuck:
             notes.append((f"{_fr(sum(t.hours for t in stuck), 1)} h rattachées à des factures annulées ou contrepassées : "
-                          "ni facturées ni refacturables tant qu'elles restent attachées à la facture (AxisPro).", 10))
+                          "ni facturées ni refacturables tant qu'elles restent attachées à la facture dans MB AxisPro "
+                          "Consulting.", 10))
         candidates = self._activite_insights(b, rate, ratio, realization_block, profit_rows, forecast, revenue_block,
                                              summary, by_service)
         return {

@@ -950,7 +950,7 @@ export function LienEcran({ href, children }: { href: string; children: ReactNod
   );
 }
 
-/** Lien vers une fiche (dossier AxisPro, écran de la finance) quand le noyau en donne un. */
+/** Lien vers une fiche (dossier MB AxisPro Consulting, écran de la finance) quand le noyau en donne un. */
 export function LienFiche({ href, children, className }: { href?: string | null; children: ReactNode; className?: string }) {
   return href ? (
     <LienSuivi href={href} className={cx("font-medium text-ink hover:text-accent", className)}>
