@@ -450,7 +450,12 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         l'alerte de concentration, échéance absente non échue, décaissements sur des mois civils complets."""
         groupe, metrics = self.env["eguitra.analytics.groupe"], self.env["eguitra.finance.metrics"]
         ctx = self._ctx()
+        # Mémoire de l'ORM vide, comme au début d'une requête : l'écran IFRS lisait alors 0 (la devise de la
+        # société, lue entre la requête et sa lecture, vidait le résultat du curseur).
+        self.env.invalidate_all()
         ifrs = self.env["eguitra.ifrs.policy"].expected_credit_loss(self.company, DATE_TO)
+        self.assertAlmostEqual(ifrs["ecl"], 77_880_000, delta=1,
+                               msg="A : 11,8 + 3,54 + 1,18 M ; B : 1,77 + 0,59 M ; C : 50 % de 118 M")
         self.assertAlmostEqual(sum(groupe._expected_loss(ctx).values()), ifrs["ecl"], delta=1)
         clients = self._get("clients")
         finance = metrics.working_capital(self.company, date(2026, 1, 1), DATE_TO)["concentration"]
