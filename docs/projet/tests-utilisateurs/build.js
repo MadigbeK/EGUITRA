@@ -100,7 +100,9 @@ fs.mkdirSync(OUT, { recursive: true });
     const { parties, total } = controler(fichier, md);
     const titre = md.split('\n')[0].replace(/^#\s*/, '');
     const module = titre.replace(/^Cahier de test : /, '');
-    const nom = `Cahier_de_test_${fichier.slice(0, 2)}_${module.replace(/[^A-Za-zÀ-ÿ0-9]+/g, '_').replace(/_+$/, '')}.docx`;
+    // Nom de fichier sans accent ni espace, comme les autres documents Word du projet.
+    const court = module.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const nom = `Cahier_de_test_${fichier.slice(0, 2)}_${court}.docx`;
     await build({ markdown: md, out: path.join(OUT, nom), title: titre, footer: `NIMOVA · ${titre}` });
     ensemble += total;
     console.log(`Écrit : word/${nom} (${total} scénarios : ${parties.map((p) => `${p.cle} ${p.n}`).join(' ; ')})`);
