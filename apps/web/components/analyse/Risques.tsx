@@ -83,7 +83,7 @@ function Corps() {
                 <div className="grid grid-cols-3 gap-2.5">
                   <Chiffre label="Actions ouvertes" value={String(act.open)} hint={act.submitted ? `${act.submitted} à valider` : undefined} />
                   <Chiffre label="En retard" value={String(act.overdue)} tone={act.overdue > 5 ? "danger" : act.overdue ? "warn" : "ok"} />
-                  <Chiffre label="Délai médian" value={act.median_days === null ? "–" : joursOu(act.median_days)} hint={act.done ? `${act.done} terminée${act.done > 1 ? "s" : ""} sur 12 mois` : "aucune action terminée"} />
+                  <Chiffre label="Délai médian" value={act.median_days === null ? "–" : joursOu(act.median_days)} hint={act.done ? `${act.done} terminée${act.done > 1 ? "s" : ""} sur la période` : "aucune action terminée sur la période"} />
                 </div>
                 {act.velocity.length > 1 && (
                   <div className="mt-4">

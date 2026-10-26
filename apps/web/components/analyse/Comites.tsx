@@ -44,14 +44,17 @@ function Corps() {
       ) : (
         <>Pas encore de revue verrouillée avec recommandation : le taux d&apos;accord n&apos;est pas calculable{ag?.excluded ? ` (${pluriel(ag.excluded, "revue exclue", "revues exclues")})` : ""}.</>
       )}{" "}
-      {total > 0 ? `${pluriel(total, "décision")} sur 12 mois` : "Aucune décision sur 12 mois"}
+      {total > 0 ? `${pluriel(total, "décision")} sur la période` : "Aucune décision sur la période"}
       {ttd && ttd.median_days !== null && ttd.n > 0 && `, prises ${joursOu(ttd.median_days)} après l'ouverture en médiane`}
       {d.forced_summary && d.forced_summary.count > 0 ? ` ; ${pluriel(d.forced_summary.count, "passage de gate forcé", "passages de gate forcés")} sur ${d.forced_summary.passages}` : d.forced_summary?.passages ? " ; aucun passage de gate forcé" : ""}.
       {d.favorable_with_knockout?.length > 0 && <> {pluriel(d.favorable_with_knockout.length, "décision favorable", "décisions favorables")} malgré un critère éliminatoire actif.</>}
     </>
   );
   const serieDecisions = d?.decisions?.series ?? [];
+  // Mois du graphique : ceux de la période, étendus aux douze derniers quand elle est plus courte ; ses
+  // décisions ne sont pas celles du total de la période.
   const mois = d?.decisions?.months ?? [];
+  const decisionsDuGraphique = serieDecisions.reduce((s, x) => s + x.values.reduce((a, v) => a + (v ?? 0), 0), 0);
 
   return (
     <div>
@@ -124,14 +127,14 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Décisions par mois" className="xl:col-span-7">
-              {serieDecisions.length && mois.length && total > 0 ? (
+            <Card title="Décisions par mois" className="xl:col-span-7" actions={mois.length ? <span className="text-[12.5px] text-muted">{mois.length} derniers mois</span> : undefined}>
+              {serieDecisions.length && mois.length && decisionsDuGraphique > 0 ? (
                 <>
                   <Legende className="mb-3" items={serieDecisions.map((s) => ({ key: s.key, label: s.label, couleur: COULEUR_DECISION[s.key] ?? ETATS.neutre, forme: "carre" as const }))} />
                   <BarresEmpilees months={mois} series={serieDecisions} />
                 </>
               ) : (
-                <Vide compact titre="Aucune décision verrouillée sur 12 mois" />
+                <Vide compact titre={`Aucune décision verrouillée sur les ${mois.length || 12} derniers mois`} />
               )}
             </Card>
             <Card title="Score global au moment de la décision" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Un point par revue · trait : médiane</span>}>
