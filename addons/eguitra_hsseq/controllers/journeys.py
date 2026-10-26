@@ -5,6 +5,8 @@ immobilisation d'un véhicule par un événement et sa levée (V09).
 Écritures du chef de parc (plan, validation, pesée) : rotation pas encore partie, ensemble d'un de ses
 sites (portée fermée par défaut). Immobilisation et levée : profil hsseq seul, levée avec motif."""
 
+from datetime import timedelta
+
 from odoo import http
 from odoo.http import request
 
@@ -72,6 +74,9 @@ def journey_row(rotation):
         "rotation": rotation_ref(rotation), "vehicle": vehicle_ref(rotation.vehicle_id),
         "driver": driver_ref(rotation.driver_id), "site": site_ref(rotation.vehicle_id.site_id),
         "route": {"id": rotation.route_id.id, "name": rotation.route_id.name,
+                  "origin": rotation.route_id.origin or None, "destination": rotation.route_id.destination or None,
+                  "distance_km": rotation.route_id.distance_km or None,
+                  "duration_days": rotation.route_id.duration_days or None,
                   "night_driving_forbidden": rotation.route_id.hsseq_night_forbidden} if rotation.route_id else None,
         "rules": {"night_start_hour": settings.night_start_hour, "night_end_hour": settings.night_end_hour,
                   "max_driving_hours": settings.max_driving_hours},
@@ -114,6 +119,9 @@ def journey_values(data):
         minutes = int(number(stop, "duration_minutes", 0))
         if not planned or minutes <= 0:
             raise ApiError(400, "invalid_parameter", "Arrêt : heure prévue et durée positive.", fields=["stops"])
+        if planned < values["planned_departure"] or planned + timedelta(minutes=minutes) > values["planned_arrival"]:
+            raise ApiError(400, "invalid_parameter", "Un arrêt se tient entre le départ et l'arrivée prévus.",
+                           fields=["stops"])
         stops.append((0, 0, {"kind": stop.get("kind") or "break", "place": text(stop, "place", 200),
                              "planned_at": planned, "duration_minutes": minutes}))
     values["stop_ids"] = [(5, 0, 0)] + stops

@@ -194,10 +194,16 @@ class EguitraHsseqJourneyStop(models.Model):
     planned_at = fields.Datetime("Prévu le", required=True)
     duration_minutes = fields.Integer("Durée (minutes)", required=True, default=30)
 
-    @api.constrains("duration_minutes")
+    @api.constrains("duration_minutes", "planned_at")
     def _check_duration(self):
         if any(s.duration_minutes <= 0 for s in self):
             raise HsseqError("invalid_parameter", "La durée d'un arrêt est positive.", fields=["stops"], status=400)
+        for stop in self:
+            journey = stop.journey_id
+            if stop.planned_at < journey.planned_departure or \
+                    stop.planned_at + timedelta(minutes=stop.duration_minutes) > journey.planned_arrival:
+                raise HsseqError("invalid_parameter", "Un arrêt se tient entre le départ et l'arrivée prévus.",
+                                 fields=["stops"], status=400)
 
 
 class EguitraTransportRotation(models.Model):

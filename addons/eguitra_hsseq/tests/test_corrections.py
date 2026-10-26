@@ -397,3 +397,23 @@ class TestCorrections(HsseqCase):
                                                                                 dict(second, code="A-1")]})
         self.assertEqual((status, {i["id"]: i["code"] for i in swapped["indicators"]}),
                          (200, {first["id"]: "A-2", second["id"]: "A-1"}), swapped)
+
+    def test_arrets_dans_l_intervalle_et_route_complete(self):
+        """Arrêts hors de l'intervalle prévu du trajet refusés (400 invalid_parameter, fields) ; la route du
+        plan sert son origine, sa destination, sa distance et sa durée."""
+        from datetime import datetime, time
+
+        self.route.write({"origin": "Conakry", "destination": "Siguiri", "duration_days": 2})
+        rot = self._rotation(driver_id=self.driver.id)
+        start = datetime.combine(rot.date_loading, time(7, 0))
+        plan = {"planned_departure": start.isoformat() + "Z", "planned_arrival": start.replace(hour=15).isoformat() + "Z"}
+        path = f"/hsseq/rotations/{rot.id}/journey"
+        for when, minutes in ((start.replace(hour=6), 30), (start.replace(hour=14, minute=45), 30)):
+            status, body = self.api("ibrahima", "PUT", path, dict(plan, stops=[
+                {"kind": "break", "planned_at": when.isoformat() + "Z", "duration_minutes": minutes}]))
+            self.assertEqual((status, body["error"], body["fields"]), (400, "invalid_parameter", ["stops"]), when)
+        status, row = self.api("ibrahima", "PUT", path, dict(plan, stops=[
+            {"kind": "break", "planned_at": start.replace(hour=11).isoformat() + "Z", "duration_minutes": 45}]))
+        self.assertEqual(status, 200, row)
+        self.assertEqual({k: row["route"][k] for k in ("origin", "destination", "distance_km", "duration_days")},
+                         {"origin": "Conakry", "destination": "Siguiri", "distance_km": 790, "duration_days": 2})
