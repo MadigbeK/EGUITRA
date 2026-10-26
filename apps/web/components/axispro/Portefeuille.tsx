@@ -2,47 +2,79 @@
 
 import Link from "next/link";
 import { AlertTriangle, Calendar, Clock, HandCoins, ShieldAlert, Users } from "@/components/icons";
-import { Badge, Card, RankBars, Repartition, cx } from "@/components/ui";
+import { Badge, Card, ErrorBox, RankBars, Repartition, cx } from "@/components/ui";
 import { COULEUR_FINANCEMENT, ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
-import { FUNDING_STATE, RISK_LEVEL, type FundingState, type Portfolio } from "@/lib/axispro-types";
-import { fmtDate, fmtPct, fmtShort, pluriel } from "@/lib/format";
-import { ratio } from "./cellules";
+import { FUNDING_STATE, RISK_LEVEL, type FundingState, type PortefeuilleDevises, type TotauxDevise } from "@/lib/axispro-types";
+import { INSECABLE, aujourdhui, fmtDate, fmtDec, fmtPct, pluriel } from "@/lib/format";
+import { montantDevise, ratio } from "./cellules";
 import { note } from "./dossier/commun";
 
 const COULEUR_ETAPE: Partial<Record<FundingState, string>> = COULEUR_FINANCEMENT;
+const OBTENUS: FundingState[] = ["signed", "disbursed"];
 
 /**
  * Pilotage du portefeuille du cabinet : financements obtenus et en cours, actions en retard,
  * risques critiques, relances des financeurs, rentabilité des dossiers, charge des consultants.
+ *
+ * Devises : les montants de chaque devise restent à part (le noyau ne les additionne jamais) ; la
+ * devise de la société vient en tête, les autres suivent sous chaque chiffre. Le DSCR d'un projet se
+ * compare au DSCR bancaire de la grille en vigueur.
  */
 export function Portefeuille() {
-  const { data } = useApi<Portfolio>("/axispro/portfolio");
-  if (!data || data.projects.length === 0) return null;
+  const { data, error, mutate } = useApi<PortefeuilleDevises>("/axispro/portfolio");
+  // Même clé que l'en-tête de la liste des dossiers : une seule lecture de la grille en vigueur.
+  const { data: grille } = useApi<{ dscr_target: number } | null>("/axispro/policy");
+  const erreur = error && (
+    <div className="mb-5">
+      <ErrorBox titre={data ? "Rechargement du pilotage impossible : les chiffres affichés peuvent dater." : "Pilotage du portefeuille indisponible."} error={error} onRetry={() => void mutate()} />
+    </div>
+  );
+  if (!data || data.projects.length === 0) return erreur || null;
+  const devise = data.currency ?? null;
   const f = data.financing;
-  const enCours = f.pipeline.filter((p) => !["rejected", "withdrawn"].includes(p.state) && p.count > 0);
+  const totaux: TotauxDevise[] = f.by_currency ?? [{ currency: devise ?? "", need: f.need, investment: f.investment, requested: f.requested, granted: f.granted }];
+  const principal = totaux.find((t) => t.currency === devise) ?? { currency: devise ?? "", need: f.need, investment: f.investment, requested: f.requested, granted: f.granted };
+  const autres = totaux.filter((t) => t !== principal);
+  const enCours = f.pipeline
+    .filter((p) => !["rejected", "withdrawn"].includes(p.state))
+    .map((p) => ({ p, valeur: OBTENUS.includes(p.state) ? p.granted : p.requested }))
+    .filter((x) => x.valeur > 0);
   const rentables = data.projects.filter((p) => p.irr_project !== null).sort((a, b) => (b.irr_project ?? 0) - (a.irr_project ?? 0));
-  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const jour = aujourdhui();
+  const seuilDscr = grille?.dscr_target ?? null;
+  const couverture = (t: Pick<TotauxDevise, "need" | "granted">) => (t.need ? fmtPct((t.granted / t.need) * 100, 0) : "–");
 
   return (
     <div className="mb-5 space-y-5">
+      {erreur}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
         <Card title="Financement des projets" className="xl:col-span-7">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Chiffre titre="Besoin des dossiers" valeur={fmtShort(f.need)} />
-            <Chiffre titre="Sollicité" valeur={fmtShort(f.requested)} />
-            <Chiffre titre="Obtenu" valeur={fmtShort(f.granted)} accent />
-            <Chiffre titre="Couverture du besoin" valeur={f.need ? fmtPct((f.granted / f.need) * 100, 0) : "–"} />
+            <Chiffre titre="Besoin des dossiers" valeur={montantDevise(principal.need, devise)} autres={autres.filter((t) => t.need).map((t) => montantDevise(t.need, t.currency))} />
+            <Chiffre titre="Sollicité" valeur={montantDevise(principal.requested, devise)} autres={autres.filter((t) => t.requested).map((t) => montantDevise(t.requested, t.currency))} />
+            <Chiffre titre="Obtenu" valeur={montantDevise(principal.granted, devise)} autres={autres.filter((t) => t.granted).map((t) => montantDevise(t.granted, t.currency))} accent />
+            <Chiffre titre="Couverture du besoin" valeur={couverture(principal)} autres={autres.filter((t) => t.need).map((t) => `${t.currency}${INSECABLE}: ${couverture(t)}`)} />
           </div>
           {enCours.length > 0 ? (
             <div className="mt-4">
               <Repartition
-                format={(v) => `${fmtShort(v)} GNF`}
-                parts={enCours.map((p) => ({ key: p.state, label: `${FUNDING_STATE[p.state].label} (${p.count})`, value: ["signed", "disbursed"].includes(p.state) ? p.granted : p.requested, color: COULEUR_ETAPE[p.state] ?? ETATS.neutre }))}
+                format={(v) => montantDevise(v, devise)}
+                parts={enCours.map(({ p, valeur }) => ({ key: p.state, label: `${FUNDING_STATE[p.state].label} (${p.count})`, value: valeur, color: COULEUR_ETAPE[p.state] ?? ETATS.neutre }))}
               />
             </div>
           ) : (
-            <p className="mt-4 text-[13px] text-muted">Aucune démarche de financement enregistrée : onglet « Financements » des dossiers.</p>
+            autres.length === 0 && <p className="mt-4 text-[13px] text-muted">Aucune démarche de financement enregistrée : onglet « Financements » des dossiers.</p>
+          )}
+          {autres.some((t) => t.requested || t.granted) && (
+            <p className="mt-3 text-[12.5px] text-muted">
+              Démarches en d&apos;autres devises, à part :{" "}
+              {autres
+                .filter((t) => t.requested || t.granted)
+                .map((t) => `${montantDevise(t.requested, t.currency)} sollicités, ${montantDevise(t.granted, t.currency)} obtenus`)
+                .join(" ; ")}
+              .
+            </p>
           )}
           <div className="mt-3 text-right">
             <Link href="/axispro/financements" className="text-[13px] font-semibold text-accent hover:underline">
@@ -59,7 +91,7 @@ export function Portefeuille() {
           <ul className="mt-4 space-y-2 text-[13px]">
             {data.follow_ups.slice(0, 4).map((r) => (
               <li key={`f${r.id}`} className="flex items-start gap-2">
-                <Calendar className={cx("mt-0.5 h-4 w-4 flex-none", (r.next_date ?? "") < aujourdhui ? "text-danger" : "text-muted")} />
+                <Calendar className={cx("mt-0.5 h-4 w-4 flex-none", (r.next_date ?? "") < jour ? "text-danger" : "text-muted")} />
                 <span className="min-w-0">
                   <b className="tabular">{fmtDate(r.next_date)}</b> relancer {r.funder.name}
                   {r.dossier && (
@@ -112,7 +144,7 @@ export function Portefeuille() {
                     <th className="px-4 py-2 text-left font-semibold">Projet</th>
                     <th className="px-3 py-2 text-right font-semibold" title="Project Readiness, APD Readiness, Bankability">Readiness / APD / Bank.</th>
                     <th className="px-3 py-2 text-right font-semibold">TRI</th>
-                    <th className="px-3 py-2 text-right font-semibold">DSCR min.</th>
+                    <th className="px-3 py-2 text-right font-semibold" title={seuilDscr !== null ? `En rouge : sous le DSCR bancaire de la grille en vigueur (${ratio(seuilDscr)})` : undefined}>DSCR min.</th>
                     <th className="px-3 py-2 text-right font-semibold">VAN</th>
                     <th className="px-4 py-2 text-right font-semibold">Besoin</th>
                   </tr>
@@ -128,9 +160,9 @@ export function Portefeuille() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right tabular">{!p.assessed ? "–" : `${note(p.readiness)} / ${note(p.apd)} / ${note(p.bankability)}`}</td>
                       <td className="px-3 py-2 text-right">{fmtPct(p.irr_project)}</td>
-                      <td className={cx("px-3 py-2 text-right", p.dscr_min !== null && p.dscr_min < 1.3 && "font-semibold text-danger")}>{ratio(p.dscr_min)}</td>
-                      <td className={cx("px-3 py-2 text-right", (p.npv ?? 0) < 0 && "text-danger")}>{fmtShort(p.npv)}</td>
-                      <td className="px-4 py-2 text-right">{fmtShort(p.financing_need)}</td>
+                      <td className={cx("px-3 py-2 text-right", p.dscr_min !== null && seuilDscr !== null && p.dscr_min < seuilDscr && "font-semibold text-danger")}>{ratio(p.dscr_min)}</td>
+                      <td className={cx("whitespace-nowrap px-3 py-2 text-right", (p.npv ?? 0) < 0 && "text-danger")}>{montantDevise(p.npv, p.currency)}</td>
+                      <td className="whitespace-nowrap px-4 py-2 text-right">{montantDevise(p.financing_need, p.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -142,11 +174,11 @@ export function Portefeuille() {
           {data.workload.length === 0 ? (
             <p className="text-[13px] text-muted">Aucun temps saisi.</p>
           ) : (
-            <RankBars items={data.workload.map((w) => ({ key: w.name, label: w.name, value: w.hours, detail: pluriel(w.dossiers, "dossier") }))} format={(v) => `${v.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h`} />
+            <RankBars items={data.workload.map((w) => ({ key: w.name, label: w.name, value: w.hours, detail: pluriel(w.dossiers, "dossier") }))} format={(v) => `${fmtDec(v)}${INSECABLE}h`} />
           )}
           <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-line pt-3 text-[13px] text-ink-2">
-            <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4 text-muted" /> {data.fees.unbilled_hours.toLocaleString("fr-FR")} h à facturer</span>
-            <span className="inline-flex items-center gap-1.5"><HandCoins className="h-4 w-4 text-muted" /> {fmtShort(data.fees.invoiced_year)} GNF facturés cette année</span>
+            <span className="inline-flex items-center gap-1.5"><Users className="h-4 w-4 text-muted" /> {fmtDec(data.fees.unbilled_hours)}{INSECABLE}h à facturer</span>
+            <span className="inline-flex items-center gap-1.5"><HandCoins className="h-4 w-4 text-muted" /> {montantDevise(data.fees.invoiced_year, data.fees.currency ?? devise)} facturés cette année</span>
           </div>
         </Card>
       </div>
@@ -154,11 +186,17 @@ export function Portefeuille() {
   );
 }
 
-function Chiffre({ titre, valeur, accent }: { titre: string; valeur: string; accent?: boolean }) {
+function Chiffre({ titre, valeur, autres, accent }: { titre: string; valeur: string; autres?: string[]; accent?: boolean }) {
   return (
     <div>
       <div className="text-[12.5px] text-muted">{titre}</div>
       <div className={cx("font-display text-[21px] font-bold tabular", accent ? "text-accent" : "text-ink")}>{valeur}</div>
+      {/* Montants des autres devises, jamais ajoutés au premier. */}
+      {autres?.map((a) => (
+        <div key={a} className="text-[12px] font-semibold tabular text-ink-2">
+          + {a}
+        </div>
+      ))}
     </div>
   );
 }

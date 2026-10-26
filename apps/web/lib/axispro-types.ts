@@ -706,3 +706,29 @@ export type MontantsParDevise = Record<string, number>;
 
 /** Démarche de financement : ses montants sont dans la devise de son dossier (`currency`). */
 export type FinancementDevise = Funding & { currency?: string | null };
+
+/** Totaux d'une devise du portefeuille. */
+export interface TotauxDevise {
+  currency: string;
+  need: number;
+  investment: number;
+  requested: number;
+  granted: number;
+}
+
+/**
+ * Portefeuille du cabinet (GET /axispro/portfolio) : les montants simples ne portent que sur la devise de
+ * la société (`currency`) ; chaque devise a ses totaux (`by_currency`, `need_by_currency`…).
+ */
+export type PortefeuilleDevises = Omit<Portfolio, "funnel" | "sectors" | "projects" | "financing" | "follow_ups" | "fees"> & {
+  currency?: string;
+  funnel: Array<Portfolio["funnel"][number] & { need_by_currency?: MontantsParDevise }>;
+  sectors: Array<Portfolio["sectors"][number] & { investment_by_currency?: MontantsParDevise }>;
+  projects: Array<Portfolio["projects"][number] & { currency?: string | null }>;
+  financing: Omit<Portfolio["financing"], "pipeline"> & {
+    by_currency?: TotauxDevise[];
+    pipeline: Array<Portfolio["financing"]["pipeline"][number] & { by_currency?: Array<{ currency: string; count: number; requested: number; granted: number }> }>;
+  };
+  follow_ups: FinancementDevise[];
+  fees: Portfolio["fees"] & { currency?: string };
+};
