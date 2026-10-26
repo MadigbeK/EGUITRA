@@ -176,3 +176,31 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
                 close.action_close()
             self.assertEqual(close.state, "open")
         self.assertFalse(self.company.fiscalyear_lock_date, "Rien n'est verrouillé")
+
+    def test_sceau_stable_et_complet(self):
+        """Un journal ouvert après la clôture ou la société renommée ne lèvent pas le sceau ; le solde d'une
+        ligne (balance, qui alimente les états) modifié seul le lève. Un sceau de la première version
+        reste vérifiable à l'identique."""
+        self.make_invoice("out_invoice", 100_000_000, day=self.month)
+        close = self._close()
+        self.assertEqual(close.seal_data.get("version"), 2)
+        self.assertEqual(close._seal_hash(dict(close.seal_data, company="Autre société", vat="NIF-0000")), close.seal,
+                         "L'identité de la société est hors de l'empreinte")
+        legacy = close._seal_payload({key: close.seal_data[key] for key in ("company", "vat", "journals")})
+        self.assertNotIn("version", legacy, "Sceau de la première version recalculé à l'identique")
+        self.env["account.journal"].create({"name": "Banque ouverte après la clôture", "type": "bank", "code": "BNA9",
+                                            "company_id": self.company.id})
+        self.company.name = f"{self.company.name} (nouvelle raison sociale)"
+        self.assertEqual(close.eguitra_verify_seal()["status"], "ok", "Ni le nouveau journal ni le nom ne lèvent le sceau")
+        sealed = (close.seal, close.seal_data)
+        close.sudo().write({"seal": close._seal_hash(legacy), "seal_data": legacy})
+        self.assertEqual(close.eguitra_verify_seal()["status"], "ok", "Sceau de la première version")
+        close.sudo().write({"seal": sealed[0], "seal_data": sealed[1]})
+
+        line = self.env["account.move.line"].search(
+            [("company_id", "=", self.company.id), ("date", "=", self.month), ("parent_state", "=", "posted")], limit=1)
+        self.env.cr.execute("UPDATE account_move_line SET balance = balance + 1 WHERE id = %s", line.ids)
+        self.env.invalidate_all()
+        check = close.eguitra_verify_seal()
+        self.assertEqual(check["status"], "altered", "Solde modifié hors de la plateforme")
+        self.assertIn("contenu des écritures du mois modifié depuis la clôture", check["differences"])

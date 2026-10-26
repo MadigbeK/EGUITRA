@@ -37,6 +37,11 @@ CLOSE_KINDS = [
     ("ecl", "Pertes de crédit attendues"),
 ]
 KIND_LABELS = dict(CLOSE_KINDS) | {"depreciation": "Dotations aux amortissements"}
+# Version du sceau. 2 : identité de la société hors de l'empreinte, colonne balance des lignes scellée.
+SEAL_VERSION = 2
+# Identité de la société, imprimée sur le PV mais hors de l'empreinte (version 2) : un changement de nom
+# ou de NIF ne lève pas les sceaux des mois clôturés.
+SEAL_IDENTITY = ("company", "vat")
 
 
 def _gnf(amount):
@@ -452,17 +457,23 @@ class EguitraPeriodClose(models.Model):
             self.event_ids[:1].sudo().seal = seal  # la réouverture garde trace du sceau levé
         return result
 
-    def _seal_payload(self):
-        """Éléments scellés : société, période, horodatage de clôture, et pour chaque journal chaîné
-        le nombre de pièces et l'empreinte de la dernière pièce chaînée du mois ; totaux des lignes."""
+    def _seal_payload(self, stored=None):
+        """Éléments scellés : période, horodatage de clôture, et pour chaque journal chaîné le nombre de
+        pièces et l'empreinte de la dernière pièce chaînée du mois ; totaux et empreinte du contenu des
+        lignes. stored : éléments d'un sceau déjà posé, recalculés à l'identique (même version, mêmes
+        journaux, même identité) : un journal ouvert après la clôture ne lève pas le sceau."""
         company = self.company_id.sudo()
         _start, end = self._bounds()
+        version = stored.get("version", 1) if stored else SEAL_VERSION
         Move = self.env["account.move"].sudo()
         order = "secure_sequence_number desc, id desc" if "secure_sequence_number" in Move._fields else "date desc, id desc"
+        journals = self.env["account.journal"].sudo().search(
+            [("company_id", "=", company.id), ("type", "in", SECURED_JOURNAL_TYPES)], order="code")
+        if stored:
+            sealed = {j["journal"] for j in stored.get("journals", [])}
+            journals = journals.filtered(lambda j: j.code in sealed)
         chain = []
-        for journal in self.env["account.journal"].sudo().search(
-            [("company_id", "=", company.id), ("type", "in", SECURED_JOURNAL_TYPES)], order="code"
-        ):
+        for journal in journals:
             domain = [("journal_id", "=", journal.id), ("state", "=", "posted"), ("date", "<=", end)]
             last = Move.search(domain + [("inalterable_hash", "!=", False)], order=order, limit=1)
             chain.append({"journal": journal.code, "moves": Move.search_count(domain),
@@ -475,27 +486,38 @@ class EguitraPeriodClose(models.Model):
         )
         count, debit, credit = self.env.cr.fetchone()
         # Empreinte du contenu des lignes du mois : une modification faite hors de la plateforme (même
-        # d'un libellé) change le sceau.
+        # d'un libellé, ou du seul solde, qui alimente les états) change le sceau.
         start, _end = self._bounds()
+        columns = ("aml.id, aml.move_id, aml.account_id, aml.date, aml.debit, aml.credit, aml.amount_currency, "
+                   "aml.currency_id, aml.partner_id, aml.name, aml.tax_line_id")
+        if version >= 2:
+            columns += ", aml.balance"
         self.env.cr.execute(
-            """SELECT encode(sha256(convert_to(COALESCE(string_agg(concat_ws('|', aml.id, aml.move_id, aml.account_id,
-                      aml.date, aml.debit, aml.credit, aml.amount_currency, aml.currency_id, aml.partner_id, aml.name,
-                      aml.tax_line_id), E'\\n' ORDER BY aml.id), ''), 'UTF8')), 'hex')
+            f"""SELECT encode(sha256(convert_to(COALESCE(string_agg(concat_ws('|', {columns}),
+                      E'\\n' ORDER BY aml.id), ''), 'UTF8')), 'hex')
                  FROM account_move_line aml
                 WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date BETWEEN %s AND %s""",
             (company.id, start, end),
         )
         digest = self.env.cr.fetchone()[0]
-        return {
-            "company": company.name, "vat": company.vat or "", "period": f"{self.period:%Y-%m}",
+        payload = {
+            "company": stored.get("company", company.name) if stored else company.name,
+            "vat": stored.get("vat", "") if stored else company.vat or "",
+            "period": f"{self.period:%Y-%m}",
             "closed_at": fields.Datetime.to_string(self.closed_at) if self.closed_at else None,
             "journals": chain, "lines": count, "debit": round(float(debit), 2), "credit": round(float(credit), 2),
             "month_digest": digest,
         }
+        if version >= 2:
+            payload["version"] = version
+        return payload
 
     @staticmethod
     def _seal_hash(payload):
-        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        """Empreinte SHA-256 des éléments scellés ; à partir de la version 2, sans l'identité de la société."""
+        sealed = payload if payload.get("version", 1) < 2 else {
+            key: value for key, value in payload.items() if key not in SEAL_IDENTITY}
+        return hashlib.sha256(json.dumps(sealed, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
     def _closing_snapshot(self, generated):
         company = self.company_id.sudo()
@@ -539,10 +561,10 @@ class EguitraPeriodClose(models.Model):
         self.ensure_one()
         if self.state != "closed" or not self.seal:
             return {"period": self.period, "status": "none", "seal": None}
-        payload = self._seal_payload()
+        stored = self.seal_data or {}
+        payload = self._seal_payload(stored or None)
         computed = self._seal_hash(payload)
         differences = []
-        stored = self.seal_data or {}
         labels = {"lines": "nombre de lignes", "debit": "total des débits", "credit": "total des crédits"}
         for key, label in labels.items():
             if stored.get(key) != payload.get(key):
@@ -554,5 +576,7 @@ class EguitraPeriodClose(models.Model):
             before = old.get(journal["journal"])
             if before != journal:
                 differences.append(f"journal {journal['journal']} modifié depuis la clôture")
+        for code in sorted(set(old) - {j["journal"] for j in payload["journals"]}):
+            differences.append(f"journal {code} supprimé depuis la clôture")
         return {"period": self.period, "status": "ok" if computed == self.seal else "altered", "seal": self.seal,
                 "computed": computed, "differences": differences[:10]}
