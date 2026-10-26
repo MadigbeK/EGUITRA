@@ -1,7 +1,7 @@
 {
   "name": "nimova-terrain",
   "version": "0.1.0",
-  "main": "expo-router/entry",
+  "main": "index.ts",
   "dependencies": {
     "@expo-google-fonts/funnel-display": "^0.4.1",
     "@expo-google-fonts/funnel-sans": "^0.4.2",
