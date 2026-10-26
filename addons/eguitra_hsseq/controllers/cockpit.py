@@ -45,7 +45,8 @@ def event_matrix(comps, month, period, sites, vehicle_kind):
     events = request.env["eguitra.hsseq.event"].sudo().search(domain)
     counts = Counter((e.potential_severity, e.probability) for e in events if e.potential_severity and e.probability)
     settings = request.env["eguitra.hsseq.settings"]._get(comps[:1] or request.env.company)
-    return matrix_cells(counts, settings._level), len(events) - sum(counts.values())
+    cells = [dict(cell, potential_severity=cell["severity"]) for cell in matrix_cells(counts, settings._level)]
+    return cells, len(events) - sum(counts.values())
 
 
 def lot2_blocks(comps, month, sites):

@@ -30,8 +30,8 @@ class TestComplements(HsseqCase):
         matrix = cockpit["events"]["matrix"]
         self.assertEqual(len(matrix), 25, "Une case par gravité potentielle et probabilité")
         cells = {(c["severity"], c["probability"]): c for c in matrix}
-        self.assertEqual((cells[(4, 3)]["count"], cells[(4, 3)]["criticality"], cells[(4, 3)]["level"]),
-                         (2, 12, "significant"))
+        self.assertEqual((cells[(4, 3)]["count"], cells[(4, 3)]["criticality"], cells[(4, 3)]["level"],
+                          cells[(4, 3)]["potential_severity"]), (2, 12, "significant", 4))
         self.assertEqual((cells[(5, 5)]["count"], cells[(5, 5)]["level"]), (1, "high"))
         self.assertEqual(cells[(1, 1)]["count"], 0, "Événement hors de la période")
         self.assertEqual(cockpit["events"]["matrix_unclassified"], 1, "Non classé : hors matrice, compté à part")
