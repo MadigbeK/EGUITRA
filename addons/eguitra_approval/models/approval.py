@@ -68,6 +68,11 @@ class EguitraApprovalRule(models.Model):
 
     @api.model
     def _applicable(self, document, company, amount, account_codes=()):
+        """Règles de la nature et de la société qui s'appliquent au montant et aux comptes mouvementés.
+
+        account_codes=None : comptes encore inconnus (engagement dont le compte reste à préciser par la
+        finance). Une règle réservée à un préfixe de compte ne peut alors pas être écartée : elle
+        s'applique aussi, sans quoi un investissement soumis sans compte échapperait à son circuit."""
         rules = self.sudo().search([("document", "=", document), ("company_id", "=", company.id)])
         result = self.browse()
         for rule in rules:
@@ -77,7 +82,8 @@ class EguitraApprovalRule(models.Model):
                 continue
             if rule.max_amount and amount > rule.max_amount:
                 continue
-            if rule.account_prefix and not any(code.startswith(rule.account_prefix) for code in account_codes):
+            if rule.account_prefix and account_codes is not None \
+                    and not any(code.startswith(rule.account_prefix) for code in account_codes):
                 continue
             result |= rule
         return result.sorted(lambda r: (r.sequence, r.min_amount))

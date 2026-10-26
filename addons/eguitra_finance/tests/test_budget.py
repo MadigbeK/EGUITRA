@@ -157,6 +157,16 @@ class TestBudgetApi(FinanceDataMixin, ApiCase):
         status, _b = self.call("DELETE", f"/finance/budget-lines/{line['id']}", token=self.token)
         self.assertEqual(status, 200)
 
+    def test_routes_par_compte_retirees(self):
+        """Anciennes routes des lignes par compte (mis_builder_budget) : retirées, aucun écran ni script ne les
+        appelait ; l'écran lit /execution et écrit /budget-lines."""
+        budget = self.budget["id"]
+        self.assertEqual(self.call("GET", f"/finance/budgets/{budget}/lines", token=self.token)[0], 404)
+        self.assertEqual(self.call("POST", f"/finance/budgets/{budget}/lines", {
+            "account_id": self.acc_purchase.id, "month": 1, "amount": 1}, token=self.token)[0], 404)
+        self.assertEqual(self.call("GET", f"/finance/budgets/{budget}/compare?month=1", token=self.token)[0], 404)
+        self.assertFalse(self.env["mis.budget.by.account.item"].search_count([("budget_id", "=", budget)]))
+
     def test_import_et_export(self):
         header = "nature;ligne;comptes;residuel;activite;centre_cout;janv;fevr;mars;avr;mai;juin;juil;aout;sept;oct;nov;dec\n"
         status, body = self._import(header + "Produits;Loyers;706;;Inconnue;;1;1;1;1;1;1;1;1;1;1;1;1\n")

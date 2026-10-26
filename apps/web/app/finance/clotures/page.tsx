@@ -2,9 +2,20 @@
 
 import { useState } from "react";
 import { CheckCircle2, Download, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Loading, Modal, Notice, PageHeader, Select, Textarea, cx } from "@/components/ui";
-import { ApiError, apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
-import { MONTHS_FR, fmtDate, fmtDateTime, fmtGNF } from "@/lib/format";
+import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Modal, Notice, PageHeader, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
+import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
+import { useEnvoi } from "@/lib/envoi";
+import { anneeEnCours } from "@/lib/jour";
+import { MONTHS_FR, fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, pluriel } from "@/lib/format";
+import type { Profile } from "@/lib/types";
+
+// Profils des routes d'écriture (addons/eguitra_finance/controllers/closing.py et reprise.py) : la clôture
+// est faite par la finance (FIN_WRITE), la réouverture motivée par la direction ou l'administration, le
+// chargement des valeurs de référence de la reprise par l'administration seule. Les contrôles, le PV et
+// l'annexe se lisent avec les profils de la finance (FIN_READ, direction comprise).
+const CLOTURE: Profile[] = ["admin", "finance"];
+const REOUVERTURE: Profile[] = ["admin", "direction"];
+const REFERENCES: Profile[] = ["admin"];
 
 interface Check {
   code: string;
@@ -54,8 +65,20 @@ const KINDS: Record<string, string> = {
   ecl: "Pertes de crédit attendues",
 };
 
+/**
+ * Mois d'une période « AAAA-MM-JJ » en toutes lettres (« septembre 2026 »), lu sur la chaîne elle-même :
+ * `new Date("2026-09-01")` est minuit UTC, que le navigateur d'un poste à l'ouest de Greenwich lit encore
+ * en août.
+ */
+function mois(period: string): string {
+  return new Date(`${period.slice(0, 7)}-01T12:00:00Z`).toLocaleDateString("fr-FR", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+/** Abréviation du mois d'une période (« sept. »), lue sur la chaîne. */
+const abrege = (period: string) => MONTHS_FR[Number(period.slice(5, 7)) - 1] ?? period;
+
 export default function ClosingPage() {
-  const year = new Date().getFullYear();
+  const year = anneeEnCours();
   const [selectedYear, setYear] = useState(year);
   const { data, error, mutate } = useApi<{ company: string; year: number; lock_date: string | null; months: Month[] }>(`/finance/closing?year=${selectedYear}`);
   const [month, setMonth] = useState<Month | null>(null);
@@ -66,32 +89,32 @@ export default function ClosingPage() {
         title="Clôtures et contrôles"
         subtitle="Contrôles bloquants avant clôture, verrouillage et chaînage des écritures, réouverture motivée."
         actions={
-          <Select value={String(selectedYear)} onChange={(e) => setYear(Number(e.target.value))} options={[year - 1, year, year + 1].map((y) => ({ value: y, label: `Exercice ${y}` }))} />
+          <Select aria-label="Exercice" value={String(selectedYear)} onChange={(e) => setYear(Number(e.target.value))} options={[year - 1, year, year + 1].map((y) => ({ value: y, label: `Exercice ${y}` }))} />
         }
       />
-      {error && <ErrorBox error={error} />}
-      {!data && !error && <Loading />}
-      {data && (
-        <>
-          <Notice tone="accent">
-            {data.company} : {data.lock_date ? `écritures verrouillées jusqu'au ${fmtDate(data.lock_date)}` : "aucune période clôturée pour l'instant"}.
-          </Notice>
-          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
-            {data.months.map((m, i) => (
-              <button key={m.period} type="button" onClick={() => setMonth(m)} className={cx("rounded-xl p-4 text-left transition-shadow hover:ring-1 hover:ring-inset hover:ring-line-strong/60", m.state === "closed" ? "bg-ok/[0.08]" : "bg-panel")}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold capitalize">{MONTHS_FR[i]}</span>
-                  {m.state === "closed" ? <Lock className="h-4 w-4 text-ok" /> : <LockOpen className="h-4 w-4 text-muted" />}
-                </div>
-                <div className="mt-2 text-xs text-muted">{m.state === "closed" ? `Clôturé le ${fmtDateTime(m.closed_at)}` : "Ouvert"}</div>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement du registre des clôtures…">
+        {(d) => (
+          <>
+            <Notice tone="accent">
+              {d.company} : {d.lock_date ? `écritures verrouillées jusqu'au ${fmtDate(d.lock_date)}` : "aucune période clôturée pour l'instant"}.
+            </Notice>
+            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+              {d.months.map((m) => (
+                <button key={m.period} type="button" onClick={() => setMonth(m)} className={cx("rounded-xl p-4 text-left transition-shadow hover:ring-1 hover:ring-inset hover:ring-line-strong/60", m.state === "closed" ? "bg-ok/[0.08]" : "bg-panel")}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold capitalize">{abrege(m.period)}</span>
+                    {m.state === "closed" ? <Lock className="h-4 w-4 text-ok" /> : <LockOpen className="h-4 w-4 text-muted" />}
+                  </div>
+                  <div className="mt-2 text-xs text-muted">{m.state === "closed" ? `Clôturé le ${fmtDateTime(m.closed_at)}` : "Ouvert"}</div>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </Etat>
       <Integrity />
       <RepriseValidation />
-      {month && <MonthModal month={month} onClose={() => setMonth(null)} onChanged={() => mutate()} />}
+      {month && <MonthModal key={month.period} month={month} onClose={() => setMonth(null)} onChanged={() => mutate()} />}
     </div>
   );
 }
@@ -104,40 +127,39 @@ const CHAIN = {
 
 /** Contrôles permanents du mois écoulé et vérification des empreintes des écritures verrouillées. */
 function Integrity() {
-  const { data, error } = useApi<{ period: string; checks: Check[]; hash_chains: Chain[] | null; seals?: SealCheck[] }>("/finance/integrity");
-  const label = data ? new Date(data.period).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) : "";
+  const { data, error, mutate } = useApi<{ period: string; checks: Check[]; hash_chains: Chain[] | null; seals?: SealCheck[] }>("/finance/integrity");
   return (
     <div className="mt-6">
       <Card title="Contrôles d'intégrité">
-        {error && <ErrorBox error={error} />}
-        {!data && !error && <Loading />}
-        {data && (
-          <div className="space-y-4">
-            <p className="text-sm text-muted">Contrôles permanents du mois écoulé ({label}), puis recalcul de l&apos;empreinte de chaque écriture verrouillée : une écriture modifiée hors de la plateforme serait signalée.</p>
-            <CheckList checks={data.checks} />
-            {data.hash_chains === null ? (
-              <Notice tone="accent">La vérification des empreintes est réservée aux profils de la finance.</Notice>
-            ) : data.hash_chains.length === 0 ? (
-              <Notice tone="accent">Aucune écriture encore chaînée : la première clôture mensuelle verrouille et chaîne les écritures du mois.</Notice>
-            ) : (
-              <DataTable dense rows={data.hash_chains} rowKey={(c) => c.journal} columns={[
-                { key: "journal", label: "Journal", render: (c) => c.journal },
-                { key: "status", label: "Écritures", render: (c) => <Badge tone={CHAIN[c.status]?.tone ?? "neutral"}>{CHAIN[c.status]?.label ?? c.status}</Badge> },
-                { key: "first", label: "Première pièce", render: (c) => c.first ?? "–" },
-                { key: "last", label: "Dernière pièce", render: (c) => (c.last ? `${c.last}${c.last_date ? ` (${c.last_date})` : ""}` : "–") },
-                { key: "message", label: "", render: (c) => (c.status === "corrupted" ? <span className="text-danger">{c.message}</span> : null) },
-              ]} />
-            )}
-            {data.seals && data.seals.length > 0 && (
-              <DataTable dense rows={data.seals} rowKey={(s) => s.period} columns={[
-                { key: "period", label: "Mois clôturé", render: (s) => new Date(s.period).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) },
-                { key: "status", label: "Sceau recalculé", render: (s) => <Badge tone={s.status === "ok" ? "ok" : "danger"}>{s.status === "ok" ? "Identique au PV" : "Altération"}</Badge> },
-                { key: "seal", label: "Sceau du PV", render: (s) => <span className="font-mono text-[11px]">{s.seal?.slice(0, 16)}…</span> },
-                { key: "differences", label: "", render: (s) => (s.status === "altered" ? <span className="text-danger">{(s.differences ?? []).join(" ; ")}</span> : null) },
-              ]} />
-            )}
-          </div>
-        )}
+        <Etat data={data} error={error} onRetry={() => mutate()} label="Contrôles et recalcul des empreintes…">
+          {(d) => (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">Contrôles permanents du mois écoulé ({mois(d.period)}), puis recalcul de l&apos;empreinte de chaque écriture verrouillée : une écriture modifiée hors de la plateforme serait signalée.</p>
+              <CheckList checks={d.checks} />
+              {d.hash_chains === null ? (
+                <Notice tone="accent">La vérification des empreintes est réservée aux profils de la finance.</Notice>
+              ) : d.hash_chains.length === 0 ? (
+                <Notice tone="accent">Aucune écriture encore chaînée : la première clôture mensuelle verrouille et chaîne les écritures du mois.</Notice>
+              ) : (
+                <DataTable dense rows={d.hash_chains} rowKey={(c) => c.journal} columns={[
+                  { key: "journal", label: "Journal", render: (c) => c.journal },
+                  { key: "status", label: "Écritures", render: (c) => <Badge tone={CHAIN[c.status]?.tone ?? "neutral"}>{CHAIN[c.status]?.label ?? c.status}</Badge> },
+                  { key: "first", label: "Première pièce", render: (c) => c.first ?? "–" },
+                  { key: "last", label: "Dernière pièce", render: (c) => (c.last ? `${c.last}${c.last_date ? ` du ${fmtDate(c.last_date)}` : ""}` : "–") },
+                  { key: "message", label: "", render: (c) => (c.status === "corrupted" ? <span className="text-danger">{c.message}</span> : null) },
+                ]} />
+              )}
+              {d.seals && d.seals.length > 0 && (
+                <DataTable dense rows={d.seals} rowKey={(s) => s.period} columns={[
+                  { key: "period", label: "Mois clôturé", render: (s) => mois(s.period) },
+                  { key: "status", label: "Sceau recalculé", render: (s) => <Badge tone={s.status === "ok" ? "ok" : "danger"}>{s.status === "ok" ? "Identique au PV" : "Altération"}</Badge> },
+                  { key: "seal", label: "Sceau du PV", render: (s) => <span className="font-mono text-[11px]">{s.seal ? `${s.seal.slice(0, 16)}…` : "–"}</span> },
+                  { key: "differences", label: "", render: (s) => (s.status === "altered" ? <span className="text-danger">{(s.differences ?? []).join(" ; ")}</span> : null) },
+                ]} />
+              )}
+            </div>
+          )}
+        </Etat>
       </Card>
     </div>
   );
@@ -175,32 +197,41 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
   const [generations, setGenerations] = useState<Generation[]>([]);
   const [canClose, setCanClose] = useState(false);
   const [reason, setReason] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const label = new Date(month.period).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const cloture = useAutorise(CLOTURE);
+  const reouverture = useAutorise(REOUVERTURE);
+  const envoi = useEnvoi();
+  const label = mois(month.period);
 
-  async function run(action: "check" | "close" | "reopen") {
-    setBusy(action);
-    setError(null);
-    try {
-      if (action === "check") {
-        const res = await apiSend<{ checks: Check[]; can_close: boolean; generations: Generation[] }>("POST", "/finance/closing/check", { period: month.period });
-        setChecks(res.checks);
-        setGenerations(res.generations ?? []);
-        setCanClose(res.can_close);
-      } else if (action === "close") {
-        await apiSend("POST", "/finance/closing/close", { period: month.period });
-        onChanged();
-        onClose();
-      } else {
-        await apiSend("POST", "/finance/closing/reopen", { period: month.period, reason });
-        onChanged();
-        onClose();
-      }
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Action impossible.");
-    } finally {
-      setBusy(null);
+  async function controler() {
+    await envoi.run("check", async () => {
+      const res = await apiSend<{ checks: Check[]; can_close: boolean; generations: Generation[] }>("POST", "/finance/closing/check", { period: month.period });
+      setChecks(res.checks);
+      setGenerations(res.generations ?? []);
+      setCanClose(res.can_close);
+    }, undefined, "Contrôles impossibles.");
+  }
+  async function cloturer() {
+    const oui = await demanderConfirmation(
+      `Clôturer ${label} ? Les dotations du mois, la liquidation de la TVA et les factures à établir sont comptabilisées, puis les écritures du mois sont verrouillées, chaînées et scellées. Seules la direction et l'administration peuvent rouvrir un mois clôturé, avec un motif.`,
+      { action: "Clôturer le mois", danger: true },
+    );
+    if (!oui) return;
+    const ok = await envoi.run("close", () => apiSend("POST", "/finance/closing/close", { period: month.period }), undefined, "Clôture impossible.");
+    if (ok) {
+      onChanged();
+      onClose();
+    }
+  }
+  async function rouvrir() {
+    const oui = await demanderConfirmation(
+      `Rouvrir ${label} ? Les écritures du mois redeviennent modifiables jusqu'à la prochaine clôture ; la réouverture et son motif sont inscrits au registre des clôtures.`,
+      { action: "Rouvrir le mois", danger: true },
+    );
+    if (!oui) return;
+    const ok = await envoi.run("reopen", () => apiSend("POST", "/finance/closing/reopen", { period: month.period, reason: reason.trim() }), undefined, "Réouverture impossible.");
+    if (ok) {
+      onChanged();
+      onClose();
     }
   }
 
@@ -213,29 +244,33 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
       footer={
         month.state === "open" ? (
           <>
-            <Button loading={busy === "check"} onClick={() => run("check")}>
+            <Button loading={envoi.busy === "check"} disabled={!!envoi.busy} onClick={controler}>
               Lancer les contrôles
             </Button>
-            <Button variant="primary" disabled={!canClose} loading={busy === "close"} onClick={() => run("close")}>
-              <Lock className="h-4 w-4" /> Clôturer le mois
-            </Button>
+            {cloture && (
+              <Button variant="primary" disabled={!canClose || !!envoi.busy} loading={envoi.busy === "close"} onClick={cloturer}>
+                <Lock className="h-4 w-4" /> Clôturer le mois
+              </Button>
+            )}
           </>
         ) : (
           <>
             {month.seal && (
-              <Button onClick={() => apiDownload(`/finance/closing/pv?period=${month.period}`, `PV-cloture-${month.period.slice(0, 7)}.pdf`)}>
+              <Button loading={envoi.busy === "pv"} disabled={!!envoi.busy} onClick={() => envoi.telecharger("pv", `/finance/closing/pv?period=${month.period}`, `PV-cloture-${month.period.slice(0, 7)}.pdf`)}>
                 <Download className="h-4 w-4" /> PV de clôture
               </Button>
             )}
-            <Button variant="danger" disabled={reason.trim().length < 10} loading={busy === "reopen"} onClick={() => run("reopen")}>
-              <LockOpen className="h-4 w-4" /> Rouvrir
-            </Button>
+            {reouverture && (
+              <Button variant="danger" disabled={reason.trim().length < 10 || !!envoi.busy} loading={envoi.busy === "reopen"} onClick={rouvrir}>
+                <LockOpen className="h-4 w-4" /> Rouvrir
+              </Button>
+            )}
           </>
         )
       }
     >
       <div className="space-y-4">
-        {error && <Notice tone="danger">{error}</Notice>}
+        {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
         {month.state === "closed" ? (
           <>
             <Notice tone="ok">Mois clôturé par {month.closed_by} le {fmtDateTime(month.closed_at)}. Les écritures sont verrouillées et chaînées.</Notice>
@@ -257,7 +292,7 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
                 <dt className="text-muted">Dotations du mois</dt>
                 <dd className="text-right font-mono">{fmtGNF(month.snapshot.depreciations)}</dd>
                 <dt className="text-muted">Lignes verrouillées</dt>
-                <dd className="text-right font-mono">{month.snapshot.lines_locked}</dd>
+                <dd className="text-right font-mono">{fmtInt(month.snapshot.lines_locked)}</dd>
               </dl>
             )}
             {month.generated && month.generated.length > 0 && (
@@ -271,15 +306,19 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
                 ]} />
               </Card>
             )}
-            <Field label="Motif de réouverture" hint="Obligatoire, conservé au registre des clôtures. Réservé à la direction et à l'administration.">
-              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} />
-            </Field>
+            {reouverture ? (
+              <Field label="Motif de réouverture" hint="Obligatoire (dix caractères au moins), conservé au registre des clôtures.">
+                <Textarea value={reason} onChange={(e) => setReason(e.target.value)} />
+              </Field>
+            ) : (
+              <p className="text-[12.5px] text-muted">La réouverture d&apos;un mois clôturé est réservée à la direction et à l&apos;administration, avec un motif inscrit au registre.</p>
+            )}
           </>
         ) : (
           <p className="text-sm text-muted">
             La clôture vérifie les équilibres, le compte de passage, les brouillons, le rapprochement bancaire et l&apos;ordre des mois ; elle est refusée tant qu&apos;un contrôle bloquant échoue.
             Elle comptabilise ensuite les dotations du mois, liquide la TVA (pièce datée du dernier jour du mois), passe les factures à établir (extournées le 1er du mois suivant),
-            puis verrouille, chaîne et scelle la période ; le PV de clôture porte le sceau.
+            puis verrouille, chaîne et scelle la période ; le PV de clôture porte le sceau.{!cloture && " La clôture elle-même est faite par la finance ; les contrôles se lancent d'ici."}
           </p>
         )}
         {checks && <CheckList checks={checks} />}
@@ -317,39 +356,49 @@ interface Reprise { loaded: boolean; date_from?: string; date_to?: string; sourc
  * plateforme (offre, chapitre 6.3), à annexer au procès-verbal de bascule. */
 function RepriseValidation() {
   const { data, error, mutate } = useApi<Reprise>("/finance/reprise/validation");
-  const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
-  const fmt = (r: RepriseRow, v: number | null) => (v === null ? "n.d." : r.unit === "gnf" ? fmtGNF(v) : v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }));
+  const references = useAutorise(REFERENCES);
+  const envoi = useEnvoi();
+  // Valeur non recalculée (donnée absente) : « – », comme partout ailleurs.
+  const fmt = (r: RepriseRow, v: number | null) => (v === null ? "–" : r.unit === "gnf" ? fmtGNF(v) : fmtDec(v));
   async function charger(file: File) {
-    setMessage(null);
     const form = new FormData();
     form.append("file", file);
-    try {
+    await envoi.run("references", async () => {
       await apiUpload("/finance/reprise/references", form);
-      setMessage({ tone: "ok", text: "Valeurs de référence chargées." });
-      void mutate();
-    } catch (e) {
-      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Chargement impossible." });
-    }
+      await mutate();
+    }, "Valeurs de référence chargées.", "Chargement impossible.");
   }
   return (
     <Card
       className="mt-6"
-      title={data?.loaded ? `Validation de la reprise : ${data.conform}/${data.total} conformes` : "Validation de la reprise"}
+      title={data?.loaded ? `Validation de la reprise : ${pluriel(data.conform, "indicateur conforme", "indicateurs conformes")} sur ${fmtInt(data.total)}` : "Validation de la reprise"}
       padded={false}
       actions={
         <div className="flex flex-wrap gap-2">
-          {data?.loaded && <Button onClick={() => apiDownload("/finance/reprise/validation.xlsx", "validation_reprise.xlsx")}><Download className="h-4 w-4" /> Annexe du PV</Button>}
-          <FileButton small label="Valeurs de référence (.json)" accept=".json" onFile={charger} />
+          {data?.loaded && (
+            <Button loading={envoi.busy === "annexe"} disabled={!!envoi.busy} onClick={() => envoi.telecharger("annexe", "/finance/reprise/validation.xlsx", "validation_reprise.xlsx")}>
+              <Download className="h-4 w-4" /> Annexe du PV
+            </Button>
+          )}
+          {references && (envoi.busy === "references" ? (
+            <Button size="sm" loading>Chargement des valeurs</Button>
+          ) : (
+            <FileButton small label="Valeurs de référence (.json)" accept=".json" onFile={(file) => void charger(file)} />
+          ))}
         </div>
       }
     >
       <div className="px-4 py-3">
-        {message && <Notice tone={message.tone}>{message.text}</Notice>}
-        {!data ? <Etat error={error} onRetry={() => mutate()} /> : !data.loaded ? (
-          <p className="text-sm text-muted">Après la reprise, chargez le fichier des valeurs du classeur de référence (scripts/reprise, extraire_reference.py) : la plateforme les recalcule et signale chaque écart au-delà de la tolérance.</p>
-        ) : (
-          <p className="text-[12.5px] text-muted">Du {fmtDate(data.date_from)} au {fmtDate(data.date_to)}{data.source ? `, source : ${data.source}` : ""} ; définitions du classeur (produits = classe 7, charges d&apos;exploitation = classe 6 hors 67 et 68, capitaux propres = 101 + 106 + 110 + résultat), distinctes des rubriques SYSCOHADA.</p>
-        )}
+        {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
+        <Etat data={data} error={error} onRetry={() => mutate()} label="Recalcul des valeurs de la reprise…">
+          {(d) => (!d.loaded ? (
+            <p className="text-sm text-muted">
+              Après la reprise, {references ? "chargez" : "l'administration charge"} le fichier des valeurs du classeur de référence (scripts/reprise, extraire_reference.py) : la plateforme les recalcule et signale chaque écart au-delà de la tolérance.
+            </p>
+          ) : (
+            <p className="text-[12.5px] text-muted">Du {fmtDate(d.date_from)} au {fmtDate(d.date_to)}{d.source ? `, source : ${d.source}` : ""} ; définitions du classeur (produits = classe 7, charges d&apos;exploitation = classe 6 hors 67 et 68, capitaux propres = 101 + 106 + 110 + résultat), distinctes des rubriques SYSCOHADA.</p>
+          ))}
+        </Etat>
       </div>
       {data?.loaded && (
         <DataTable dense rows={data.rows} rowKey={(r) => r.code} columns={[

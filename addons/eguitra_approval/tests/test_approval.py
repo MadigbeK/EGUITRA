@@ -223,6 +223,35 @@ class TestApproval(FinanceDataMixin, ApiCase):
         self.assertEqual(moves["approval"]["state"], "pending")
         self.assertEqual(moves["approval"]["pending_with"], "Direction générale")
 
+    def test_demandes_paginees(self):
+        """Liste des demandes par pages (paged=1, offset) avec leur total : au-delà de la page, rien n'est
+        perdu, chaque demande vient une seule fois ; sans paged, la réponse reste une liste."""
+        bills = self.env["account.move"]
+        for amount in (10_000_000, 20_000_000, 30_000_000):
+            bill = self._bill(amount)
+            bill.with_user(self.comptable)._eguitra_post_or_submit()
+            bills |= bill
+        mine = self.env["eguitra.approval.request"].search([("res_model", "=", "account.move"), ("res_id", "in", bills.ids)])
+        self.assertEqual(len(mine), 3)
+        total = self.env["eguitra.approval.request"].search_count([("company_id", "in", self.dg.company_ids.ids)])
+        self.env.flush_all()  # visible des requêtes HTTP
+        token = self.open_session("dg")["access_token"]
+        seen, offset = [], 0
+        while True:
+            status, page = self.call("GET", f"/approvals/requests?paged=1&limit=2&offset={offset}", token=token)
+            self.assertEqual(status, 200, page)
+            self.assertEqual((page["total"], page["offset"], page["limit"]), (total, offset, 2))
+            seen += [r["id"] for r in page["items"]]
+            offset += 2
+            if offset >= page["total"]:
+                break
+        self.assertEqual(len(seen), total, "Toutes les demandes, page après page")
+        self.assertEqual(len(set(seen)), total, "Aucune demande deux fois")
+        self.assertTrue(set(mine.ids) <= set(seen))
+        status, rows = self.call("GET", "/approvals/requests?mine=1", token=self.open_session("comptable")["access_token"])
+        self.assertEqual(status, 200, rows)
+        self.assertEqual({r["id"] for r in rows}, set(mine.ids), "Sans paged : la liste de ses demandes, comme avant")
+
     def test_demandes_visibles_selon_le_profil(self):
         bill = self._bill(100_000_000)
         bill.with_user(self.comptable)._eguitra_post_or_submit()

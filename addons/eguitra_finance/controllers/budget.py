@@ -1,11 +1,11 @@
 """Budget : lignes budgétaires (nature, préfixes de comptes, douze mois, affectation analytique) et
-leur exécution ; lignes mensuelles par compte (mis_builder_budget), conservées pour mémoire."""
+leur exécution. Les routes des lignes mensuelles par compte de mis_builder_budget (lignes, saisie et
+comparatif) sont retirées : aucun écran ni script ne les appelait plus, remplacées par les lignes
+budgétaires et /execution. Les budgets par compte déjà saisis restent lus par le pilotage (budget_status)."""
 
 import csv
 import io
 import unicodedata
-
-from dateutil.relativedelta import relativedelta
 
 from odoo import http
 from odoo.exceptions import UserError, ValidationError
@@ -14,9 +14,9 @@ from odoo.http import content_disposition, request
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_api.files import XLSX, XLSX_OPTIONS, workbook_rows, xlsx_row
 
+from ..formats import pluriel
 from ..models.analytic import ACTIVITY_PLAN, COST_CENTER_PLAN
 from ..models.budget import MONTH_FIELDS, NATURES
-from ..models.finance_metrics import ACC_CODE
 from .common import FIN_READ, FIN_WRITE, as_float, today
 from .treasury import _number
 
@@ -243,12 +243,13 @@ class EguitraFinanceBudget(http.Controller):
             values = {"nature": nature, "name": name[:120],
                       "account_prefixes": str(cell(row, "prefixes") or "").replace(";", ",").strip() or False,
                       "residual": _plain(cell(row, "residual")) in ("oui", "o", "x", "1", "vrai", "yes")}
-            for key, field, xmlid, label in (("activity", "activity_id", ACTIVITY_PLAN, "activité"),
-                                             ("cost_center", "cost_center_id", COST_CENTER_PLAN, "centre de coût")):
+            for key, field, xmlid, label, inconnu in (
+                    ("activity", "activity_id", ACTIVITY_PLAN, "activité", "inconnue"),
+                    ("cost_center", "cost_center_id", COST_CENTER_PLAN, "centre de coût", "inconnu")):
                 value = cell(row, key)
                 record = _analytic(value, xmlid, company) if value not in (None, "") else None
                 if value not in (None, "") and not record:
-                    errors.append(f"Ligne {number} : {label} « {value} » inconnu(e) dans la société.")
+                    errors.append(f"Ligne {number} : {label} « {value} » {inconnu} dans la société.")
                 values[field] = record.id if record else False
             try:
                 for month in range(1, 13):
@@ -258,7 +259,8 @@ class EguitraFinanceBudget(http.Controller):
                 continue
             parsed.append((number, values))
         if errors:
-            raise ApiError(422, "business_rule", f"{len(errors)} anomalie(s) : rien n'est enregistré.", errors=errors[:50])
+            raise ApiError(422, "business_rule", f"{pluriel(len(errors), 'anomalie')} : rien n'est enregistré.",
+                           errors=errors[:50])
         Line = request.env["eguitra.budget.line"]
         if request.httprequest.form.get("replace") == "1":
             budget.eguitra_line_ids.unlink()
@@ -278,7 +280,8 @@ class EguitraFinanceBudget(http.Controller):
             except (UserError, ValidationError) as e:  # contrainte d'une ligne : rattachée à sa ligne du fichier
                 errors.append(f"Ligne {number} : {e.args[0] if e.args else e}")
         if errors:
-            raise ApiError(422, "business_rule", f"{len(errors)} anomalie(s) : rien n'est enregistré.", errors=errors[:50])
+            raise ApiError(422, "business_rule", f"{pluriel(len(errors), 'anomalie')} : rien n'est enregistré.",
+                           errors=errors[:50])
         return {"created": created, "updated": updated, "lines": len(budget.eguitra_line_ids)}
 
     @api_route("/finance/budgets/<int:budget_id>/export", profiles=FIN_READ)
@@ -322,83 +325,3 @@ class EguitraFinanceBudget(http.Controller):
             "company_id": request.env.company.id,
         })
         return {"id": budget.id, "name": budget.name}
-
-    @api_route("/finance/budgets/<int:budget_id>/lines", profiles=FIN_READ)
-    def lines(self, budget_id, **_kw):
-        budget = _budget(budget_id)
-        rows = {}
-        for item in budget.item_ids:
-            key = item.account_id.id
-            row = rows.setdefault(key, {"account_id": key, "code": item.account_id.code, "name": item.account_id.name,
-                                        "months": {m: 0.0 for m in range(1, 13)}})
-            sign = -1 if item.account_id.code.startswith("7") else 1
-            row["months"][item.date_from.month] += sign * item.balance
-        result = sorted(rows.values(), key=lambda r: r["code"])
-        for row in result:
-            row["total"] = sum(row["months"].values())
-        return {"budget": {"id": budget.id, "name": budget.name, "year": budget.date_from.year}, "lines": result}
-
-    @api_route("/finance/budgets/<int:budget_id>/lines", methods=("POST",), profiles=FIN_WRITE)
-    def set_line(self, budget_id, **_kw):
-        """Montant budgété d'un compte pour un mois (charges au débit, produits au crédit)."""
-        budget = _budget(budget_id, write=True)
-        data = read_json()
-        account_id, month, amount = require(data, "account_id", "month", "amount")
-        account = request.env["account.account"].browse(int(account_id)).exists()
-        if not account:
-            raise ApiError(404, "not_found", "Compte introuvable.")
-        month = int(month)
-        if not 1 <= month <= 12:
-            raise ApiError(400, "invalid_parameter", "Mois invalide.")
-        amount = as_float(amount, "amount")
-        start = budget.date_from.replace(month=month, day=1)
-        end = start + relativedelta(months=1, days=-1)
-        Item = request.env["mis.budget.by.account.item"]
-        item = Item.search([("budget_id", "=", budget.id), ("account_id", "=", account.id),
-                            ("date_from", "=", start)], limit=1)
-        income = account.code.startswith("7")
-        values = {"debit": 0.0 if income else max(amount, 0.0), "credit": max(amount, 0.0) if income else 0.0}
-        if item:
-            item.write(values)
-        else:
-            Item.create(dict(values, budget_id=budget.id, account_id=account.id, date_from=start, date_to=end,
-                             name=account.name, company_id=request.env.company.id))
-        return {"status": "ok"}
-
-    @api_route("/finance/budgets/<int:budget_id>/compare", profiles=FIN_READ)
-    def compare(self, budget_id, **kw):
-        """Budget et réalisé cumulés à fin de mois, par compte, avec l'écart et son taux."""
-        budget = _budget(budget_id)
-        month = int_arg(kw, "month", today().month if today().year == budget.date_from.year else 12, 1, 12)
-        start = budget.date_from
-        end = start.replace(month=month, day=1) + relativedelta(months=1, days=-1)
-        planned = {}
-        for item in budget.item_ids.filtered(lambda i: i.date_from <= end):
-            planned[item.account_id.id] = planned.get(item.account_id.id, 0.0) + item.balance
-        request.env.flush_all()
-        cr = request.env.cr
-        cr.execute(
-            f"""SELECT aml.account_id, {ACC_CODE}, COALESCE(SUM(aml.balance), 0)
-                  FROM account_move_line aml JOIN account_account aa ON aa.id = aml.account_id
-                 WHERE aml.parent_state = 'posted' AND aml.company_id = %s AND aml.date BETWEEN %s AND %s
-                   AND {ACC_CODE} ~ '^[67]'
-              GROUP BY 1, 2""",
-            (request.env.company.id, start, end),
-        )
-        actual = {acc: (code, float(b)) for acc, code, b in cr.fetchall()}
-        threshold = request.env["eguitra.alert.threshold"].sudo().search([
-            ("company_id", "=", request.env.company.id), ("code", "=", "budget_overrun_pct"),
-        ], limit=1).value or 10.0
-        accounts = request.env["account.account"].browse(list(set(planned) | set(actual)))
-        rows = []
-        for account in accounts.sorted("code"):
-            sign = -1 if account.code.startswith("7") else 1
-            plan = sign * planned.get(account.id, 0.0)
-            real = sign * actual.get(account.id, (None, 0.0))[1]
-            gap = real - plan
-            rate = (gap / plan * 100) if plan else None
-            overrun = rate is not None and (rate > threshold if sign == 1 else rate < -threshold)
-            rows.append({"account_id": account.id, "code": account.code, "name": account.name,
-                         "kind": "produit" if sign == -1 else "charge", "budget": plan, "actual": real,
-                         "gap": gap, "gap_pct": rate, "alert": overrun})
-        return {"budget": budget.name, "through": end, "threshold_pct": threshold, "lines": rows}

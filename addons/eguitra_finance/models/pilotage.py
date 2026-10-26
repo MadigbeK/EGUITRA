@@ -16,7 +16,7 @@ from dateutil.relativedelta import relativedelta
 
 from odoo import api, models
 
-from ..formats import days, money_short, number
+from ..formats import accord, days, money_short, number, pluriel
 from .finance_metrics import ACC_CODE, month_bounds
 from .syscohada import OPENING_JOURNAL
 
@@ -29,6 +29,9 @@ ECL_RATES = {"non_echu": 0.01, "1_30": 0.03, "31_60": 0.10, "61_90": 0.25, "plus
 
 # Au-delà de ce retard, une créance est tenue pour douteuse : la prévision de trésorerie ne la compte pas.
 DOUBTFUL_DAYS = 90
+
+# Nature d'une ligne budgétaire (eguitra.budget.line) dans le suivi du budget du tableau de bord.
+BUDGET_KINDS = {"income": "produit", "expense": "charge", "capex": "investissement"}
 
 # Tableaux de bord calculés pendant un appel du rapport mensuel (le contexte porte le numéro d'appel).
 _DASHBOARD_CALLS = itertools.count(1)
@@ -75,19 +78,25 @@ class EguitraFinancePilotage(models.AbstractModel):
     # ─── Briques ──────────────────────────────────────────────────────────
 
     def _invoiced_ttc(self, companies, kind, date_from, date_to):
-        """Ventes (kind='sale') ou achats ('purchase') facturés TTC sur la période, avoirs déduits."""
-        types = ("out_invoice", "out_refund") if kind == "sale" else ("in_invoice", "in_refund")
+        """Ventes (kind='sale') ou achats ('purchase') TTC de la période, avoirs déduits : mouvements des
+        comptes clients (41) des journaux de vente, ou fournisseurs (40) des journaux d'achat, comme la
+        validation de la reprise (reprise_reference.py). Les écritures reprises dans ces journaux (pièces
+        « entry » de la reprise de l'exercice) comptent ainsi comme les factures : sans elles, le DSO, le
+        DPO et le BFR en jours d'un exercice repris seraient rapportés à quelques mois de ventes."""
+        prefix, journal_type, sign = ("41", "sale", 1) if kind == "sale" else ("40", "purchase", -1)
         self.env.flush_all()
         self.env.cr.execute(
-            """SELECT COALESCE(SUM(CASE WHEN am.move_type = %(main)s THEN ABS(am.amount_total_signed)
-                                        ELSE -ABS(am.amount_total_signed) END), 0)
-                 FROM account_move am
-                WHERE am.state = 'posted' AND am.company_id = ANY(%(companies)s) AND am.move_type = ANY(%(types)s)
-                  AND am.date BETWEEN %(date_from)s AND %(date_to)s""",
-            {"main": types[0], "types": list(types), "companies": list(companies.ids),
-             "date_from": date_from, "date_to": date_to},
+            f"""SELECT COALESCE(SUM(aml.balance), 0)
+                  FROM account_move_line aml
+                  JOIN account_account aa ON aa.id = aml.account_id
+                  JOIN account_journal aj ON aj.id = aml.journal_id
+                 WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
+                   AND aml.date BETWEEN %(date_from)s AND %(date_to)s AND aj.type = %(journal_type)s
+                   AND {ACC_CODE} LIKE %(prefix)s""",
+            {"companies": list(companies.ids), "date_from": date_from, "date_to": date_to,
+             "journal_type": journal_type, "prefix": prefix + "%"},
         )
-        return float(self.env.cr.fetchone()[0])
+        return sign * float(self.env.cr.fetchone()[0])
 
     def _top_client(self, companies, date_from, date_to):
         """Premier client de la période : (tiers, chiffre d'affaires HT)."""
@@ -326,20 +335,25 @@ class EguitraFinancePilotage(models.AbstractModel):
     @api.model
     def partner_aging(self, companies, account_type, day):
         """Encours par tiers : pièces, encours, dont échu, retard maximal et statut (contentieux
-        au-delà de 90 jours de retard, retard au-delà de 0, sinon à jour)."""
+        au-delà de 90 jours de retard, retard au-delà de 0, sinon à jour). L'encours est net des avoirs et
+        des règlements non lettrés ; l'échu et le retard ne retiennent que les restes dus de même sens
+        (positifs pour un client, négatifs pour un fournisseur) : un avoir non imputé ou un règlement
+        d'avance ne met pas le tiers en retard ni en contentieux."""
+        sign = -1 if account_type == "liability_payable" else 1
         self.env.flush_all()
         self.env.cr.execute(
             """SELECT aml.partner_id, COUNT(DISTINCT aml.move_id), COALESCE(SUM(aml.amount_residual), 0),
-                      COALESCE(SUM(CASE WHEN aml.date_maturity < %(day)s THEN aml.amount_residual END), 0),
-                      COALESCE(MAX(CASE WHEN aml.date_maturity < %(day)s THEN %(day)s - aml.date_maturity END), 0)
+                      COALESCE(SUM(CASE WHEN aml.date_maturity < %(day)s AND aml.amount_residual * %(sign)s > 0
+                                        THEN aml.amount_residual END), 0),
+                      COALESCE(MAX(CASE WHEN aml.date_maturity < %(day)s AND aml.amount_residual * %(sign)s > 0
+                                        THEN %(day)s - aml.date_maturity END), 0)
                  FROM account_move_line aml
                  JOIN account_account aa ON aa.id = aml.account_id
                 WHERE aml.parent_state = 'posted' AND aml.company_id = ANY(%(companies)s)
                   AND aa.account_type = %(account_type)s AND NOT aml.reconciled AND aml.date <= %(day)s
              GROUP BY 1""",
-            {"day": day, "companies": list(companies.ids), "account_type": account_type},
+            {"day": day, "companies": list(companies.ids), "account_type": account_type, "sign": sign},
         )
-        sign = -1 if account_type == "liability_payable" else 1
         rows = [r for r in self.env.cr.fetchall() if abs(float(r[2])) > 0.5]
         partners = {p.id: p for p in self.env["res.partner"].sudo().browse([r[0] for r in rows if r[0]])}
         result = []
@@ -589,10 +603,13 @@ class EguitraFinancePilotage(models.AbstractModel):
             if "eguitra_line_ids" in budget._fields and budget.eguitra_line_ids:
                 months = (m_end.year - budget.date_from.year) * 12 + m_end.month - budget.date_from.month + 1
                 execution = self.env["eguitra.budget.line"].sudo().execution(budget, max(1, min(12, months)))
+                # Statuts de l'écran Activités et budget (execution) : seuil de dépassement des charges et des
+                # investissements, sous-réalisation tolérée des produits, charges non budgétées ; les
+                # investissements ne sont pas des charges.
                 for r in execution["lines"]:
                     row = rows.setdefault(f"L{r['id']}", {
                         "code": r["account_prefixes"] or "", "name": r["name"], "budget": 0.0, "actual": 0.0,
-                        "kind": "produit" if r["nature"] == "income" else "charge"})
+                        "kind": BUDGET_KINDS[r["nature"]], "status": r["status"], "overrun": r["alert"]})
                     row["budget"] += r["budget"]
                     row["actual"] += r["actual"]
                 continue
@@ -621,7 +638,10 @@ class EguitraFinancePilotage(models.AbstractModel):
         for row in sorted(rows.values(), key=lambda r: r["code"]):
             gap = row["actual"] - row["budget"]
             rate = gap / row["budget"] * 100 if row["budget"] else None
-            overrun = rate is not None and (rate > threshold if row["kind"] == "charge" else rate < -threshold)
+            if "overrun" in row:
+                overrun = row["overrun"]  # ligne budgétaire : statut de l'écran Budget
+            else:
+                overrun = rate is not None and (rate > threshold if row["kind"] == "charge" else rate < -threshold)
             lines.append(dict(row, gap=gap, gap_pct=rate, overrun=overrun))
 
         def total(kind):
@@ -635,6 +655,7 @@ class EguitraFinancePilotage(models.AbstractModel):
             "threshold_pct": threshold,
             "revenue": total("produit"),
             "expenses": total("charge"),
+            "investments": total("investissement"),
             "lines": lines,
             "overruns": sorted([line for line in lines if line["overrun"]], key=lambda r: -abs(r["gap"])),
         }
@@ -712,8 +733,11 @@ class EguitraFinancePilotage(models.AbstractModel):
         by_bucket = {k: max(0.0, aging.get(k, 0.0)) * rate for k, rate in rates.items()}
         total = sum(by_bucket.values())
         exposure = sum(max(0.0, v) for v in aging.values())
+        # Dépréciation déjà passée (solde créditeur des 491) : elle est dans le résultat ; seul l'écart avec
+        # la perte attendue le change encore (même ajustement que Fiscalité > IFRS).
+        existing = -self._sum_balance(companies, ["491"], None, day)
         return {"total": total, "rate_pct": _pct(total, exposure) if exposure else None, "by_bucket": by_bucket,
-                "rates": rates}
+                "rates": rates, "existing_impairment": existing, "adjustment": total - existing}
 
     # ─── Tableau de bord ──────────────────────────────────────────────────
 
@@ -792,13 +816,18 @@ class EguitraFinancePilotage(models.AbstractModel):
         q("result", "Combien l'entreprise a-t-elle gagné depuis le début de l'exercice ?", _money(result),
           "red" if result <= 0 else "green" if (net_pct or 0) >= 5 else "orange", reading)
 
-        # 2. Après pertes attendues
-        ecl = d["expected_credit_loss"]["total"]
-        after = result - ecl
+        # 2. Après pertes attendues : le résultat porte déjà la dépréciation passée (491) ; seul l'écart avec
+        # la perte attendue le change encore, sans la déduire deux fois.
+        loss = d["expected_credit_loss"]
+        ecl, booked = loss["total"], loss.get("existing_impairment", 0.0)
+        adjustment = loss.get("adjustment", ecl - booked)
+        after = result - adjustment
+        reading = f"Perte attendue sur les créances clients de {_money(ecl)} (matrice par ancienneté)"
+        if booked > 0.5:
+            reading += f", dont {_money(booked)} déjà dépréciés dans les comptes"
         q("result_ifrs", "Ce résultat tient-il après dépréciation des créances (IFRS 9) ?", _money(after),
-          "red" if after <= 0 else "orange" if result > 0 and ecl > result * 0.25 else "green",
-          f"Perte attendue sur les créances clients de {_money(ecl)} (matrice par ancienneté) : le résultat "
-          f"{'reste positif' if after > 0 else 'devient négatif'}.")
+          "red" if after <= 0 else "orange" if result > 0 and adjustment > result * 0.25 else "green",
+          f"{reading} : le résultat {'reste positif' if after > 0 else 'devient négatif'}.")
 
         # 3. Trésorerie
         cash = d["cash"]
@@ -858,11 +887,12 @@ class EguitraFinancePilotage(models.AbstractModel):
         else:
             rate, seuil = tr["margin_rate"], th["transport_margin_min"]
             v = tr["vehicles"]
-            after = (f" {len(v['deficit'])} camion(s) sur {v['count']} déficitaire(s) une fois la structure absorbée."
+            after = (f" {pluriel(len(v['deficit']), 'camion')} sur {v['count']} {accord(len(v['deficit']), 'déficitaire')} "
+                     "une fois la structure absorbée."
                      if v["basis"] == "net" else " Résultat après charges de structure non encore calculé.")
             q("transport", "Mon métier principal est-il rentable ?", "–" if rate is None else f"{_num(rate)} %",
               "grey" if rate is None or not seuil else "red" if rate < 0 else "orange" if rate < seuil else "green",
-              f"Marge directe du transport sur {tr['rotations']} rotation(s)"
+              f"Marge directe du transport sur {pluriel(tr['rotations'], 'rotation')}"
               + (f", {_num(tr['share_of_revenue_pct'])} % du chiffre d'affaires" if tr["share_of_revenue_pct"] else "")
               + (f", seuil {_num(seuil, 0)} %." if seuil else ", seuil non fixé.") + after,
               unset=rate is not None and not seuil)
@@ -881,7 +911,7 @@ class EguitraFinancePilotage(models.AbstractModel):
         else:
             over = [line for line in budget["overruns"] if line["kind"] == "charge"]
             exp = budget["expenses"]
-            q("budget", "Suis-je dans mon budget ?", f"{len(over)} ligne(s) en dépassement",
+            q("budget", "Suis-je dans mon budget ?", f"{pluriel(len(over), 'ligne')} en dépassement",
               "green" if not over else "red" if (exp["gap_pct"] or 0) > budget["threshold_pct"] else "orange",
               f"Charges réalisées {_money(exp['actual'])} pour un budget cumulé de {_money(exp['budget'])} à fin "
               f"{month_label(budget['through'])} ; tolérance de {_num(budget['threshold_pct'], 0)} % au-dessus du budget.")
@@ -892,7 +922,7 @@ class EguitraFinancePilotage(models.AbstractModel):
         else:
             un = tr["unbilled"]
             old = un["oldest"] and (d["as_of"] - un["oldest"]).days > 30
-            q("unbilled", "Ai-je du chiffre d'affaires qui dort ?", f"{un['count']} rotation(s)",
+            q("unbilled", "Ai-je du chiffre d'affaires qui dort ?", pluriel(un["count"], "rotation"),
               "green" if not un["count"] else "red" if old else "orange",
               (f"Prestations livrées non facturées : {_money(un['amount'])}. Le produit est acquis : facturez pour le "
                "transformer en créance, puis en trésorerie.") if un["count"]
@@ -904,7 +934,7 @@ class EguitraFinancePilotage(models.AbstractModel):
         balanced_sheet = abs(wc["balance_sheet_difference"]) < 1
         lock = d["lock_date"]
         q("publishable", "Mes comptes sont-ils diffusables ?",
-          f"{len(severe)} alerte(s) critique(s)" if severe else "Aucun blocage",
+          f"{pluriel(len(severe), 'alerte')} {accord(len(severe), 'critique')}" if severe else "Aucun blocage",
           "red" if severe or not ledger["balanced"] or not balanced_sheet else "orange" if not lock else "green",
           f"Balance {'équilibrée' if ledger['balanced'] else 'déséquilibrée'}, bilan "
           f"{'équilibré' if balanced_sheet else 'déséquilibré'}, écritures "
@@ -1029,7 +1059,7 @@ class EguitraFinancePilotage(models.AbstractModel):
 
         tr = report.get("transport_summary")
         if tr and tr["rotations"]:
-            text = f"Le transport compte {tr['rotations']} rotation(s) dans le mois"
+            text = f"Le transport compte {pluriel(tr['rotations'], 'rotation')} dans le mois"
             if tr["share_of_revenue_pct"] is not None:
                 text += f", {_num(tr['share_of_revenue_pct'])} % du chiffre d'affaires"
             if tr["margin_rate"] is not None:
@@ -1037,15 +1067,20 @@ class EguitraFinancePilotage(models.AbstractModel):
             text += "."
             v = tr["vehicles"]
             if v["basis"] == "net":
-                text += f" {len(v['deficit'])} camion(s) sur {v['count']} restent déficitaires une fois la structure absorbée."
+                n = len(v["deficit"])
+                text += (f" {pluriel(n, 'camion')} sur {v['count']} {accord(n, 'reste', 'restent')} "
+                         f"{accord(n, 'déficitaire')} une fois la structure absorbée.")
             if tr["unbilled"]["count"]:
-                text += f" {tr['unbilled']['count']} rotation(s) validée(s) attendent leur facture."
+                n = tr["unbilled"]["count"]
+                text += (f" {pluriel(n, 'rotation')} {accord(n, 'validée')} "
+                         f"{accord(n, 'attend sa facture', 'attendent leur facture')}.")
             paragraphs.append(text)
 
         alerts = [a for a in report["alerts"] if a.get("status", "alert") == "alert"]
         severe = [a for a in alerts if a["severity"] in ("blocking", "critical")]
         paragraphs.append(
-            f"Le système signale {len(alerts)} alerte(s) active(s), dont {len(severe)} critique(s) ou bloquante(s)."
+            f"Le système signale {pluriel(len(alerts), 'alerte')} {accord(len(alerts), 'active')}, dont "
+            f"{len(severe)} {accord(len(severe), 'critique ou bloquante', 'critiques ou bloquantes')}."
             if alerts else "Aucune alerte active : tous les seuils fixés sont respectés."
         )
         return paragraphs

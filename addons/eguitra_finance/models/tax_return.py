@@ -8,6 +8,8 @@ l'écriture de règlement si on la désigne. L'écriture de liquidation de la TV
 clôture du mois (pièce « TVA-mm/aaaa »).
 """
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
@@ -28,6 +30,9 @@ class EguitraTaxReturn(models.Model):
     amount_base = fields.Monetary("Base imposable")
     amount_collected = fields.Monetary("TVA collectée ou retenues opérées")
     amount_deductible = fields.Monetary("TVA déductible ou retenues subies")
+    amount_credit_prior = fields.Monetary(
+        "Crédit reporté du mois précédent",
+        help="Crédit de TVA à l'ouverture du mois (4449, ou 445 non liquidé), déduit de la TVA à payer.")
     amount_due = fields.Monetary("À payer")
     amount_credit = fields.Monetary("Crédit à reporter")
     details = fields.Json("Calcul figé", readonly=True)
@@ -63,6 +68,7 @@ class EguitraTaxReturn(models.Model):
                 "amount_base": computation["base_sales"],
                 "amount_collected": computation["vat_collected"],
                 "amount_deductible": computation["vat_deductible"],
+                "amount_credit_prior": computation.get("vat_credit_prior") or 0.0,
                 "amount_due": computation["vat_due"],
                 "amount_credit": computation["vat_credit"],
             }
@@ -71,6 +77,7 @@ class EguitraTaxReturn(models.Model):
                 "amount_base": computation["base_total"],
                 "amount_collected": computation["total_operated"],
                 "amount_deductible": computation["total_suffered"],
+                "amount_credit_prior": 0.0,
                 "amount_due": computation["total_operated"],
                 "amount_credit": 0.0,
             }
@@ -86,7 +93,17 @@ class EguitraTaxReturn(models.Model):
             raise UserError("La référence de dépôt (numéro de quittance ou d'accusé) est obligatoire.")
         self.write({"state": "filed", "filed_date": day, "filed_reference": reference.strip()[:120],
                     "filed_by": self.env.user.id})
+        self._lock_taxes()
         return self
+
+    def _lock_taxes(self):
+        """Déclaration déposée : les taxes de son mois sont verrouillées (date de verrouillage fiscal de la
+        société, tax_lock_date, à confirmer en 19), pour qu'une pièce modifiée ou ajoutée ensuite ne la
+        contredise plus. La date ne recule jamais."""
+        end = self.period + relativedelta(months=1, days=-1)
+        company = self.company_id.sudo()
+        if not company.tax_lock_date or company.tax_lock_date < end:
+            company.tax_lock_date = end
 
     def eguitra_pay(self, day, reference, move=None):
         self.ensure_one()

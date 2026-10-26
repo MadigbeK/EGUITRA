@@ -242,23 +242,6 @@ class TestFinanceApi(FinanceDataMixin, ApiCase):
         status, _b = self.call("POST", "/finance/treasury/journals", dict(payload, code="BDM2"), token=self.token)
         self.assertEqual(status, 403, "Réservé à l'administration")
 
-    def test_budget(self):
-        status, budget = self.call("POST", "/finance/budgets", {"name": "Budget 2026", "year": self.today.year},
-                                   token=self.token)
-        self.assertEqual(status, 200, budget)
-        status, _b = self.call("POST", f"/finance/budgets/{budget['id']}/lines", {
-            "account_id": self.acc_purchase.id, "month": self.today.month, "amount": 100_000_000,
-        }, token=self.token)
-        self.assertEqual(status, 200)
-        self.make_invoice("in_invoice", 150_000_000)
-        status, compare = self.call("GET", f"/finance/budgets/{budget['id']}/compare?month={self.today.month}",
-                                    token=self.token)
-        self.assertEqual(status, 200, compare)
-        line = next(l for l in compare["lines"] if l["account_id"] == self.acc_purchase.id)
-        self.assertEqual(line["budget"], 100_000_000)
-        self.assertEqual(line["actual"], 150_000_000)
-        self.assertTrue(line["alert"], "Dépassement de 50 % au-delà du seuil de 10 %")
-
     def test_relances_clients(self):
         from datetime import timedelta
 

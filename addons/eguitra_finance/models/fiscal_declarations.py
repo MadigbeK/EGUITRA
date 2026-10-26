@@ -8,7 +8,10 @@ déductible et la base des achats au débit ; les avoirs viennent en diminution.
 
 from odoo import api, models
 
-NOTE = "Montants préparés à partir des écritures ; le modèle de déclaration est validé avec l'expert-comptable."
+from .finance_metrics import ACC_CODE
+from .syscohada import OPENING_JOURNAL
+
+NOTE ="Montants préparés à partir des écritures ; le modèle de déclaration est validé avec l'expert-comptable."
 
 
 class EguitraFiscal(models.AbstractModel):
@@ -58,7 +61,8 @@ class EguitraFiscal(models.AbstractModel):
             params,
         )
         bases = {use: float(b) for use, b in cr.fetchall()}
-        balance = collected - deductible
+        prior = self._vat_credit_carried(companies, start)
+        balance = collected - deductible - prior
         return {
             "period": {"from": start, "to": end},
             "taxes": taxes,
@@ -66,10 +70,34 @@ class EguitraFiscal(models.AbstractModel):
             "base_purchases": bases.get("purchase", 0.0),
             "vat_collected": collected,
             "vat_deductible": deductible,
+            "vat_credit_prior": prior,
             "vat_due": max(balance, 0.0),
             "vat_credit": max(-balance, 0.0),
             "note": NOTE,
         }
+
+    def _vat_credit_carried(self, companies, start):
+        """Crédit de TVA reporté à l'ouverture du mois, déduit comme le fait la liquidation de la clôture
+        (period_close_complete._vat_position) : solde débiteur, à la veille du mois, du crédit à reporter
+        (4449) et de la TVA non liquidée (443 et 445 ; sans compte 4449, la liquidation laisse le crédit au
+        445), à-nouveaux du premier jour compris (crédit repris à l'ouverture de l'exercice). Une position
+        débitrice (TVA due d'un mois antérieur) relève de sa propre déclaration : elle n'est pas reportée."""
+        self.env.flush_all()
+        total = 0.0
+        for company in companies:
+            self.env.cr.execute(
+                f"""SELECT COALESCE(SUM(aml.balance), 0)
+                      FROM account_move_line aml
+                      JOIN account_account aa ON aa.id = aml.account_id
+                      JOIN account_move am ON am.id = aml.move_id
+                      JOIN account_journal aj ON aj.id = am.journal_id
+                     WHERE aml.parent_state = 'posted' AND aml.company_id = %(company)s
+                       AND (aml.date < %(start)s OR (aml.date = %(start)s AND aj.code = %(opening)s))
+                       AND ({ACC_CODE} LIKE '443%%' OR {ACC_CODE} LIKE '445%%' OR {ACC_CODE} LIKE '4449%%')""",
+                {"company": company.id, "start": start, "opening": OPENING_JOURNAL},
+            )
+            total += max(float(self.env.cr.fetchone()[0]), 0.0)
+        return total
 
     @api.model
     def vat_annex(self, companies, start, end):
