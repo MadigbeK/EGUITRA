@@ -266,7 +266,10 @@ export interface Bien {
 export interface ImmobilierSummary {
   properties: number;
   occupied: number;
+  /** Biens loués / biens à la date d'arrêté (définition de la finance). */
   occupancy_pct: number;
+  /** Occupation moyenne de la période : jours couverts par un bail. */
+  period_occupancy_pct?: number;
   annual_rent: number;
   portfolio_value: number;
   gross_yield_pct: number | null;

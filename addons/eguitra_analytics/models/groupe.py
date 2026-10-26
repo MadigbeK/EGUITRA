@@ -34,6 +34,7 @@ from odoo import api, models
 from odoo.addons.eguitra_finance.formats import days
 from odoo.addons.eguitra_finance.models.analytic import ACTIVITY_PLAN, account_shares
 from odoo.addons.eguitra_finance.models.finance_metrics import ACC_CODE
+from odoo.addons.eguitra_finance.models.ifrs import bucket_of as ifrs_bucket
 from odoo.addons.eguitra_finance.models.pilotage import DOUBTFUL_DAYS
 from odoo.addons.eguitra_finance.models.syscohada import CR_LINES, CR_TOTALS, OPENING_JOURNAL, _compute, _totals
 
@@ -463,12 +464,14 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         """Pièces ouvertes à la date d'arrêté (restes dus au jour du calcul, comme la balance âgée) : par
         pièce, tiers (société mère du contact), échéance et reste dû positif (à encaisser d'un client, à
         payer à un fournisseur). Les avances et règlements non lettrés d'un tiers s'imputent sur ses pièces
-        les plus anciennes ; le reliquat est rendu dans `unapplied`."""
+        les plus anciennes ; le reliquat est rendu dans `unapplied`. Une pièce sans échéance n'est pas échue,
+        comme pour la finance (open_items) : elle prend pour échéance le lendemain de la date d'arrêté."""
         def load():
             sign = 1.0 if account_type == "asset_receivable" else -1.0
+            not_due = ctx.date_to + timedelta(days=1)
             rows = self._rows(
                 """SELECT COALESCE(rp.commercial_partner_id, aml.partner_id), aml.move_id, am.name, aml.date,
-                          COALESCE(aml.date_maturity, aml.date), aml.amount_residual
+                          aml.date_maturity, aml.amount_residual
                      FROM account_move_line aml
                      JOIN account_account aa ON aa.id = aml.account_id
                      JOIN account_move am ON am.id = aml.move_id
@@ -480,7 +483,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             by_partner = {}
             for partner, move, name, day, due, residual in rows:
                 by_partner.setdefault(partner, []).append(
-                    {"partner": partner, "move": move, "name": name, "date": day, "due": due,
+                    {"partner": partner, "move": move, "name": name, "date": day, "due": due or not_due,
                      "amount": sign * float(residual)})
             items, unapplied = [], {}
             for partner, lines in by_partner.items():
@@ -653,11 +656,14 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
 
     def _budget_amount(self, ctx, scope, start, end):
         """Budget d'un agrégat sur une période : montants mensuels des lignes, mois entamés au prorata des
-        jours ; None sans budget à lignes."""
+        jours ; None sans budget à lignes, ou quand le budget ne couvre pas toute la période (douze mois à
+        cheval sur deux exercices : une cible partielle face à un réalisé de douze mois serait fausse)."""
         budget = self._budget(ctx)
         if not budget or not budget["lines"]:
             return None
         record = budget["record"]
+        if start < record.date_from or end > record.date_to:
+            return None
         total, found = 0.0, False
         for month in _months_between(start, end):
             if month < record.date_from.replace(day=1) or month > record.date_to:
@@ -779,12 +785,16 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         return trend
 
     def _disbursements(self, ctx, months=6):
-        """Décaissements moyens mensuels des banques et caisses sur les six derniers mois (mois mouvementés),
-        hors à-nouveaux et virements internes (compte 585) : la définition des flux mensuels de la finance."""
+        """Décaissements moyens mensuels des banques et caisses sur les six derniers mois civils complets
+        (mois mouvementés), hors à-nouveaux et virements internes (compte 585) : la définition des flux
+        mensuels de la finance. Six mois glissants en dates touchaient sept mois civils, dont deux partiels
+        comptés comme entiers."""
         def load():
             accounts = self._metrics()._treasury_accounts(ctx.company)
             if not accounts:
                 return None
+            end = ctx.date_to if ctx.month_complete else ctx.date_to.replace(day=1) - timedelta(days=1)
+            start = end.replace(day=1) - relativedelta(months=months - 1)
             rows = self._rows(
                 """SELECT to_char(date_trunc('month', aml.date), 'YYYY-MM'), COALESCE(SUM(aml.credit), 0)
                      FROM account_move_line aml
@@ -798,7 +808,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                              AND COALESCE(ta.code_store->>(t.company_id::text), '') LIKE '585%%')
                  GROUP BY 1""",
                 {"company": ctx.company.id, "accounts": accounts.ids, "journal": OPENING_JOURNAL,
-                 "start": ctx.date_to - relativedelta(months=months) + timedelta(days=1), "end": ctx.date_to},
+                 "start": start, "end": end},
             )
             paid = [float(v) for _m, v in rows if float(v) > 0]
             return sum(paid) / len(paid) if paid else None
@@ -1296,11 +1306,16 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 "revenue": income, "costs": expense, "net": income - expense,
                 "lease_end": active.date_end if active else None,
             })
+        # Patrimoine : valeur bien par bien (actuelle, à défaut d'acquisition), la définition que la finance
+        # retient (eguitra.lease.summary corrigé) ; occupation du parc comme la finance, biens loués / biens à la
+        # date d'arrêté, et occupation moyenne de la période (jours couverts par un bail) en second.
         values = sum(r["value"] for r in rows)
         rent = sum(r["annual_rent"] for r in rows)
+        occupied = sum(1 for r in rows if r["occupied"])
         summary = {
-            "properties": len(rows), "occupied": sum(1 for r in rows if r["occupied"]),
-            "occupancy_pct": stats.mean([r["occupancy_pct"] for r in rows]), "annual_rent": rent,
+            "properties": len(rows), "occupied": occupied,
+            "occupancy_pct": occupied / len(rows) * 100 if rows else None,
+            "period_occupancy_pct": stats.mean([r["occupancy_pct"] for r in rows]), "annual_rent": rent,
             "portfolio_value": values, "gross_yield_pct": _pct_of(rent, values),
             "unpaid_amount": sum(r["unpaid_amount"] for r in rows), "unpaid_count": sum(r["unpaid_count"] for r in rows),
             "revenue": sum(r["revenue"] for r in rows), "costs": sum(r["costs"] for r in rows),
@@ -1755,17 +1770,25 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         history = self._payment_history(ctx)
         partners = {p for p, _v in ranked} | {i["partner"] for i in open_items["items"] if i["partner"]}
         names = self._names("res.partner", list(partners) + [p for p, v in previous.items() if p and v > 0])
+        # Part du premier client : la définition de l'alerte de concentration de la finance (working_capital) :
+        # chiffre d'affaires du premier tiers facturé rapporté au chiffre d'affaires de la période (ventes sans
+        # tiers comprises), pour que l'Analyse et l'alerte disent le même dépassement.
+        metrics = self._metrics()
+        first_partner, first_amount = metrics._top_client(ctx.company, ctx.date_from, ctx.date_to)
+        revenue_70 = metrics.revenue(ctx.company, ctx.date_from, ctx.date_to)
         concentration = {
             "lorenz": lorenz["points"], "gini": lorenz["gini"], "hhi": stats.hhi(values),
             "top_share": {
-                "first": _pct_of(values[0], total) if values else None,
-                "first_id": ranked[0][0] if ranked else None, "first_name": names.get(ranked[0][0]) if ranked else None,
-                "top5": _pct_of(sum(values[:5]), total) if values else None,
+                "first": _pct_of(first_amount, revenue_70) if first_partner and revenue_70 > 0 else None,
+                "first_id": first_partner.id or None, "first_name": first_partner.name or None,
+                "top5": _pct_of(sum(values[:5]), revenue_70) if values and revenue_70 > 0 else None,
             },
             "pareto_count": pareto, "clients": len(values), "revenue": total,
             "unassigned_revenue": revenue.get(None, 0.0),
             "method": "Chiffre d'affaires (comptes 70) par client de la période : courbe de Lorenz et Gini, indice de "
-                      "Herfindahl-Hirschman (parts en %), nombre de clients qui font 80 % du chiffre d'affaires.",
+                      "Herfindahl-Hirschman (parts en %), nombre de clients qui font 80 % du chiffre d'affaires ; part "
+                      "du premier client et des cinq premiers rapportée au chiffre d'affaires de la période, comme "
+                      "l'alerte de concentration de la finance.",
         }
         segments = self._client_segments(ctx, ranked, previous, open_items, history, names, pareto, total)
         blocks = {
@@ -1810,22 +1833,42 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             label = "Stable"
         return {"slope_days_per_month": slope, "r2": fit["r2"], "t": t, "n": len(records), "label": label}
 
+    def _expected_loss(self, ctx):
+        """Perte attendue par client (société mère), à la définition de l'écran IFRS de la finance
+        (eguitra.ifrs.policy.expected_credit_loss) : chaque créance ouverte de reste positif, classée par
+        l'ancienneté de son échéance (sans échéance : non échue), au taux de la matrice de la société. Le
+        total de l'Analyse est ainsi celui de la provision proposée en Fiscalité > IFRS."""
+        def load():
+            rates = self.env["eguitra.ifrs.policy"].sudo()._get(ctx.company).rates()
+            rows = self._rows(
+                """SELECT COALESCE(rp.commercial_partner_id, aml.partner_id), aml.date_maturity, aml.amount_residual
+                     FROM account_move_line aml
+                     JOIN account_account aa ON aa.id = aml.account_id
+                LEFT JOIN res_partner rp ON rp.id = aml.partner_id
+                    WHERE aml.company_id = %s AND aml.parent_state = 'posted' AND aml.date <= %s AND NOT aml.reconciled
+                      AND aa.account_type = 'asset_receivable' AND aml.amount_residual > 0""",
+                (ctx.company.id, ctx.date_to),
+            )
+            losses = {}
+            for partner, maturity, residual in rows:
+                bucket = ifrs_bucket((ctx.date_to - maturity).days if maturity else 0)
+                losses[partner] = losses.get(partner, 0.0) + float(residual) * rates[bucket] / 100
+            return losses
+        return ctx.get("expected_loss", load)
+
     def _client_segments(self, ctx, ranked, previous, open_items, history, names, pareto, total):
         """Matrice valeur × comportement : valeur forte = client parmi ceux qui font 80 % du chiffre
         d'affaires ; bon payeur = note de paiement d'au moins 60 (sans historique ni encours : réputé bon
-        payeur). Perte attendue (IFRS 9) = encours par tranche d'ancienneté × taux de la matrice de la société."""
+        payer). Perte attendue (IFRS 9) : la définition de l'écran IFRS de la finance (_expected_loss)."""
         day = ctx.date_to
-        rates = self._metrics().expected_credit_loss(ctx.company, day)["rates"]
+        losses = self._expected_loss(ctx)
         by_partner = {}
         for record in history:
             by_partner.setdefault(record["partner"], []).append(record)
-        aging, opened, overdue = {}, {}, {}
+        opened, overdue = {}, {}
         for item in open_items["items"]:
             late = (day - item["due"]).days
-            bucket = "non_echu" if late <= 0 else "1_30" if late <= 30 else "31_60" if late <= 60 \
-                else "61_90" if late <= 90 else "plus_90"
             partner = item["partner"]
-            aging.setdefault(partner, dict.fromkeys(rates, 0.0))[bucket] += item["amount"]
             opened[partner] = opened.get(partner, 0.0) + item["amount"]
             if late > 0:
                 overdue[partner] = overdue.get(partner, 0.0) + item["amount"]
@@ -1848,7 +1891,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             good = score is None or score >= GOOD_PAYER
             high = partner in top
             segment = ("strategiques" if good else "a_securiser") if high else ("a_developper" if good else "a_surveiller")
-            ecl = sum(max(0.0, amount) * rates[b] for b, amount in aging.get(partner, {}).items())
+            ecl = losses.get(partner, 0.0)
             margin = margins.get(partner)
             rows.append({
                 "id": partner, "name": names.get(partner, "?"), "revenue": revenue.get(partner, 0.0),

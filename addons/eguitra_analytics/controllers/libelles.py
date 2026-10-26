@@ -95,7 +95,7 @@ COLONNES = {
     "earned_value": "Valeur acquise", "eac": "Coût estimé à terminaison", "margin_at_completion": "Marge à terminaison",
     "margin_at_completion_pct": "Marge à terminaison (%)", "contract_amount": "Montant du marché",
     "progress_pct": "Avancement (%)", "retention_outstanding": "Retenues à libérer", "occupancy_pct": "Occupation (%)",
-    "gross_yield_pct": "Rendement brut (%)", "annual_rent": "Loyer annuel", "unpaid_amount": "Impayés",
+    "gross_yield_pct": "Rendement brut (%)", "period_occupancy_pct": "Occupation moyenne de la période (%)","annual_rent": "Loyer annuel", "unpaid_amount": "Impayés",
     "unpaid_count": "Loyers impayés", "lease_end": "Fin de bail", "weeks": "Semaines", "weeks_p10": "Semaines (p10)",
     "weeks_p50": "Semaines (p50)", "threshold": "Seuil", "mape": "Erreur moyenne (MAPE %)",
     "pass_probability": "Probabilité d'atteindre le budget", "payroll": "Masse salariale", "dossier": "Dossier",

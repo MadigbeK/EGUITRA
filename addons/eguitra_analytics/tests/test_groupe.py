@@ -428,6 +428,32 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
                                delta=1, msg="Chiffre d'affaires rattaché au tiers de la ligne 411")
         self.assertIn(entry.id, {r["move"] for r in groupe._payment_history(ctx)}, "Règlement appris sur la reprise")
 
+    def test_definitions_de_la_finance(self):
+        """L'Analyse calcule comme la finance : perte attendue de l'écran IFRS, part du premier client de
+        l'alerte de concentration, échéance absente non échue, décaissements sur des mois civils complets."""
+        groupe, metrics = self.env["eguitra.analytics.groupe"], self.env["eguitra.finance.metrics"]
+        ctx = self._ctx()
+        ifrs = self.env["eguitra.ifrs.policy"].expected_credit_loss(self.company, DATE_TO)
+        self.assertAlmostEqual(sum(groupe._expected_loss(ctx).values()), ifrs["ecl"], delta=1)
+        clients = self._get("clients")
+        finance = metrics.working_capital(self.company, date(2026, 1, 1), DATE_TO)["concentration"]
+        self.assertAlmostEqual(clients["concentration"]["top_share"]["first"], finance["pct"], delta=0.05)
+        # Créance sans échéance : non échue au jour d'arrêté (la finance la classe « non échu »).
+        client = self.env["res.partner"].create({"name": "KANKAN NÉGOCE (fictif)", "customer_rank": 1})
+        receivable = client.with_company(self.company).property_account_receivable_id
+        move = self._entry([(receivable, 5_000_000, 0, client), (self.acc_services, 0, 5_000_000, None)], date(2026, 2, 1))
+        self.env.flush_all()
+        self.env.cr.execute("UPDATE account_move_line SET date_maturity = NULL WHERE move_id = %s", (move.id,))
+        self.env.invalidate_all()
+        items = [i for i in groupe._open_items(self._ctx(), "asset_receivable")["items"] if i["partner"] == client.id]
+        self.assertEqual([i["due"] for i in items], [DATE_TO + timedelta(days=1)])
+        # Mois entamé : la moyenne des décaissements reste celle des six mois civils clos.
+        mid = _Ctx(self.company, {"code": "m", "date_from": date(2026, 6, 1), "date_to": date(2026, 6, 15), "label": "",
+                                  "previous": {"date_from": date(2025, 6, 1), "date_to": date(2025, 6, 15)}})
+        end_may = _Ctx(self.company, {"code": "m", "date_from": date(2026, 5, 1), "date_to": date(2026, 5, 31),
+                                      "label": "", "previous": {"date_from": date(2025, 5, 1), "date_to": date(2025, 5, 31)}})
+        self.assertAlmostEqual(groupe._disbursements(mid), groupe._disbursements(end_may), delta=1)
+
     def test_liens_des_constats(self):
         """Chaque constat mène à son objet, que l'écran visé sait lire : une ligne (?route=, ?ensemble=,
         ?client=), un onglet (?onglet=) ou un bloc (#consommation, #doublons)."""
