@@ -5,16 +5,31 @@ qui manque. Vous travaillez sur la recette : une copie complète de la plateform
 fictives (repérées « Démo »). Rien de ce que vous y faites ne touche la vraie comptabilité : vous
 pouvez tout essayer, y compris les erreurs.
 
-## 1. Se connecter la première fois
+## 1. Se connecter
 
-1. Ouvrez l'adresse de la recette remise par la direction, dans Chrome ou Edge sur ordinateur (Safari
-   peut bloquer la session), dans Chrome sur téléphone.
-2. Saisissez votre identifiant et le mot de passe provisoire qui vous ont été remis, puis « Se
-   connecter ».
-3. Choisissez votre mot de passe définitif (10 caractères au moins), puis reconnectez-vous avec lui.
+1. Ouvrez l'adresse de votre application (tableau ci-dessous), dans Chrome ou Edge sur ordinateur
+   (Safari peut bloquer la session), dans Chrome sur téléphone.
+2. Saisissez votre identifiant et le mot de passe commun de la recette, communiqué par E-VOLUTION
+   XP, puis « Se connecter ».
 
-Votre compte est personnel : ne le prêtez pas ; si une autre personne doit tester, demandez-lui un
-compte. Mot de passe oublié : demandez à l'administrateur de vous en redonner un provisoire.
+La connexion se fait toujours dans une application : celle de l'adresse ouverte. L'adresse de la
+recette, seule, ouvre la connexion à Finance, puis l'accueil NIMOVA, d'où l'on passe aux autres
+applications du compte. Un compte qui n'a pas Finance (cabinet, RH, salarié, porteur) ouvre l'adresse
+de son application ; sinon la connexion répond « Votre profil ne donne pas accès à cette
+application. ».
+
+| Application {30} | Adresse à ouvrir {34} | Comptes de test {36} |
+|---|---|---|
+| Finance, Transport, Analyse, RH (par l'accueil NIMOVA) | l'adresse de la recette | test.dg, test.daf, test.comptable, test.achats, test.exploitation, test.parc, test.chantiers, test.immobilier, test.admin |
+| MB AxisPro Consulting (AxisPro Suite) | l'adresse de la recette suivie de /axispro | test.consultant, test.associe |
+| Analyse, pour le cabinet | l'adresse de la recette suivie de /analyse | test.consultant, test.associe |
+| RH et « Mon espace » | l'adresse de la recette suivie de /rh | test.rh, test.salarie |
+| Rotations, au téléphone | l'adresse de la recette suivie de /mobile | test.exploitation, test.parc |
+| Portail des porteurs de projets | l'adresse de la recette suivie de /portail | test.porteur, porteur.demo |
+
+Sur la recette, le mot de passe est commun à tous les comptes et ne se modifie pas : une tentative de
+changement est refusée, c'est normal. Votre compte de test reste personnel pendant la campagne : si
+une autre personne doit tester, demandez-lui un compte.
 
 Double authentification : pendant la période de test, elle est désactivée sur la recette. Elle sera
 obligatoire sur la plateforme réelle : à la première connexion, vous installerez Google
@@ -26,29 +41,36 @@ taperez à chaque connexion le code à 6 chiffres de l'application.
 EGUITRA GROUP SARLU et MB AxisPro Consulting sont deux entreprises distinctes : chacune a sa
 comptabilité, ses clients, ses factures. La plateforme les sert par applications :
 
-| Application | Adresse (à la suite de celle de la recette) | Pour qui | Société |
-|---|---|---|---|
-| NIMOVA · Finance | /finance | Direction, finance, métiers d'EGUITRA | Les deux, séparément : la société de travail se choisit dans la colonne de gauche |
-| NIMOVA · AxisPro | /axispro | Direction, consultants du cabinet | MB AxisPro Consulting seulement |
-| Rotations | /mobile | Exploitation, agents de parc | EGUITRA GROUP seulement |
-| Portail des porteurs de projets | /portail | Clients du cabinet | MB AxisPro Consulting seulement |
+| Application | Pour qui | Société |
+|---|---|---|
+| NIMOVA · Finance | Direction, finance, achats, métiers d'EGUITRA | Les deux, séparément : la société de travail se choisit en haut à droite |
+| NIMOVA · Transport | Direction, finance, exploitation | EGUITRA GROUP SARLU seulement |
+| NIMOVA · MB AxisPro Consulting | Direction, consultants du cabinet | MB AxisPro Consulting seulement |
+| NIMOVA · Analyse | Direction, finance, cabinet | Selon la société de travail |
+| NIMOVA · RH | Direction, ressources humaines ; « Mon espace » pour chaque salarié | Les deux, gestion commune |
+| NIMOVA · Rotations | Exploitation, agents de parc | EGUITRA GROUP SARLU seulement |
+| Portail des porteurs de projets | Clients du cabinet | MB AxisPro Consulting seulement |
 
-Les comptes ouverts à Finance et à AxisPro passent de l'une à l'autre par la bascule « Finance |
-AxisPro », en haut de la colonne de gauche. Les modules métier d'EGUITRA (transport, chantiers,
-immobilier) n'apparaissent que lorsque la société de travail est EGUITRA GROUP.
+Un compte ouvert à plusieurs applications passe de l'une à l'autre par le nom de l'espace, en haut à
+gauche (NIMOVA, puis le nom du module), ou par l'accueil NIMOVA. Les modules métier d'EGUITRA (BTP,
+immobilier) n'apparaissent que lorsque la société de travail est EGUITRA GROUP SARLU.
 
 ## 3. Votre compte et ce que vous testez
 
 | Compte | Métier | Applications | Sociétés |
 |---|---|---|---|
-| test.dg | Direction générale | Finance, AxisPro (consultation) | Les deux |
-| test.daf | Responsable financier | Finance | Les deux |
-| test.comptable | Comptable | Finance | Les deux |
-| test.exploitation | Responsable exploitation transport | Finance (transport), Rotations | EGUITRA GROUP |
-| test.parc | Agent de parc | Rotations, Finance (transport) | EGUITRA GROUP |
-| test.chantiers | Conducteur de travaux | Finance (chantiers) | EGUITRA GROUP |
+| test.dg | Direction générale | Finance, Transport, AxisPro (consultation), Analyse, RH | Les deux |
+| test.daf | Responsable financier | Finance, Transport, Analyse | Les deux |
+| test.comptable | Comptable | Finance, Transport, Analyse | Les deux |
+| test.achats | Acheteur | Finance (achats) | Les deux |
+| test.exploitation | Responsable exploitation transport | Finance, Transport, Rotations | EGUITRA GROUP |
+| test.parc | Agent de parc | Rotations, Transport, Finance | EGUITRA GROUP |
+| test.chantiers | Conducteur de travaux | Finance (BTP) | EGUITRA GROUP |
 | test.immobilier | Gestionnaire immobilier | Finance (immobilier) | EGUITRA GROUP |
-| test.consultant | Consultant du cabinet | AxisPro | MB AxisPro Consulting |
+| test.consultant | Consultant du cabinet | AxisPro, Analyse | MB AxisPro Consulting |
+| test.associe | Associé du cabinet (second regard) | AxisPro, Analyse | MB AxisPro Consulting |
+| test.rh | Gestionnaire RH | RH | Les deux |
+| test.salarie | Salarié | RH, « Mon espace » seul | EGUITRA GROUP |
 | test.admin | Administrateur | Toutes | Les deux |
 | test.porteur | Porteur de projet (client du cabinet) | Portail | MB AxisPro Consulting |
 
@@ -73,7 +95,7 @@ Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend
 - Trésorerie : position des comptes, import d'un relevé, rapprochement.
 - Relances clients, immobilisations, dette et financement, fiscalité (TVA), balance et états
   (bilan, compte de résultat au format SYSCOHADA, exports Excel), clôtures et contrôles.
-- Changer de société (colonne de gauche) : vérifiez que les chiffres, les factures et les journaux
+- Changer de société (nom de la société, en haut à droite) : vérifiez que les chiffres, les factures et les journaux
   d'EGUITRA GROUP et de MB AxisPro Consulting restent bien séparés.
 
 ### Exploitation transport (test.exploitation) et agent de parc (test.parc)

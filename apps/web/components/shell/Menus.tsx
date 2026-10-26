@@ -85,6 +85,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "/rh/salaries": "Dossiers du personnel, contrats et rémunérations",
   "/rh/conges": "Demandes, planning et soldes de congés",
   "/rh/avances": "Avances sur salaire et prêts, retenues mensuelles",
+  "/rh/habilitations": "Échéances, matrice des conducteurs, accidents du travail",
   "/rh/paie": "Bulletins du mois, contrôles, validation, écriture",
   "/rh/simulateur": "Du salaire de base au net, ou du net au brut",
   "/rh/moi": "Vos congés, vos bulletins, votre équipe",

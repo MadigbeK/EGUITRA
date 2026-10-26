@@ -200,6 +200,15 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 26 octobre 2026, soir : audit en production (version 20261026-1845)
+
+- En production : version 20261026-1845 (code 323817d), mise en service à 18 h 46, sauvegarde de base prise juste avant (20261026T1845). Douze modules : base 19.0.1.8.0, api 19.0.1.3.0, finance 19.0.1.9.0, approval 19.0.1.3.0, transport 19.0.1.6.0, chantier 19.0.1.1.0, immobilier 19.0.1.2.0, axispro 19.0.1.5.0, analytics 19.0.1.0.0, portail 19.0.1.3.0, rh 19.0.1.1.0, chat 19.0.1.0.0 (nouveau, chat interne). Images rafraîchies (Odoo 19.0 du 17/10, PostgreSQL 16 du 21/10) : mise à jour mensuelle consignée dans logs/maj-securite/2026-10.md. Double authentification toujours suspendue (décision du gérant).
+- Vérifications : série complète de 658 tests (un seul échec, dû au test, corrigé : 9b905cc) ; répétition sur une copie de la production réussie ; recette mise à jour (douze modules, chat, web) ; contrôle de connexion de chaque compte de test, refus attendus compris (logs/controle-profils.sh sur le serveur) ; après la mise en production : adresses publiques, santé du noyau, supervision, sauvegardes, piste d'audit des paramètres système.
+- Recette : compte test.associe ajouté (second compte du cabinet). Mot de passe commun réappliqué aux 18 comptes.
+- Cahiers de test des utilisateurs : huit fichiers Word, 248 scénarios (docs/projet/tests-utilisateurs/word/, générateur build.js) ; relecture d'AxisPro et du chat en cours.
+- Décisions prises par délégation du gérant (26/10) : scellement d'un comité, passage forcé et réouverture réservés à un associé du cabinet ou à la direction (nouveau profil associé, en cours de développement, prochaine mise en production) ; chat : messages retirés gardés en base comme trace, historique visible des nouveaux membres d'un groupe, relectures automatiques hors du journal des accès.
+- Verrou libéré après la mise en production. Ordre suivant : RH (rh-hsseq, recette), puis OTHER et DESIGN (HSSEQ, recette ; production avec l'accord du gérant, avenant), puis l'évolution AxisPro (profil associé).
+
 ### 26 octobre 2026 : intégration de l'audit, interrompue par la limite d'usage
 
 - Fusionné et poussé (0922a14), pas encore en recette ni en production : corrections du noyau du transport, du départ en route (administration et exploitation) et du barème ; espace de suivi des demandes (« Mes demandes », eguitra_api 19.0.1.2.0) ; socle web (pannes, reconnexion, société par onglet, déconnexion après 1 minute d'inactivité puis 30 secondes, eguitra_api 19.0.1.3.0) ; portail des porteurs ; Transport, Rotations hors ligne et RH (eguitra_rh 19.0.1.1.0) ; Finance en deux lots (eguitra_finance 19.0.1.9.0, eguitra_approval 19.0.1.3.0, chantier, immobilier) ; clôture de l'exercice et bilan (CJ limité à l'exercice en cours) ; Analyse.

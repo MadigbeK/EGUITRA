@@ -214,7 +214,7 @@ Objectif : vérifier les communications du cabinet et l'accusé de lecture.
 
 Compte : test.porteur.
 
-Données : la communication « Appel à projets agricole (essai) » publiée par le cabinet (AXP-22), ou
+Données : la communication « Appel à projets agricole (essai) » publiée par le cabinet (AXP-26), ou
 une autre communication « À confirmer ».
 
 1. Ouvrez « Actualités ».
@@ -233,7 +233,7 @@ confirmation, elle n'est plus « À confirmer » ; le cabinet voit l'accusé.
 
 Objectif : vérifier la demande de rendez-vous sur trois créneaux et son ajout à l'agenda.
 
-Compte : test.porteur, puis test.consultant (confirmation, AXP-23).
+Compte : test.porteur, puis test.consultant (confirmation, AXP-27).
 
 Données : objet « Point sur le plan d'affaires (essai) » ; forme visioconférence ; trois créneaux la
 semaine prochaine.
@@ -260,7 +260,7 @@ Objectif : vérifier l'inscription, la liste d'attente et la désinscription.
 
 Compte : test.porteur, puis porteur.demo.
 
-Données : l'« Atelier plan d'affaires (essai) » à une place (AXP-24), ou un autre événement publié.
+Données : l'« Atelier plan d'affaires (essai) » à une place (AXP-28), ou un autre événement publié.
 
 1. test.porteur : ouvrez « Événements et formations », l'événement, laissez une question pour
    l'intervenant, puis « Confirmer mon inscription ».

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Référentiel des habilitations (spécification NIMOVA · HSSEQ de la Direction générale) et type
+    d'absence « Accident du travail ». Durées de validité proposées à la saisie ; « obligatoire pour les
+    conducteurs » alimente le verrou de départ V04 d'HSSEQ. Tout se règle dans les paramètres RH.
+-->
+<odoo noupdate="1">
+    <record id="qualification_permis" model="eguitra.rh.qualification.type">
+        <field name="code">PERMIS</field><field name="name">Permis de conduire poids lourd</field>
+        <field name="mandatory_for_drivers" eval="True"/><field name="sequence">1</field>
+    </record>
+    <record id="qualification_conduite_defensive" model="eguitra.rh.qualification.type">
+        <field name="code">CONDUITE_DEFENSIVE</field><field name="name">Conduite défensive</field>
+        <field name="validity_months">24</field><field name="mandatory_for_drivers" eval="True"/>
+        <field name="sequence">2</field>
+    </record>
+    <record id="qualification_matieres_dangereuses" model="eguitra.rh.qualification.type">
+        <field name="code">MATIERES_DANGEREUSES</field><field name="name">Transport de matières dangereuses</field>
+        <field name="validity_months">60</field><field name="mandatory_for_drivers" eval="True"/>
+        <field name="sequence">3</field>
+    </record>
+    <record id="qualification_site_minier" model="eguitra.rh.qualification.type">
+        <field name="code">ACCES_SITE_MINIER</field><field name="name">Accès au site minier</field>
+        <field name="validity_months">12</field><field name="sequence">4</field>
+    </record>
+    <record id="qualification_secourisme" model="eguitra.rh.qualification.type">
+        <field name="code">SECOURISME</field><field name="name">Secourisme</field>
+        <field name="validity_months">24</field><field name="sequence">5</field>
+    </record>
+
+    <record id="leave_work_accident" model="eguitra.rh.leave.type">
+        <field name="code">AT</field><field name="name">Accident du travail</field>
+        <field name="work_accident" eval="True"/><field name="needs_document" eval="True"/>
+        <field name="sequence">3</field>
+    </record>
+</odoo>

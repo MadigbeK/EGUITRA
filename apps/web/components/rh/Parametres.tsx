@@ -7,8 +7,9 @@ import { apiSend, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDate, fmtDec, fmtInt } from "@/lib/format";
 import type { Department, Holiday, LeaveType, Meta, Rubric, Settings, TaxBracket } from "@/lib/rh-types";
 import { ChampMontant, PastilleSociete, avecSociete, erreurNombre, messageErreur, nombre, nomCourt, useMeta } from "./commun";
+import { TypesHabilitation } from "./Securite";
 
-type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "feries" | "departements";
+type Onglet = "paie" | "alertes" | "comptes" | "rubriques" | "absences" | "habilitations" | "feries" | "departements";
 
 /**
  * Paramètres RH : paie, alertes, comptes, rubriques, absences, fériés, départements. Les règles sont
@@ -49,6 +50,7 @@ export function ParametresRh() {
           { key: "comptes", label: "Comptes" },
           { key: "rubriques", label: "Rubriques", count: meta.rubrics.length },
           { key: "absences", label: "Types d'absence", count: meta.leave_types.length },
+          { key: "habilitations", label: "Habilitations", count: meta.qualification_types.length },
           { key: "feries", label: "Jours fériés" },
           { key: "departements", label: "Départements", count: meta.departments.length },
         ]}
@@ -56,6 +58,7 @@ export function ParametresRh() {
       {(onglet === "paie" || onglet === "alertes" || onglet === "comptes") && <FormulaireParametres key={`${onglet}-${settings.company.id}`} onglet={onglet} settings={settings} ecrit={ecrit} onSaved={(s) => void mutate(s, { revalidate: false })} />}
       {onglet === "rubriques" && <Rubriques meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
       {onglet === "absences" && <TypesAbsence meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
+      {onglet === "habilitations" && <TypesHabilitation meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
       {onglet === "feries" && <Feries ecrit={ecrit} />}
       {onglet === "departements" && <Departements meta={meta} ecrit={ecrit} onChanged={() => void rafraichirMeta()} />}
     </div>
@@ -94,6 +97,8 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
     trial_alert_days: t(settings.trial_alert_days),
     contract_alert_days: t(settings.contract_alert_days),
     document_alert_days: t(settings.document_alert_days),
+    qualification_alert_days: t(settings.qualification_alert_days),
+    qualification_urgent_days: t(settings.qualification_urgent_days),
     cnss_employer_number: settings.cnss_employer_number ?? "",
   });
   const [bareme, setBareme] = useState(settings.rts_brackets.map((b) => ({ from: t(b.from), rate: t(b.rate) })));
@@ -106,7 +111,7 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
   // envoyé (un plafond CNSS illisible valait 0, soit une assiette nulle à la paie suivante).
   const requis: Array<keyof typeof f> = onglet === "paie"
     ? ["cnss_employee_rate", "cnss_employer_rate", "cnss_ceiling", "smig", "allowance_exempt_cap", "vf_rate", "training_tax_rate", "leave_days_per_month", "monthly_hours"]
-    : onglet === "alertes" ? ["trial_alert_days", "contract_alert_days", "document_alert_days"] : [];
+    : onglet === "alertes" ? ["trial_alert_days", "contract_alert_days", "document_alert_days", "qualification_alert_days", "qualification_urgent_days"] : [];
   const erreurs: Partial<Record<keyof typeof f, string>> = {};
   for (const k of requis) erreurs[k] = erreurNombre(f[k], true);
   if (onglet === "paie") erreurs.rotation_bonus = erreurNombre(f.rotation_bonus);
@@ -138,7 +143,13 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
         rts_brackets: brackets,
       };
     } else if (onglet === "alertes") {
-      body = { trial_alert_days: nombre(f.trial_alert_days), contract_alert_days: nombre(f.contract_alert_days), document_alert_days: nombre(f.document_alert_days) };
+      body = {
+        trial_alert_days: nombre(f.trial_alert_days),
+        contract_alert_days: nombre(f.contract_alert_days),
+        document_alert_days: nombre(f.document_alert_days),
+        qualification_alert_days: nombre(f.qualification_alert_days),
+        qualification_urgent_days: nombre(f.qualification_urgent_days),
+      };
     } else {
       body = { accounts: comptes };
     }
@@ -175,6 +186,12 @@ function FormulaireParametres({ onglet, settings, ecrit, onSaved }: { onglet: "p
           </Field>
           <Field label="Échéance d'un document (jours avant)" error={erreurs.document_alert_days}>
             <Input inputMode="numeric" disabled={!ecrit} value={f.document_alert_days} onChange={set("document_alert_days")} />
+          </Field>
+          <Field label="Habilitation ou aptitude à renouveler (jours avant)" hint="Alerte orange dans l'échéancier" error={erreurs.qualification_alert_days}>
+            <Input inputMode="numeric" disabled={!ecrit} value={f.qualification_alert_days} onChange={set("qualification_alert_days")} />
+          </Field>
+          <Field label="Habilitation ou aptitude, alerte urgente (jours avant)" hint="Alerte rouge, comme une échéance dépassée" error={erreurs.qualification_urgent_days}>
+            <Input inputMode="numeric" disabled={!ecrit} value={f.qualification_urgent_days} onChange={set("qualification_urgent_days")} />
           </Field>
         </div>
         {pied}
