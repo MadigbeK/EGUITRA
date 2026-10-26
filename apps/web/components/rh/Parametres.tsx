@@ -555,9 +555,13 @@ function Feries({ ecrit }: { ecrit: boolean }) {
   const [date, setDate] = useState("");
   const [nom, setNom] = useState("");
   const [erreur, setErreur] = useState<string | null>(null);
+  // Envoi en cours (ajout, ou identifiant du jour retiré) : un double clic n'ajoute pas deux fois le jour.
+  const [envoi, setEnvoi] = useState<"ajout" | number | null>(null);
   useEffect(() => setErreur(null), [annee]);
   async function ajouter() {
+    if (envoi !== null) return;
     setErreur(null);
+    setEnvoi("ajout");
     try {
       await apiSend("POST", "/rh/holidays", { date, name: nom.trim() });
       setDate("");
@@ -565,15 +569,21 @@ function Feries({ ecrit }: { ecrit: boolean }) {
       void mutate();
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setEnvoi(null);
     }
   }
   async function supprimer(h: Holiday) {
     if (!(await demanderConfirmation(`Retirer le jour férié « ${h.name} » du ${fmtDate(h.date)} ?`, { action: "Retirer", danger: true }))) return;
+    setErreur(null);
+    setEnvoi(h.id);
     try {
       await apiSend("DELETE", `/rh/holidays/${h.id}`);
       void mutate();
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setEnvoi(null);
     }
   }
   return (
@@ -613,7 +623,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
               align: "right",
               render: (h) =>
                 ecrit ? (
-                  <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void supprimer(h)}>
+                  <Button variant="ghost" size="sm" aria-label="Retirer" loading={envoi === h.id} disabled={envoi !== null} onClick={() => void supprimer(h)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 ) : null,
@@ -629,7 +639,7 @@ function Feries({ ecrit }: { ecrit: boolean }) {
           <Field label="Fête">
             <Input value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Tabaski" />
           </Field>
-          <Button variant="primary" disabled={!date || !nom.trim()} onClick={ajouter}>
+          <Button variant="primary" loading={envoi === "ajout"} disabled={!date || !nom.trim() || envoi !== null} onClick={ajouter}>
             <Plus className="h-4 w-4" /> Ajouter
           </Button>
         </div>

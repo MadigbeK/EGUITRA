@@ -18,6 +18,7 @@ export function MonEspace() {
   const { data, error, mutate } = useApi<MySpace>("/rh/me");
   const [demande, setDemande] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [annulation, setAnnulation] = useState<number | null>(null);
   if (error) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!data) return <Loading label="Chargement de votre espace…" />;
   const e = data.employee;
@@ -36,11 +37,14 @@ export function MonEspace() {
   async function annuler(l: Leave) {
     if (!(await demanderConfirmation(`Annuler votre demande (${l.type.name}, ${periode(l.date_from, l.date_to, l.half_day)}) ?`, { action: "Annuler la demande", danger: true }))) return;
     setErreur(null);
+    setAnnulation(l.id);
     try {
       await apiSend("POST", `/rh/me/leaves/${l.id}/cancel`);
       void mutate();
     } catch (err) {
       setErreur(messageErreur(err));
+    } finally {
+      setAnnulation(null);
     }
   }
 
@@ -104,7 +108,7 @@ export function MonEspace() {
                   <span className="flex items-center gap-2">
                     <EtatAbsence state={l.state} />
                     {(l.state === "submitted" || (l.state === "approved" && l.date_from > aujourdhui)) && (
-                      <Button variant="ghost" size="sm" onClick={() => void annuler(l)}>
+                      <Button variant="ghost" size="sm" loading={annulation === l.id} disabled={annulation !== null} onClick={() => void annuler(l)}>
                         Annuler
                       </Button>
                     )}
@@ -219,7 +223,7 @@ function DemandeAbsence({ types, solde, onClose, onDone }: { types: LeaveType[];
     <Modal
       open
       title="Demander une absence"
-      onClose={onClose}
+      onClose={() => !busy && onClose()}
       footer={
         <Button variant="primary" loading={busy} disabled={!typeId || !du || Boolean(erreurJours)} onClick={envoyer}>
           Envoyer la demande

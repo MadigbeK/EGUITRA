@@ -250,15 +250,20 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
   const requete = params.toString();
   const { data, error, mutate } = useApi<Leave[]>(`/rh/leaves${requete ? `?${requete}` : ""}`);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [annulation, setAnnulation] = useState<number | null>(null);
 
   async function annuler(l: Leave) {
     if (!(await demanderConfirmation(`Annuler l'absence de ${l.employee.name} (${periode(l.date_from, l.date_to, l.half_day)}) ?`, { action: "Annuler l'absence", danger: true }))) return;
+    setErreur(null);
+    setAnnulation(l.id);
     try {
       await apiSend("POST", `/rh/leaves/${l.id}/cancel`);
       void mutate();
       onChanged();
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setAnnulation(null);
     }
   }
 
@@ -302,7 +307,7 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
                   l.state === "submitted" && l.can_decide ? (
                     <DecisionAbsence compact leave={l} peutForcer={Boolean(meta?.can_write)} onDone={() => { void mutate(); onChanged(); }} />
                   ) : meta?.can_write && (l.state === "submitted" || l.state === "approved") ? (
-                    <Button variant="ghost" size="sm" onClick={() => void annuler(l)}>
+                    <Button variant="ghost" size="sm" loading={annulation === l.id} disabled={annulation !== null} onClick={() => void annuler(l)}>
                       Annuler
                     </Button>
                   ) : null,
@@ -316,8 +321,8 @@ function Absences({ meta, societe, onChanged }: { meta: Meta | undefined; societ
 }
 
 function Soldes({ societe }: { societe: number | null }) {
-  const { data, error } = useApi<BalanceRow[]>(avecSociete("/rh/leaves/balances", societe));
-  if (error) return <ErrorBox error={error} />;
+  const { data, error, mutate } = useApi<BalanceRow[]>(avecSociete("/rh/leaves/balances", societe));
+  if (error && !data) return <ErrorBox error={error} onRetry={() => mutate()} />;
   return (
     <Card padded={false}>
       {!data ? (

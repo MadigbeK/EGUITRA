@@ -425,17 +425,21 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
     }
   }
 
+  const [retrait, setRetrait] = useState<number | null>(null);
   async function retirer(inputId: number) {
     setErreur(null);
+    setRetrait(inputId);
     try {
       await mutate(await apiSend<Payslip>("DELETE", `/rh/payslips/${payslipId}/inputs/${inputId}`), { revalidate: false });
     } catch (e) {
       setErreur(messageErreur(e));
+    } finally {
+      setRetrait(null);
     }
   }
 
   return (
-    <Modal open wide title={b ? `Éléments du mois, ${b.employee.name}` : "Éléments du mois"} onClose={onClose} footer={<Button onClick={onClose}>Fermer</Button>}>
+    <Modal open wide title={b ? `Éléments du mois, ${b.employee.name}` : "Éléments du mois"} onClose={() => !busy && retrait === null && onClose()} footer={<Button disabled={busy || retrait !== null} onClick={onClose}>Fermer</Button>}>
       {!b ? (
         <Etat error={error} onRetry={() => mutate()} />
       ) : (
@@ -468,7 +472,7 @@ function ElementsVariables({ payslipId, meta, onClose }: { payslipId: number; me
                 align: "right",
                 render: (i) =>
                   i.source === "manual" ? (
-                    <Button variant="ghost" size="sm" aria-label="Retirer" onClick={() => void retirer(i.id)}>
+                    <Button variant="ghost" size="sm" aria-label="Retirer" loading={retrait === i.id} disabled={retrait !== null || busy} onClick={() => void retirer(i.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   ) : null,

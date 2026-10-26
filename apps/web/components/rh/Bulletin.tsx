@@ -17,8 +17,8 @@ const MODE: Record<string, string> = { virement: "Virement", especes: "Espèces"
  * source : /rh/payslips/<id> (gestion) ou /rh/me/payslips/<id> (le salarié lui-même).
  */
 export function BulletinPaie({ source, retour }: { source: string; retour: { href: string; label: string } }) {
-  const { data: b, error } = useApi<Payslip>(source);
-  if (error) return <ErrorBox error={error} />;
+  const { data: b, error, mutate } = useApi<Payslip>(source);
+  if (error && !b) return <ErrorBox error={error} onRetry={() => mutate()} />;
   if (!b) return <Loading label="Chargement du bulletin…" />;
 
   const gains = b.lines.filter((l) => l.kind === "gain");
