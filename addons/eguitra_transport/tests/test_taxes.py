@@ -123,7 +123,9 @@ class TestTaxes(TransportCase):
                                     token=finance)
         self.assertEqual(status, 422, "Un compte de produit n'est pas un compte de charge")
 
-        agent = self.open_session("ibrahima", app="mobile")["access_token"]
+        # Profil exploitation au bureau (application Transport) : une session de Rotations n'ouvre que la
+        # saisie des rotations (eguitra_api, organisation.SESSION_ROUTES).
+        agent = self.open_session("ibrahima", app="transport")["access_token"]
         status, _b = self.call("PATCH", f"/transport/taxes/{body['id']}", {"rate": 1}, token=agent)
         self.assertEqual(status, 403, "Le barème relève de la finance")
         # Saisie gardée sur un téléphone d'avant la mise à jour : l'ancien total des taxes, sans barème.

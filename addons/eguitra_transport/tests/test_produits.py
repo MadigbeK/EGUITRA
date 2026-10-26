@@ -46,7 +46,9 @@ class TestProduits(TransportCase):
         status, _b = self.call("PATCH", f"/transport/products/{body['id']}", {"name": "Bitume routier"}, token=token)
         self.assertEqual(status, 200)
 
-        agent = self.open_session("ibrahima", app="mobile")["access_token"]
+        # Profil exploitation au bureau (application Transport) : une session de Rotations n'ouvre que la
+        # saisie des rotations (eguitra_api, organisation.SESSION_ROUTES).
+        agent = self.open_session("ibrahima", app="transport")["access_token"]
         status, _b = self.call("POST", "/transport/products", {"name": "Autre", "code": "x"}, token=agent)
         self.assertEqual(status, 403, "Le parc ne crée pas de produit")
         status, refs = self.call("GET", "/transport/referentials", token=agent)

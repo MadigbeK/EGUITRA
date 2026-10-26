@@ -9,15 +9,17 @@ import { APPS, appFromPath } from "@/lib/config";
 
 /**
  * Page d'incident (adresse inconnue, erreur d'un écran, accès refusé) : la route qui s'interrompt,
- * un titre clair, ce que l'on peut faire. Le lien ramène à l'accueil de l'application ouverte, ou à
- * `retour` quand cette application n'est justement pas ouverte au compte.
+ * un titre clair, ce que l'on peut faire. Le lien ramène à l'accueil de l'application de l'adresse, à
+ * `retour` quand cette application n'est justement pas ouverte au compte, et sinon à la racine du
+ * site, qui mène chacun à son accueil (portail, accueil NIMOVA et ses seuls modules) : un compte sans
+ * Finance n'est plus renvoyé à « l'accueil de Finance ».
  */
 export function PageErreur({ code, titre, texte, actions, retour }: { code: string; titre: string; texte: string; actions?: ReactNode; retour?: { href: string; label: string } }) {
   const pathname = usePathname() ?? "/";
-  const app = appFromPath(pathname) ?? "finance";
-  const lien = retour ?? { href: APPS[app].home, label: `Revenir à l'accueil de ${APPS[app].name.replace("NIMOVA · ", "")}` };
+  const app = appFromPath(pathname);
+  const lien = retour ?? (app ? { href: APPS[app].home, label: `Revenir à l'accueil de ${APPS[app].name.replace("NIMOVA · ", "")}` } : { href: "/", label: "Revenir à l'accueil" });
   return (
-    <div data-app={app} className="flex min-h-[70vh] items-center justify-center px-5 py-16">
+    <div data-app={app ?? "finance"} className="flex min-h-[70vh] items-center justify-center px-5 py-16">
       <div className="w-full max-w-[520px] text-center">
         <Monogramme tuile={false} className="n-entree mx-auto h-14 w-14" />
         <svg viewBox="0 0 320 70" className="mx-auto mt-8 w-full max-w-[320px]" aria-hidden focusable="false">
