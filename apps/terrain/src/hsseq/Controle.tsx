@@ -15,6 +15,7 @@ import { supprimerPhoto } from "./appareil";
 import { ficheControle, manques, pointsDuControle, resultat, type Reponse } from "./reglesControle";
 import { positionDeLaFiche, usePosition } from "./position";
 import { PrisePhoto } from "./PrisePhoto";
+import { Signature } from "./Signature";
 import type { Answer, TemplateItem } from "./types";
 import { grilleDe, NATURE_VEHICULE, useHsseq } from "./useHsseq";
 
@@ -48,6 +49,8 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
   const [ecoule, setEcoule] = useState(0);
   const [enregistrement, setEnregistrement] = useState(false);
   const [fait, setFait] = useState<string | null>(null);
+  const [signature, setSignature] = useState<{ image: string; at: string } | null>(null);
+  const [signer, setSigner] = useState(false);
 
   // Véhicule pré-rempli : celui du conducteur, s'il en a un.
   useEffect(() => {
@@ -130,7 +133,7 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
     });
     try {
       await envoi.enregistrer(
-        { client_uuid: uuid.current, kind: "check", user_id: user.id, created_at: new Date().toISOString(), status: "pending", payload: { ...fiche, offline: !envoi.online } },
+        { client_uuid: uuid.current, kind: "check", user_id: user.id, created_at: new Date().toISOString(), status: "pending", payload: { ...fiche, ...(signature ? { signature: signature.image } : {}), offline: !envoi.online } },
         Object.values(photos),
       );
     } catch {
@@ -336,7 +339,19 @@ function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial
           </View>
           <Bouton titre="Revoir les points" variante="discret" onPress={() => { setIndex(0); setEtape(points.critiques.length ? "critiques" : "autres"); }} />
         </Feuille>
+        <Feuille>
+          <Texte variante="libelle">Signature</Texte>
+          {signature ? (
+            <View style={styles.mention}>
+              <Texte style={{ flex: 1 }}>Signé à {heure(signature.at)}.</Texte>
+              <Bouton titre="Effacer" variante="secondaire" onPress={() => setSignature(null)} />
+            </View>
+          ) : (
+            <Bouton titre="Signer le contrôle" variante="secondaire" onPress={() => setSigner(true)} />
+          )}
+        </Feuille>
       </ScrollView>
+      <Signature visible={signer} onFermer={() => setSigner(false)} onSignee={(image) => setSignature({ image, at: new Date().toISOString() })} />
       <BarreAction
         etat={fait ?? (manque.sansReponse.length || manque.sansPhoto.length ? "Des points restent à compléter." : !envoi.online ? "Hors réseau : le contrôle partira seul dès que le réseau passe. Rien à refaire." : `Durée : ${duree(ecoule)}.`)}
         tonEtat={fait ? "ok" : "second"}

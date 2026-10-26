@@ -55,6 +55,8 @@ export interface NewCheck extends Partial<Position> {
   driver_id: number | null;
   duration_s: number;
   answers: Array<{ item_id: number; answer: Answer; comment?: string }>;
+  /** Signature tracée : image PNG en « data:image/png;base64,… », 512 Ko au plus. */
+  signature?: string;
 }
 
 /** Réponse de POST /hsseq/checks : les non-conformités ouvertes, auxquelles se rattachent les photos. */

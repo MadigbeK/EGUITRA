@@ -24,6 +24,19 @@ noyau de la session OTHER (branche `hsseq`) :
 - Déclaration en un geste : trois tuiles, photo conseillée, une phrase, position relevée sans geste.
 - Fiches envoyées une à une par leur route, idempotentes par `client_uuid`, puis leurs photos
   (compressées à 1 280 px, rattachées à l'événement ou à la non-conformité du point).
+- Départ : rotations du jour avec leur verrou (`GET /hsseq/me/rotations`, `POST /hsseq/lock/evaluate`),
+  motifs V01 à V05 en mots simples, contrôle ou alcootest lancés depuis le motif ; hors réseau ou
+  réponse de plus de 10 minutes, « Départ non vérifié », jamais « autorisé ». Passage en route par
+  le chef de parc seul (`POST /transport/rotations/{id}/depart`).
+- Dérogation (chef de parc) : un seul motif dérogeable, jamais V01 ni V03, justification de
+  30 caractères au moins ; la demande vaut première validation.
+- Non-conformités (chef de parc, Responsable HSSEQ) : levée en ligne, photo de la correction
+  déposée d'abord (`role: "lift"`), puis citée par la levée.
+- Envoi en arrière-plan (`expo-background-task`, toutes les 15 minutes au plus) sous la session
+  gardée, un seul envoi à la fois avec le premier plan.
+- Code personnel : choisi après la connexion (4 à 6 chiffres, ni répétés ni suivis), empreinte salée
+  au coffre ; redemandé après 5 minutes hors de l'application au téléphone, après 2 minutes sans
+  geste à la tablette (préavis de 20 s) ; cinq erreurs ferment la session sur l'appareil.
 
 Socle :
 
@@ -66,14 +79,14 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
 |---|---|
 | `src/app/` | Écrans routés (Expo Router) : `_layout.tsx` (polices, session, connexion, file d'envoi), `index.tsx` (Ma journée), un écran par module |
 | `src/accueil/` | « Ma journée », modules ouverts par profil, garde des écrans |
-| `src/hsseq/` | Fiches HSSEQ : contrôle avant départ, alcootest, déclaration, appareil photo, position, envoi |
+| `src/hsseq/` | Fiches HSSEQ : contrôle avant départ, alcootest, déclaration, départ et verrou, dérogation, non-conformités, appareil photo, position, envoi |
 | `src/api/` | Client de l'API (jetons, renouvellement unique, délais, erreurs), types, bureau simulé |
-| `src/auth/` | Coffre sécurisé, session et étapes de connexion |
+| `src/auth/` | Coffre sécurisé, session et étapes de connexion, code personnel et verrouillage |
 | `src/store/` | Base SQLite (file d'envoi, listes gardées), règles de l'appareil partagé |
-| `src/sync/` | File d'envoi commune (`Envoi.tsx`) et envoi groupé des rotations |
+| `src/sync/` | File d'envoi commune (`Envoi.tsx`), envoi groupé des rotations, envoi en arrière-plan |
 | `src/rotations/` | Saisie et listes des rotations |
 | `src/ui/` | Jetons visuels et éléments communs |
-| `__tests__/` | Tests (Jest) : client de l'API, file d'envoi, saisie, écriture française |
+| `__tests__/` | Tests (Jest) : client de l'API, files d'envoi, saisie, fiches HSSEQ, verrou, code personnel, modules par profil |
 
 ## Sécurité et rôles
 
@@ -82,8 +95,10 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
   noyau sans module HSSEQ, `EXPO_PUBLIC_APP_CODE=mobile` ouvre l'application sous le code de
   Rotations web (admin et exploitation, Rotations seules).
 - Modules par profil (`src/accueil/modules.ts`, matrice du contrat HSSEQ) : Rotations pour admin et
-  exploitation ; contrôle avant départ et alcootest pour hsseq, exploitation et conducteur ;
-  déclaration pour admin, direction, hsseq, exploitation et conducteur. Un module hors profil ne
+  exploitation ; départ pour admin, hsseq, exploitation et conducteur ; contrôle avant départ et
+  alcootest pour hsseq, exploitation et conducteur ; déclaration pour admin, direction, hsseq,
+  exploitation et conducteur ; non-conformités pour hsseq et exploitation. Passage en route et
+  demande de dérogation : chef de parc (exploitation) seul. Un module hors profil ne
   s'ouvre pas, même par une adresse directe ; le noyau refuse de toute façon le reste.
   Comptes de recette : `test.parc` (agent de parc) et `test.exploitation` ; un compte conducteur
   sera à créer avec le module HSSEQ.
@@ -91,7 +106,8 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
   en attente restent à leur auteur et ne partent que sous sa session.
 - Aucun tarif, coût ni marge gardé sur l'appareil ; pas de sauvegarde Android de l'application
   (`allowBackup: false`).
-- Déconnexion confirmée ; impossible sans réseau (la session doit être fermée au bureau).
+- Déconnexion confirmée. Sans réseau (changement d'équipe), la session est oubliée sur l'appareil
+  tout de suite et révoquée au bureau au premier échange réussi.
 
 ## Prérequis côté serveur
 
@@ -110,7 +126,8 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
   à distance avec `expo-updates`) : décision et compte du gérant.
 - Icônes et système de conception « terrain » : session DESIGN (`docs/design/mobile/`). Les icônes
   actuelles sont celles du modèle Expo.
-- Écran du départ : verrou de la rotation du jour (`GET /hsseq/me/rotations`), « Départ non
-  vérifié » hors réseau, jamais « autorisé » ; le passage en route reste au chef de parc au lot 1.
-- Envoi en arrière-plan (`expo-background-task`), signature, mode dépôt de la tablette partagée,
-  levée des non-conformités et dérogations à la tablette.
+- Signature des contrôles (tracé ou code personnel) : en attente de la Direction générale (valeur
+  de la signature par code).
+- Tablette en mode kiosque (gestion de flotte Android) avec les tuiles des habitués et le badge QR :
+  demande une décision sur les badges et un registre côté serveur.
+- Seconde validation des dérogations par le Responsable HSSEQ : écran web (session DESIGN).
