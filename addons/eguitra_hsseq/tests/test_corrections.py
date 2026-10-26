@@ -376,3 +376,24 @@ class TestCorrections(HsseqCase):
         self.assertEqual([f["audit"]["id"] for f in findings["items"]], [dock.id])
         status, findings = self.api("kadi.hsseq", "GET", "/hsseq/findings?q=bureaux")
         self.assertEqual(findings["items"], [], "Recherche aussi sur l'audit du constat")
+
+    def test_numero_d_indicateur_en_double(self):
+        """Numéro d'indicateur en double dans un modèle de rapport : 409 conflict ; un échange de numéros
+        entre deux indicateurs reste possible."""
+        row = {"nature": "proactive", "mode": "manual", "unit": "nbre", "direction": "up", "aggregation": "sum"}
+        status, body = self.api("kadi.hsseq", "POST", "/hsseq/reports/templates", {
+            "name": "Modèle en double (fictif)", "indicators": [dict(row, code="A-1", label="Un"),
+                                                                  dict(row, code="A-1", label="Deux")]})
+        self.assertEqual((status, body["error"], body["fields"]), (409, "conflict", ["indicators"]), body)
+        status, template = self.api("kadi.hsseq", "POST", "/hsseq/reports/templates", {
+            "name": "Modèle fictif", "indicators": [dict(row, code="A-1", label="Un"), dict(row, code="A-2", label="Deux")]})
+        self.assertEqual(status, 200, template)
+        first, second = template["indicators"]
+        path = f"/hsseq/reports/templates/{template['id']}"
+        status, body = self.api("kadi.hsseq", "PATCH", path, {"indicators": [
+            dict(first, code="A-2"), dict(second), dict(row, code="A-2", label="Trois")]})
+        self.assertEqual((status, body["error"]), (409, "conflict"))
+        status, swapped = self.api("kadi.hsseq", "PATCH", path, {"indicators": [dict(first, code="A-2"),
+                                                                                dict(second, code="A-1")]})
+        self.assertEqual((status, {i["id"]: i["code"] for i in swapped["indicators"]}),
+                         (200, {first["id"]: "A-2", second["id"]: "A-1"}), swapped)

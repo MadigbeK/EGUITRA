@@ -173,22 +173,26 @@ def entry_text(known, value, comment, unit):
 
 def save_indicators(template, rows):
     """Indicateurs du modèle : cités par id mis à jour, nouveaux créés, absents retirés (archivés s'ils ont
-    déjà des valeurs saisies ou figées)."""
+    déjà des valeurs saisies ou figées). Un numéro en double, dans la liste ou déjà pris par un indicateur
+    retiré qui garde ses valeurs : 409 conflict, rien n'est enregistré."""
     Indicator = request.env["eguitra.hsseq.report.indicator"].sudo().with_context(active_test=False)
     existing = {i.id: i for i in template.with_context(active_test=False).indicator_ids}
-    kept = set()
+    parsed = []
     for row in rows or []:
         if not isinstance(row, dict):
             raise ApiError(400, "invalid_parameter", "Indicateur invalide.", fields=["indicators"])
         values = indicator_values(row)
         indicator_id = int_or_none(row, "id")
-        if indicator_id:
-            if indicator_id not in existing:
-                raise ApiError(422, "business_rule", "Indicateur d'un autre modèle.", fields=["indicators"])
-            existing[indicator_id].write(values)
-            kept.add(indicator_id)
-        else:
-            kept.add(Indicator.create(dict(values, template_id=template.id)).id)
+        if indicator_id and indicator_id not in existing:
+            raise ApiError(422, "business_rule", "Indicateur d'un autre modèle.", fields=["indicators"])
+        parsed.append((indicator_id, values))
+    codes = [values["code"] for _id, values in parsed]
+    duplicates = sorted({code for code in codes if codes.count(code) > 1})
+    if duplicates:
+        raise ApiError(409, "conflict", f"Numéro d'indicateur en double : {', '.join(duplicates)}.",
+                       fields=["indicators"])
+    kept = {indicator_id for indicator_id, _values in parsed if indicator_id}
+    # Retirés d'abord, pour libérer leur numéro ; ceux qui gardent des valeurs restent archivés.
     Value = request.env["eguitra.hsseq.report.value"].sudo()
     for indicator_id in set(existing) - kept:
         indicator = existing[indicator_id]
@@ -196,6 +200,20 @@ def save_indicators(template, rows):
             indicator.write({"active": False})
         else:
             indicator.unlink()
+    retired = {i.code for i in template.with_context(active_test=False).indicator_ids if i.id not in kept}
+    clash = sorted(code for code in codes if code in retired)
+    if clash:
+        raise ApiError(409, "conflict", f"Numéro déjà pris par un indicateur retiré qui garde ses valeurs : "
+                                        f"{', '.join(clash)}.", fields=["indicators"])
+    # Numéros échangés entre indicateurs : un numéro provisoire évite le doublon en cours d'écriture.
+    for indicator_id, values in parsed:
+        if indicator_id and existing[indicator_id].code != values["code"]:
+            existing[indicator_id].write({"code": f"~{indicator_id}"})
+    for indicator_id, values in parsed:
+        if indicator_id:
+            existing[indicator_id].write(values)
+        else:
+            Indicator.create(dict(values, template_id=template.id))
 
 
 # ─── Mois du rapport ──────────────────────────────────────────────────────
