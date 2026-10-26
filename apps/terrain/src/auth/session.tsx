@@ -3,7 +3,8 @@ import { ApiClient } from "../api/client";
 import { ApiError, SESSION_EXPIREE } from "../api/errors";
 import { simulationFetch } from "../api/simulation";
 import type { LoginResponse, PublicUser } from "../api/types";
-import { API_URL, APP_CODE, SIMULATION } from "../config";
+import { APP_CODE } from "../config";
+import { baseApi, enSimulation } from "../serveur";
 import { claimCache, forgetDevice } from "../store/device";
 import { openStore } from "../store";
 import type { Store } from "../store/types";
@@ -91,10 +92,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const api = useMemo(
     () =>
       new ApiClient({
-        base: SIMULATION ? "" : API_URL,
+        base: baseApi(),
         coffre: coffreJeton,
         surSessionPerdue: () => perdue.current(),
-        ...(SIMULATION ? { fetchFn: simulationFetch } : {}),
+        ...(enSimulation() ? { fetchFn: simulationFetch } : {}),
       }),
     [],
   );

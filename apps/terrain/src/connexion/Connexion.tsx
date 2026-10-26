@@ -4,8 +4,10 @@ import { AppState, KeyboardAvoidingView, ScrollView, StyleSheet, View, type Text
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, DelaiDepasse } from "../api/errors";
 import { useSession } from "../auth/session";
-import { ENVIRONNEMENT, SIMULATION } from "../config";
+import { ENVIRONNEMENT } from "../config";
+import { enSimulation } from "../serveur";
 import { Bandeau, Bouton, Champ, Feuille, Texte } from "../ui/elements";
+import { ChoixDuServeur } from "./choixServeur";
 import { espaces, marque } from "../ui/terrain";
 
 /** Message d'un échec de connexion : celui du bureau, ou ce que dit le réseau. */
@@ -68,10 +70,16 @@ export function Connexion() {
           <Texte variante="libelle" style={{ color: marque.menthe }}>Terrain{ENVIRONNEMENT ? `, ${ENVIRONNEMENT}` : ""}</Texte>
         </View>
         <Feuille style={styles.carte}>
-          {SIMULATION ? <Bandeau ton="attention" texte="Simulation : bureau fictif. Tout identifiant ouvre la session, mot de passe « faux » refusé." /> : null}
+          {enSimulation() ? (
+            <Bandeau
+              ton="attention"
+              texte="Démonstration : bureau simulé, données inventées. Tout identifiant ouvre la session (« conducteur… » pour un conducteur), avec n'importe quel mot de passe sauf « faux »."
+            />
+          ) : null}
           {message ? <Bandeau ton="attention" texte={message} /> : null}
           {erreur ? <Bandeau ton="danger" texte={erreur} /> : null}
           {etape.nom === "connexion" ? <Identifiants envoi={envoi} onValider={(l, p) => void agir(() => session.seConnecter(l, p))} /> : null}
+          {etape.nom === "connexion" ? <ChoixDuServeur /> : null}
           {etape.nom === "code" ? (
             <CodeSaisi
               titre="Code de vérification"

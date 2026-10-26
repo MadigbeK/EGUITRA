@@ -3,7 +3,8 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { ApiError } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
-import { ENVIRONNEMENT, SIMULATION } from "../config";
+import { ENVIRONNEMENT } from "../config";
+import { enSimulation } from "../serveur";
 import { pluriel } from "../format";
 import { Bandeau, EnTete, Ecran, PastilleReseau, Segment, Texte, demanderConfirmation, type EtatReseau } from "../ui/elements";
 import { espaces, LARGEUR_TABLETTE, marque, mesures, traits } from "../ui/terrain";
@@ -102,9 +103,9 @@ function Contenu({ user, onRetour }: { user: Utilisateur; onRetour?: () => void 
           </>
         )}
       />
-      {SIMULATION ? (
+      {enSimulation() ? (
         <View style={styles.simulation}>
-          <Texte variante="service" style={{ color: "#0b1a16" }}>Simulation : bureau fictif, aucune donnée réelle.</Texte>
+          <Texte variante="service" style={{ color: "#0b1a16" }}>Démonstration : bureau simulé, aucune donnée réelle.</Texte>
         </View>
       ) : null}
 

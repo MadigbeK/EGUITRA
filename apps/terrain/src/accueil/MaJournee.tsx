@@ -4,12 +4,13 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { ApiError } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
-import { ENVIRONNEMENT, SIMULATION } from "../config";
+import { ENVIRONNEMENT } from "../config";
 import { heure, pluriel, quand } from "../format";
 import { PHOTO_REFUSEE } from "../hsseq/envoi";
 import { useContactsCrise, useMesDocuments } from "../hsseq/useHsseq";
 import type { QueuedItem } from "../store/types";
 import { useEnvoi } from "../sync/Envoi";
+import { enSimulation } from "../serveur";
 import { RECUE_AVANT_CORRECTION } from "../sync/outbox";
 import { Bandeau, Bouton, EnTete, Ecran, Feuille, PastilleReseau, Tampon, Texte, demanderConfirmation, type EtatReseau } from "../ui/elements";
 import { espaces, marque, mesures, modules, rayons, traits } from "../ui/terrain";
@@ -113,9 +114,9 @@ export function MaJournee({ user }: { user: Utilisateur }) {
           </>
         )}
       />
-      {SIMULATION ? (
+      {enSimulation() ? (
         <View style={styles.simulation}>
-          <Texte variante="service" style={{ color: "#0b1a16" }}>Simulation : bureau fictif, aucune donnée réelle.</Texte>
+          <Texte variante="service" style={{ color: "#0b1a16" }}>Démonstration : bureau simulé, aucune donnée réelle.</Texte>
         </View>
       ) : null}
       {peutOuvrir(user.profiles, "declaration") ? <AnnuaireGarde /> : null}

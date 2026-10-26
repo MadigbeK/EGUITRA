@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import type { Coffre } from "../api/client";
+import { cleDeLEspace } from "../serveur";
 
 /**
  * Coffre sécurisé de l'appareil (Keystore Android, trousseau iOS) : jeton de renouvellement et
@@ -16,18 +17,19 @@ const OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStor
 const memoire = new Map<string, string>();
 const web = Platform.OS === "web";
 
+// Chaque serveur a son espace au coffre (src/serveur.ts) : la démonstration ne touche pas au vrai bureau.
 async function lire(cle: string): Promise<string | null> {
-  return web ? (memoire.get(cle) ?? null) : SecureStore.getItemAsync(cle, OPTIONS);
+  return web ? (memoire.get(cleDeLEspace(cle)) ?? null) : SecureStore.getItemAsync(cleDeLEspace(cle), OPTIONS);
 }
 
 async function ecrire(cle: string, valeur: string): Promise<void> {
-  if (web) memoire.set(cle, valeur);
-  else await SecureStore.setItemAsync(cle, valeur, OPTIONS);
+  if (web) memoire.set(cleDeLEspace(cle), valeur);
+  else await SecureStore.setItemAsync(cleDeLEspace(cle), valeur, OPTIONS);
 }
 
 async function effacer(cle: string): Promise<void> {
-  if (web) memoire.delete(cle);
-  else await SecureStore.deleteItemAsync(cle, OPTIONS);
+  if (web) memoire.delete(cleDeLEspace(cle));
+  else await SecureStore.deleteItemAsync(cleDeLEspace(cle), OPTIONS);
 }
 
 /** Jeton de renouvellement. L'effacer efface aussi le profil : plus personne n'ouvre la session. */

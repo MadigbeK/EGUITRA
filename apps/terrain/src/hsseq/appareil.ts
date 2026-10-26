@@ -3,6 +3,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { cleDeLEspace } from "../serveur";
 import type { Piece } from "../store/types";
 import type { Appareil } from "./envoi";
 import type { ResultatAlcootest } from "./types";
@@ -16,7 +17,7 @@ import type { ResultatAlcootest } from "./types";
 const web = Platform.OS === "web";
 const memoire = new Map<string, string>();
 const OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
-const cle = (uuid: string) => `nimova.terrain.alcootest.${uuid}`;
+const cle = (uuid: string) => cleDeLEspace(`nimova.terrain.alcootest.${uuid}`);
 
 export async function garderResultat(uuid: string, resultat: ResultatAlcootest): Promise<void> {
   const valeur = JSON.stringify(resultat);

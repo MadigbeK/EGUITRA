@@ -11,7 +11,7 @@ import { BarreAction, Bandeau, Bouton, EnTete, Ecran, Feuille, Tampon, Texte, vi
 import { espaces, mesures, textes } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
 import type { Lecture } from "./envoi";
-import { ouvrirDocument } from "./ouvrirDocument";
+import { documentSansFichier, ouvrirDocument } from "./ouvrirDocument";
 import type { MyBulletin, MyDocuments, MyProcedure } from "./types";
 import { useMesDocuments } from "./useHsseq";
 
@@ -104,9 +104,10 @@ function Contenu({ user }: { user: Utilisateur }) {
       setOuverts((o) => new Set(o).add(p.id));
     } catch (e) {
       vibrer.erreur();
-      setRetour({ ton: "attention", texte: e instanceof Error && e.message.startsWith("Aperçu web") ? e.message : "Document pas encore sur l'appareil : il s'ouvre une première fois avec du réseau." });
-      // Aperçu web : la lecture reste possible pour essayer le parcours.
-      if (e instanceof Error && e.message.startsWith("Aperçu web")) setOuverts((o) => new Set(o).add(p.id));
+      const sansFichier = documentSansFichier(e);
+      setRetour({ ton: "attention", texte: sansFichier && e instanceof Error ? e.message : "Document pas encore sur l'appareil : il s'ouvre une première fois avec du réseau." });
+      // Aperçu web, démonstration : la lecture reste possible pour essayer le parcours.
+      if (sansFichier) setOuverts((o) => new Set(o).add(p.id));
     } finally {
       setOuverture(null);
     }

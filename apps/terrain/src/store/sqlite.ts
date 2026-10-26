@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { baseLocale } from "../serveur";
 import type { Piece, QueuedItem, Store } from "./types";
 
 /**
@@ -55,11 +56,15 @@ function versSaisie(r: Ligne): QueuedItem {
   };
 }
 
-let ouverture: Promise<SQLite.SQLiteDatabase> | null = null;
+/** Une base par serveur (src/serveur.ts, baseLocale) : la démonstration n'écrit pas dans celle du bureau. */
+const ouvertures = new Map<string, Promise<SQLite.SQLiteDatabase>>();
 
 function base(): Promise<SQLite.SQLiteDatabase> {
-  ouverture ??= (async () => {
-    const db = await SQLite.openDatabaseAsync("terrain.db");
+  const nom = baseLocale();
+  const deja = ouvertures.get(nom);
+  if (deja) return deja;
+  const ouverture = (async () => {
+    const db = await SQLite.openDatabaseAsync(nom);
     await db.execAsync("PRAGMA journal_mode = WAL;");
     const version = (await db.getFirstAsync<{ user_version: number }>("PRAGMA user_version"))?.user_version ?? 0;
     for (let v = version; v < MIGRATIONS.length; v += 1) {
@@ -70,9 +75,10 @@ function base(): Promise<SQLite.SQLiteDatabase> {
     }
     return db;
   })().catch((e: unknown) => {
-    ouverture = null; // nouvel essai au prochain appel
+    ouvertures.delete(nom); // nouvel essai au prochain appel
     throw e;
   });
+  ouvertures.set(nom, ouverture);
   return ouverture;
 }
 

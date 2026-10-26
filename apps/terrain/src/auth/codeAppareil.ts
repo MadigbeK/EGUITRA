@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
+import { cleDeLEspace } from "../serveur";
 import { codePersonnel } from "./codePersonnel";
 
 /** Code personnel au coffre de l'appareil ; dans un navigateur (aperçu), en mémoire seulement. */
@@ -10,14 +11,15 @@ const OPTIONS: SecureStore.SecureStoreOptions = { keychainAccessible: SecureStor
 
 export const codeAppareil = codePersonnel(
   {
-    lire: async (cle) => (web ? (memoire.get(cle) ?? null) : SecureStore.getItemAsync(cle, OPTIONS)),
+    // Un code par serveur : celui de la démonstration n'ouvre pas une session de la recette.
+    lire: async (cle) => (web ? (memoire.get(cleDeLEspace(cle)) ?? null) : SecureStore.getItemAsync(cleDeLEspace(cle), OPTIONS)),
     ecrire: async (cle, valeur) => {
-      if (web) memoire.set(cle, valeur);
-      else await SecureStore.setItemAsync(cle, valeur, OPTIONS);
+      if (web) memoire.set(cleDeLEspace(cle), valeur);
+      else await SecureStore.setItemAsync(cleDeLEspace(cle), valeur, OPTIONS);
     },
     effacer: async (cle) => {
-      if (web) memoire.delete(cle);
-      else await SecureStore.deleteItemAsync(cle, OPTIONS);
+      if (web) memoire.delete(cleDeLEspace(cle));
+      else await SecureStore.deleteItemAsync(cleDeLEspace(cle), OPTIONS);
     },
   },
   (texte) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, texte),

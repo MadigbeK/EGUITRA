@@ -3,16 +3,20 @@
  *
  * API_URL : entrée de l'API réservée aux applications natives, sans barre finale. Les chemins de
  * l'API (« /auth/login », « /transport/sync ») s'y ajoutent tels quels. Sans adresse, une version de
- * développement travaille sur un serveur simulé (src/api/simulation.ts) ; une version publiée refuse
- * de démarrer : elle ne doit jamais montrer de données inventées.
+ * développement ou de démonstration travaille sur un serveur simulé (src/api/simulation.ts) ; une
+ * version publiée refuse de démarrer : elle ne doit jamais montrer de données inventées. Serveur
+ * de travail effectif : src/serveur.ts.
  */
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 
+/**
+ * Version de démonstration (profil de construction « preview ») : bureau simulé embarqué, et choix
+ * du serveur à l'écran de connexion pour passer sur la recette. Jamais dans une version publiée.
+ */
+export const DEMONSTRATION = process.env.EXPO_PUBLIC_DEMONSTRATION === "1";
+
 /** Nom de l'environnement affiché sous le titre hors production (« Recette »), vide en production. */
 export const ENVIRONNEMENT = process.env.EXPO_PUBLIC_ENVIRONMENT ?? "";
-
-/** Serveur simulé : version de développement sans adresse d'API, pour travailler les écrans. */
-export const SIMULATION = !API_URL && __DEV__;
 
 /**
  * Code d'application transmis au noyau (addons/eguitra_api/organisation.py, APPS) : « terrain »,

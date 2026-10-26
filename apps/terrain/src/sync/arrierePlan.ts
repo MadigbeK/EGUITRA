@@ -3,7 +3,7 @@ import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 import { ApiClient } from "../api/client";
 import { coffreJeton, profilGarde } from "../auth/coffre";
-import { API_URL } from "../config";
+import { baseApi, chargerServeur, enSimulation } from "../serveur";
 import { appareil } from "../hsseq/appareil";
 import { envoyerFiches } from "../hsseq/envoi";
 import { sqliteStore } from "../store/sqlite";
@@ -20,17 +20,20 @@ const TACHE = "nimova-terrain-envoi";
 export const verrouEnvoi = { pris: false };
 
 export async function envoyerEnArrierePlan(): Promise<void> {
-  if (verrouEnvoi.pris || !API_URL) return;
+  if (verrouEnvoi.pris) return;
   // Verrou posé avant toute attente : l'application rouverte pendant ce temps n'envoie pas en double.
   verrouEnvoi.pris = true;
   try {
+    // Réveil sans interface : le serveur choisi est relu ; rien ne part du bureau simulé.
+    await chargerServeur();
+    if (enSimulation() || !baseApi()) return;
     const user = (await coffreJeton.lire()) ? await profilGarde.lire() : null;
     if (!user) return;
     const store = sqliteStore();
     // Le client de fond ne voit pas les connexions du premier plan : avant d'écrire un jeton renouvelé,
     // il vérifie que le coffre garde toujours la session de cet utilisateur.
     const api = new ApiClient({
-      base: API_URL,
+      base: baseApi(),
       coffre: coffreJeton,
       surSessionPerdue: () => undefined,
       verifierSession: async () => (await profilGarde.lire())?.id === user.id,
@@ -55,7 +58,7 @@ if (Platform.OS !== "web") {
 
 /** Inscription de la tâche, une fois la session ouverte ; sans effet dans un navigateur. */
 export async function inscrireEnvoiArrierePlan(): Promise<void> {
-  if (Platform.OS === "web" || !API_URL) return;
+  if (Platform.OS === "web" || enSimulation()) return;
   try {
     if (await TaskManager.isTaskRegisteredAsync(TACHE)) return;
     await BackgroundTask.registerTaskAsync(TACHE, { minimumInterval: 15 });

@@ -6,6 +6,7 @@ import { BackHandler, Image, KeyboardAvoidingView, Linking, Pressable, ScrollVie
 import { revenir } from "../accueil/retour";
 import type { Utilisateur } from "../auth/coffre";
 import { duree, heure } from "../format";
+import { enSimulation } from "../serveur";
 import type { Piece } from "../store/types";
 import { useEnvoi } from "../sync/Envoi";
 import { BarreAction, Bouton, Champ, demanderConfirmation, EnTete, Ecran, Feuille, Texte, vibrer } from "../ui/elements";
@@ -281,6 +282,8 @@ function Contenu({ user }: { user: Utilisateur }) {
  */
 function Appels({ contacts }: { contacts: CrisisContact[] | undefined }) {
   const [tous, setTous] = useState(false);
+  // Bureau simulé : numéros inventés, qui pourraient être ceux de vraies personnes. Rien n'est composé.
+  const [demo, setDemo] = useState(false);
   if (!contacts?.length) {
     return <Texte variante="service" ton="second">Annuaire de crise pas encore sur l'appareil : appelez le chef de parc depuis votre répertoire.</Texte>;
   }
@@ -293,9 +296,10 @@ function Appels({ contacts }: { contacts: CrisisContact[] | undefined }) {
           titre={`Appeler : ${k.function}`}
           variante="danger"
           indice={`Appelle ${k.name}, ${k.phone}`}
-          onPress={() => void Linking.openURL(`tel:${numeroAppel(k.phone)}`).catch(() => undefined)}
+          onPress={() => (enSimulation() ? setDemo(true) : void Linking.openURL(`tel:${numeroAppel(k.phone)}`).catch(() => undefined))}
         />
       ))}
+      {demo ? <Texte variante="service" ton="second">Démonstration : numéros fictifs, l'appel n'est pas passé.</Texte> : null}
       {contacts.length > 3 && !tous ? <Bouton titre={`Autres numéros (${contacts.length - 3})`} variante="discret" onPress={() => setTous(true)} /> : null}
     </View>
   );

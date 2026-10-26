@@ -3,7 +3,7 @@ import { randomUUID } from "expo-crypto";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { SIMULATION } from "../config";
+import { enSimulation } from "../serveur";
 import type { Piece } from "../store/types";
 import { Bouton, Texte, vibrer } from "../ui/elements";
 import { espaces, marque, mesures, textes } from "../ui/terrain";
@@ -39,7 +39,7 @@ export function PrisePhoto({
   const [travail, setTravail] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   // Aperçu dans un navigateur (développement) : pas d'appareil photo, une photo simulée.
-  const simulee = Platform.OS === "web" && SIMULATION;
+  const simulee = Platform.OS === "web" && enSimulation();
 
   async function prendre() {
     if (travail) return;
