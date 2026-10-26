@@ -6,9 +6,9 @@ import { useState } from "react";
 import { AlertTriangle, BookOpen, Calculator, Check, ChevronLeft, FileSpreadsheet, FileText, Lock, Plus, RefreshCw, RotateCcw, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etapes, Etat, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, RankBars, Select, Textarea, cx, type Tone } from "@/components/ui";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
-import { fmtDateTime, fmtDec, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
+import { fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import type { Anomaly, CompanyRef, Meta, Payroll, PayrollRow, Payslip, PayslipRow } from "@/lib/rh-types";
-import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
+import { ChampMontant, EtatPaie, FiltreSociete, PastilleSociete, accord, avecSociete, erreurNombre, messageErreur, moisCourant, moisLong, nombre, useMeta } from "./commun";
 
 const TON_ANOMALIE: Record<Anomaly["severity"], Tone> = { danger: "danger", warn: "warn", info: "accent" };
 
@@ -266,11 +266,11 @@ export function DetailPaie({ id }: { id: string }) {
       )}
       {bloquantes > 0 && p.state === "draft" && (
         <div className="mb-4">
-          <Notice tone="danger">{bloquantes} anomalie(s) bloquante(s) : la paie ne peut être validée qu&apos;une fois corrigées.</Notice>
+          <Notice tone="danger">{bloquantes > 1 ? `${fmtInt(bloquantes)} anomalies bloquantes : la paie ne peut être validée qu'une fois corrigées.` : "1 anomalie bloquante : la paie ne peut être validée qu'une fois corrigée."}</Notice>
         </div>
       )}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Net à payer" value={fmtShort(p.totals.net)} hint={`${p.totals.headcount} bulletin(s)`} />
+        <Kpi label="Net à payer" value={fmtShort(p.totals.net)} hint={pluriel(p.totals.headcount, "bulletin")} />
         <Kpi label="Brut" value={fmtShort(p.totals.gross)} hint={`Retenues diverses : ${fmtGNF(p.totals.deductions)}`} />
         <Kpi label="Cotisations et impôts" value={fmtShort(p.totals.cnss_employee + p.totals.cnss_employer + p.totals.rts + p.totals.vf + p.totals.training_tax)} hint={`CNSS ${fmtGNF(p.totals.cnss_employee + p.totals.cnss_employer)}, RTS ${fmtGNF(p.totals.rts)}, VF et formation ${fmtGNF(p.totals.vf + p.totals.training_tax)}`} />
         <Kpi label="Coût employeur" value={fmtShort(p.totals.employer_cost)} tone="accent" hint={p.totals.gross ? `${fmtDec(p.totals.employer_cost / p.totals.gross)} fois le brut` : undefined} />
@@ -309,7 +309,7 @@ export function DetailPaie({ id }: { id: string }) {
                 </span>
               ),
             },
-            { key: "days", label: "Jours", align: "right", render: (s) => <span title={`${s.worked_days} payé(s) sur ${s.month_days} ouvrables, ${s.unpaid_days} non rémunéré(s)`}>{`${fmtDec(s.worked_days - s.unpaid_days)} / ${fmtDec(s.month_days)}`}</span> },
+            { key: "days", label: "Jours", align: "right", render: (s) => <span title={`${fmtDec(s.worked_days)} ${accord(s.worked_days, "jour payé", "jours payés")} sur ${fmtDec(s.month_days)} ouvrables, ${fmtDec(s.unpaid_days)} ${accord(s.unpaid_days, "non rémunéré", "non rémunérés")}`}>{`${fmtDec(s.worked_days - s.unpaid_days)} / ${fmtDec(s.month_days)}`}</span> },
             { key: "gross", label: "Brut", align: "right", render: (s) => fmtGNF(s.gross), sortValue: (s) => s.gross },
             { key: "cnss", label: "CNSS", align: "right", render: (s) => fmtGNF(s.cnss_employee) },
             { key: "rts", label: "RTS", align: "right", render: (s) => fmtGNF(s.rts) },

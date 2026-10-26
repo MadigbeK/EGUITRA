@@ -7,7 +7,7 @@ import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, Input, Kp
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Employee, type EmployeeDocument, type Meta } from "@/lib/rh-types";
-import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, erreurNombre, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
+import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, accord, erreurNombre, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 import { SaisieAbsence } from "./Conges";
 
@@ -63,7 +63,7 @@ export function FicheSalarie({ id }: { id: string }) {
       )}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Brut mensuel" value={fmtGNF(e.monthly_gross)} hint={`Salaire de base ${fmtGNF(e.base_salary)}`} />
-        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} an(s)`} hint={`Embauché le ${fmtDate(e.hire_date)}`} />
+        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} ${accord(e.seniority_years, "an")}`} hint={`Embauché le ${fmtDate(e.hire_date)}`} />
         <Kpi label="Solde de congés" value={jours(e.balance.balance)} hint={e.balance.pending ? `${jours(e.balance.pending)} en attente de validation` : "Aucune demande en attente"} tone={e.balance.balance < 0 ? "danger" : "neutral"} />
         <Kpi label="Contrat" value={CONTRACT_LABELS[e.contract_type]} hint={e.contract_end ? `Jusqu'au ${fmtDate(e.contract_end)}` : e.trial_end ? `Essai jusqu'au ${fmtDate(e.trial_end)}` : "Sans terme"} tone={e.state === "essai" ? "warn" : "neutral"} />
       </div>
