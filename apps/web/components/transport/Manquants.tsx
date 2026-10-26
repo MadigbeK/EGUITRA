@@ -29,6 +29,9 @@ interface ShortageRotation {
   state: string;
 }
 
+/** Rotations hors tolérance montrées au plus (les plus récentes) ; au-delà, l'écran le dit. */
+const LIMITE = 200;
+
 const GROUPS = [{ value: "driver", label: "Chauffeur" }, { value: "vehicle", label: "Ensemble routier" }, { value: "client", label: "Client" }, { value: "route", label: "Route" }];
 
 /** Manquants par chauffeur, ensemble, client ou route : toléré, excédentaire, valorisé, déduit, réclamé. */
@@ -37,7 +40,7 @@ export function Manquants() {
   const [from, setFrom] = useState(`${new Date().getFullYear()}-01-01`);
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const { data, error: erreurMarges, mutate: majMarges } = useApi<{ rows: ProfitRow[] }>(`/transport/profitability?group=${group}&date_from=${from}&date_to=${to}`);
-  const { data: list, error: erreurRotations, mutate: majRotations } = useApi<{ items: ShortageRotation[]; total_count: number }>(`/transport/rotations?shortage=excess&state=done,invoiced&date_from=${from}&date_to=${to}&limit=200`);
+  const { data: list, error: erreurRotations, mutate: majRotations } = useApi<{ items: ShortageRotation[]; total_count: number }>(`/transport/rotations?shortage=excess&state=done,invoiced&date_from=${from}&date_to=${to}&limit=${LIMITE}`);
   const rows = data?.rows ?? [];
   const sum = (k: keyof ProfitRow) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
   const loaded = sum("volume_loaded");
@@ -75,6 +78,10 @@ export function Manquants() {
       </Card>
       <Card title="Rotations hors tolérance" padded={false}>
         {!list ? <Etat error={erreurRotations} onRetry={() => majRotations()} /> : (
+          <>
+          {list.total_count > list.items.length && (
+            <p className="px-5 pt-4 text-[13px] text-warn">Les {fmtInt(list.items.length)} plus récentes sur {fmtInt(list.total_count)} rotations hors tolérance : resserrez la période pour voir les autres.</p>
+          )}
           <DataTable dense rows={list.items} rowKey={(r) => r.id} empty="Aucune rotation au-delà de la tolérance sur la période." columns={[
             { key: "name", label: "N°", render: (r) => <span className="whitespace-nowrap font-mono text-xs">{r.name ?? "–"}</span> },
             { key: "date_loading", label: "Chargement", render: (r) => <span className="whitespace-nowrap">{fmtDate(r.date_loading)}</span> },
@@ -91,6 +98,7 @@ export function Manquants() {
               </span>
             ) },
           ]} />
+          </>
         )}
       </Card>
     </div>

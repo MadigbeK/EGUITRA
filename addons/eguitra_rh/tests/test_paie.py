@@ -223,17 +223,22 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.assertEqual(sum(rts.mapped("credit")), a.rts + b.rts + g.rts)
 
         payroll.action_reopen()
-        self.assertFalse(move.exists(), "Pièce en brouillon supprimée à la réouverture")
+        self.assertEqual(move.state, "cancel", "Pièce numérotée annulée et gardée à la réouverture (pas de trou)")
+        self.assertFalse(payroll.move_id)
         self.assertEqual(payroll.state, "draft")
         self.assertEqual(advance._remaining(), 500_000, "Retenue rendue tant que la paie n'est pas validée")
 
-    def test_net_negatif_bloque(self):
+    def test_retenue_d_avance_bornee_au_net(self):
+        """Audit du noyau, I-R1 : une mensualité plus forte que le net ne bloque plus la paie de la société ; la
+        retenue est bornée au net et le reliquat reste dû."""
         emp = self.Employee.create({"name": "Delta", "hire_date": date(2025, 1, 1), "base_salary": 600_000})
-        self.env["eguitra.rh.advance"].create({"employee_id": emp.id, "amount": 1_000_000, "installment": 1_000_000,
-                                               "first_month": SEPT})
+        advance = self.env["eguitra.rh.advance"].create({"employee_id": emp.id, "amount": 1_000_000,
+                                                         "installment": 1_000_000, "first_month": SEPT})
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
-        with self.assertRaisesRegex(UserError, "Net à payer négatif"):
-            payroll.with_user(self.valideur).action_validate()
+        slip = payroll.payslip_ids.filtered(lambda s: s.employee_id == emp)
+        self.assertEqual((slip.net, slip.deductions), (0, 570_000), "600 000 moins la CNSS : 570 000 retenus, net nul")
+        payroll.with_user(self.valideur).action_validate()
+        self.assertEqual((advance._remaining(), advance.state), (430_000, "open"), "Reliquat retenu les mois suivants")
 
     def test_administration_qui_recalcule_ne_valide_pas(self):
         payroll = self.env["eguitra.rh.payroll"].prepare(self.company, SEPT)
@@ -298,9 +303,16 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.assertNotIn(autre, september.prepared_by_ids, "Avance retenue à partir d'octobre seulement")
         with self.assertRaisesRegex(AccessError, "autre personne"):
             september.with_user(self.administrateur).action_validate()
+        # Données changées depuis le calcul : la paie se recalcule avant d'être validée (audit du noyau, C6).
+        self.assertTrue(september.needs_compute and october.needs_compute)
+        with self.assertRaisesRegex(UserError, "recalcule"):
+            september.with_user(self.valideur).action_validate()
+        september.with_user(self.gestionnaire).action_compute()
+        self.assertFalse(september.needs_compute)
         september.with_user(self.valideur).action_validate()
         self.assertEqual(advance.state, "open")
         self.assertNotIn(self.valideur, october.prepared_by_ids, "Le suivi du solde n'inscrit pas la direction")
+        october.with_user(self.gestionnaire).action_compute()
         october.with_user(self.valideur).action_validate()
         self.assertEqual(october.state, "validated")
 
@@ -321,6 +333,8 @@ class TestRh(FinanceDataMixin, TransactionCase):
         self.assertIn(self.gestionnaire, payroll.prepared_by_ids)
         self.assertIn(autre, payroll.prepared_by_ids)
         self.assertNotIn(self.valideur, payroll.prepared_by_ids, "Une absence payée ne change pas la paie")
+        self.assertTrue(payroll.needs_compute, "Absences non rémunérées entrées après le calcul")
+        payroll.with_user(self.gestionnaire).action_compute()
         payroll.with_user(self.valideur).action_validate()
         self.assertEqual(payroll.state, "validated")
 

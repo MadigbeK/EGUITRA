@@ -15,3 +15,4 @@ from . import test_pilotage_structure
 from . import test_releves_audit
 from . import test_verrous_rotation
 from . import test_saisies_audit
+from . import test_synchronisation
