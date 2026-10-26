@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import { Monogramme } from "@/components/brand";
 import { AlertTriangle, Check, CloudOff, Loader2, LogOut, Pencil, RefreshCw, Trash2, Truck, Wifi } from "@/components/icons";
 import { Badge, Button, FEUILLE, Field, Input, Notice, Select, Textarea, classesBouton, cx, demanderConfirmation, tonEtat, useMouvementReduit } from "@/components/ui";
-import { ApiError, DelaiDepasse, apiGet, apiSend } from "@/lib/api-client";
+import { ApiError, DelaiDepasse } from "@/lib/api-client";
 import { cache, claimCache, dernierEnvoi, forgetDevice, newUuid, queue, type QueuedRotation } from "@/lib/offline-store";
 import { INSECABLE, fmtDate, fmtInt, fmtM3, fmtVolume, pluriel } from "@/lib/format";
+import { SESSION_EXPIREE, appelBureau, sessionExpiree } from "./bureau";
 
 interface Referentials {
   vehicles: Array<{ id: number; name: string; tractor_plate: string | false | null; capacity_liters: number; driver_id: number | null }>;
@@ -33,7 +34,13 @@ interface SentRotation {
 }
 
 interface Form {
+  /** Saisie en attente que l'on corrige ; null pour une nouvelle saisie. */
   uuid: string | null;
+  /**
+   * Identifiant que prendra la nouvelle saisie, tiré dès l'ouverture du formulaire et gardé dans le
+   * brouillon : un brouillon repris après coup et enregistré une seconde fois n'est pas reçu deux fois.
+   */
+  nouveau_uuid?: string;
   /**
    * Correction d'une saisie en attente : sa version, celle de son premier envoi et sa date
    * d'enregistrement, relevées à l'ouverture de la correction (voir QueuedRotation).
@@ -142,10 +149,18 @@ type Phase = "repos" | "ecriture" | "enregistree";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const blank = (): Form => ({
-  uuid: null, date_loading: today(), vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
+  uuid: null, nouveau_uuid: newUuid(), date_loading: today(), vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
   delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
 const num = (v: string) => Number(v.replace(/\s/g, "").replace(",", ".")) || 0;
+
+/** Saisie en cours gardée sur le téléphone (application fermée par Android, photo, session expirée). */
+interface Brouillon {
+  user_id: number;
+  form: Form;
+  showCosts: boolean;
+}
+const CLE_BROUILLON = "brouillon";
 
 /** Formulaire où rien n'est saisi : la date et le produit proposés d'office ne comptent pas. */
 function formVide(f: Form): boolean {
@@ -324,6 +339,14 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const [erreurs, setErreurs] = useState<Erreurs>({});
   const [phase, setPhase] = useState<Phase>("repos");
   const [retour, setRetour] = useState<Retour | null>(null);
+  // Session expirée (401) : un bandeau propose de se reconnecter, sans quitter l'écran ni la saisie.
+  const [sessionPerdue, setSessionPerdue] = useState(false);
+  const sessionPerdueRef = useRef(false);
+  // Brouillon relu à l'ouverture : avant, l'écriture du formulaire vide l'effacerait.
+  const brouillonLu = useRef(false);
+  const minuteBrouillon = useRef(0);
+  const formRef = useRef(form);
+  const coutsRef = useRef(showCosts);
   const busy = useRef(false);
   // Saisie ouverte en correction : elle ne part pas avant que la correction soit enregistrée (sinon
   // l'ancienne version arriverait au bureau pendant la frappe).
@@ -359,10 +382,18 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     try {
       const res = await appel();
       noter(true);
+      if (sessionPerdueRef.current) {
+        sessionPerdueRef.current = false;
+        setSessionPerdue(false);
+      }
       return res;
     } catch (e) {
       // Une réponse du bureau (refus, session expirée) prouve que le réseau passe.
       noter(e instanceof ApiError);
+      if (sessionExpiree(e)) {
+        sessionPerdueRef.current = true;
+        setSessionPerdue(true);
+      }
       throw e;
     }
   }, []);
@@ -408,7 +439,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       return;
     }
     try {
-      const fresh = keepReferentials(await echanger(() => apiGet<Referentials>("/transport/referentials", { timeout: DELAI_LISTE })));
+      const fresh = keepReferentials(await echanger(() => appelBureau<Referentials>("GET", "/transport/referentials", undefined, DELAI_LISTE)));
       setRefs(fresh);
       await cache.set("referentials", fresh);
     } catch {
@@ -424,7 +455,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       return;
     }
     try {
-      const res = await echanger(() => apiGet<{ items: SentRotation[] }>("/transport/rotations?limit=30", { timeout: DELAI_LISTE }));
+      const res = await echanger(() => appelBureau<{ items: SentRotation[] }>("GET", "/transport/rotations?limit=30", undefined, DELAI_LISTE));
       const items = res.items.map(keepSent);
       setSent(items);
       setSentIndisponible(false);
@@ -445,6 +476,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
    */
   const sync = useCallback(async (origine: "auto" | "envoi" | "saisie" = "auto"): Promise<Bilan | null> => {
     if (!navigator.onLine) return null;
+    // Session expirée : les envois automatiques attendent la reconnexion (le bandeau la propose).
+    if (sessionPerdueRef.current && origine === "auto") return null;
     if (busy.current) {
       relance.current = true;
       return null;
@@ -469,7 +502,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           if (actuelle && actuelle.status !== "recue") batch.push(actuelle);
         }
         if (!batch.length) continue;
-        const res = await echanger(() => apiSend<{ results: Resultat[] }>("POST", "/transport/sync", { rotations: batch.map(versEnvoi) }, { timeout: DELAI_ENVOI }));
+        const res = await echanger(() => appelBureau<{ results: Resultat[] }>("POST", "/transport/sync", { rotations: batch.map(versEnvoi) }, DELAI_ENVOI));
         for (const r of res.results) {
           const partie = r.client_uuid ? batch.find((b) => b.client_uuid === r.client_uuid) : undefined;
           if (!partie) continue;
@@ -505,7 +538,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
         ? "Réseau faible : le bureau n'a pas répondu à temps. Les saisies repartiront seules."
         : "Réseau indisponible : les saisies partiront au retour du réseau.";
       echec = { reseau, message };
-      if (origine !== "saisie") signaler({ tone: "warn", text: echec.message, reseau });
+      // Session expirée : le bandeau du haut le dit déjà, avec la reconnexion.
+      if (origine !== "saisie" && !sessionExpiree(e)) signaler({ tone: "warn", text: echec.message, reseau });
     } finally {
       busy.current = false;
       setSyncing(false);
@@ -524,10 +558,54 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     syncRef.current = sync;
   }, [sync]);
 
+  /**
+   * Brouillon : la saisie en cours est écrite sur le téléphone à chaque modification (après 0,4 s de
+   * calme, et aussitôt que l'application passe en arrière-plan : photo du bon, appel), puis reprise à
+   * l'ouverture. Un formulaire vide efface le brouillon.
+   */
+  const ecrireBrouillon = useCallback((f: Form, couts: boolean) => {
+    window.clearTimeout(minuteBrouillon.current);
+    if (!brouillonLu.current) return;
+    if (formVide(f)) void cache.remove(CLE_BROUILLON).catch(() => undefined);
+    else void cache.set(CLE_BROUILLON, { user_id: me.id, form: f, showCosts: couts } satisfies Brouillon).catch(() => undefined);
+  }, [me.id]);
+
+  useEffect(() => {
+    formRef.current = form;
+    coutsRef.current = showCosts;
+    if (!brouillonLu.current) return;
+    window.clearTimeout(minuteBrouillon.current);
+    minuteBrouillon.current = window.setTimeout(() => ecrireBrouillon(form, showCosts), 400);
+  }, [form, showCosts, ecrireBrouillon]);
+
+  useEffect(() => {
+    const cacher = () => {
+      if (document.visibilityState === "hidden") ecrireBrouillon(formRef.current, coutsRef.current);
+    };
+    document.addEventListener("visibilitychange", cacher);
+    return () => {
+      document.removeEventListener("visibilitychange", cacher);
+      window.clearTimeout(minuteBrouillon.current);
+    };
+  }, [ecrireBrouillon]);
+
   useEffect(() => {
     setOnline(navigator.onLine);
     void (async () => {
       await claimCache(me.id); // listes d'un autre compte effacées avant tout affichage
+      if (!brouillonLu.current) {
+        const b = await cache.get<Brouillon>(CLE_BROUILLON).catch(() => undefined);
+        const repris: Form | null = b && b.user_id === me.id && b.form ? { ...blank(), ...b.form } : null;
+        // Repris seulement sur un formulaire encore vide (l'agent n'a rien commencé entre-temps).
+        if (repris && !formVide(repris) && formVide(formRef.current)) {
+          // Correction reprise : sa saisie ne part pas avant l'enregistrement (envoi lancé juste après).
+          enCorrection.current = repris.uuid;
+          setForm(repris);
+          setShowCosts(Boolean(b?.showCosts));
+          annoncer({ tone: "neutral", text: "Saisie en cours reprise : vérifiez-la, puis enregistrez-la." }, 6000);
+        }
+        brouillonLu.current = true;
+      }
       setLastSync(await dernierEnvoi.get());
       void loadQueue();
       void loadRefs();
@@ -596,28 +674,36 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
         !(await demanderConfirmation(`Le volume chargé dépasse la capacité de ${vehicle.name} (${fmtM3(vehicle.capacity_liters / 1000)}) : le bureau devra le corriger avant validation.`, { titre: "Enregistrer au-delà de la capacité ?", action: "Enregistrer quand même" }))) {
         return;
       }
-      const uuid = form.uuid ?? newUuid();
+      const uuid = form.uuid ?? form.nouveau_uuid ?? newUuid();
       const payload = toPayload(form);
       const maintenant = new Date().toISOString();
       // « ER-09, 36,50 m³ » : ce que l'agent reconnaît de la rotation qu'il vient de saisir.
       const resume = `${vehicle?.name ?? "Rotation"}, ${fmtM3(num(form.volume_loaded) || num(form.volume_delivered))}`;
       setPhase("ecriture");
       annoncer(null);
+      // Le brouillon en attente d'écriture n'est plus écrit : la saisie part dans la file.
+      window.clearTimeout(minuteBrouillon.current);
       try {
         // Correction : version suivante de la saisie relue dans la même transaction (une réponse d'envoi
         // ne s'intercale pas). Disparue de la file (envoyée et retirée pendant la correction), le bureau en
-        // a reçu une version : la correction repart marquée et le noyau met à jour son brouillon.
-        await queue.transformer(uuid, (q): QueuedRotation => ({
-          client_uuid: uuid, user_id: me.id, created_at: q?.created_at ?? form.created_at ?? maintenant, status: "pending", payload,
-          revision: form.uuid ? (q?.revision ?? form.revision ?? 1) + 1 : 1,
-          envoyee: !form.uuid ? undefined : q ? q.envoyee : (form.envoyee ?? form.revision ?? 1),
-        }));
+        // a reçu une version : la correction repart marquée et le noyau met à jour son brouillon. Une
+        // nouvelle saisie déjà en file (brouillon repris après son enregistrement) est traitée de même.
+        await queue.transformer(uuid, (q): QueuedRotation => {
+          const suite = Boolean(form.uuid) || Boolean(q);
+          return {
+            client_uuid: uuid, user_id: me.id, created_at: q?.created_at ?? form.created_at ?? maintenant, status: "pending", payload,
+            revision: suite ? (q?.revision ?? form.revision ?? 1) + 1 : 1,
+            envoyee: !suite ? undefined : q ? q.envoyee : (form.envoyee ?? form.revision ?? 1),
+          };
+        });
       } catch {
         setPhase("repos");
         annoncer({ tone: "danger", text: "Enregistrement impossible sur ce téléphone : réessayez. Si cela recommence, prévenez le bureau." });
         return;
       }
       enCorrection.current = null;
+      // Dans la file : le brouillon n'a plus d'objet (repris, il referait la même saisie).
+      await cache.remove(CLE_BROUILLON).catch(() => undefined);
 
       // Enregistrée sur le téléphone : le bouton le dit 1,5 s, le téléphone vibre, la page remonte.
       setForm({ ...blank(), date_loading: form.date_loading });
@@ -688,13 +774,18 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     const question = aEnvoyer
       ? `${pluriel(aEnvoyer, "saisie n'a pas encore été transmise", "saisies n'ont pas encore été transmises")}. ${aEnvoyer > 1 ? "Elles restent sur ce téléphone et partiront" : "Elle reste sur ce téléphone et partira"} à votre prochaine connexion.`
       : "Les listes gardées sur ce téléphone seront effacées : il faudra du réseau pour vous reconnecter.";
-    if (!(await demanderConfirmation(question, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
+    // La déconnexion efface aussi le brouillon (listes du compte) : la saisie non enregistrée est perdue.
+    const enCours = formVide(form) ? "" : " La saisie en cours, non enregistrée, sera effacée.";
+    if (!(await demanderConfirmation(`${question}${enCours}`, { titre: "Se déconnecter ?", action: "Se déconnecter" }))) return;
     // Sans réseau, la session ne peut pas être fermée au serveur : rien n'est effacé du téléphone.
     const res = navigator.onLine ? await fetch("/api/session/logout", { method: "POST" }).catch(() => null) : null;
     if (!res?.ok) {
       setNotice({ tone: "warn", text: "Déconnexion impossible sans réseau : réessayez au retour du réseau." });
       return;
     }
+    // Plus aucune écriture du brouillon (le départ de la page la déclencherait après l'effacement).
+    brouillonLu.current = false;
+    window.clearTimeout(minuteBrouillon.current);
     await forgetDevice();
     window.location.href = "/login?app=mobile";
   }
@@ -780,6 +871,15 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       </header>
 
       <main className={cx("flex-1 space-y-4 px-4 pt-5", view === "saisie" && refs ? "pb-0" : "pb-10")}>
+        {sessionPerdue && (
+          <Notice tone="warn">
+            <span className="block">{SESSION_EXPIREE}</span>
+            {/* La saisie en cours est déjà écrite dans le brouillon : elle sera reprise après la connexion. */}
+            <a href="/login?app=mobile&next=%2Fmobile" onClick={() => ecrireBrouillon(form, showCosts)} className={classesBouton("primary", "lg", "mt-3 min-h-12")}>
+              Se reconnecter
+            </a>
+          </Notice>
+        )}
         {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
         {view === "saisie" && (

@@ -106,6 +106,7 @@ export const queue = {
 export const cache = {
   get: <T>(key: string) => run<T | undefined>("cache", "readonly", (s) => s.get(key) as IDBRequest<T | undefined>),
   set: (key: string, value: unknown) => run("cache", "readwrite", (s) => s.put(value, key)),
+  remove: (key: string) => run("cache", "readwrite", (s) => s.delete(key)),
   clear: () => run("cache", "readwrite", (s) => s.clear()),
 };
 
