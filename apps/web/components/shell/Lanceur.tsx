@@ -7,7 +7,7 @@ import { IconeModule } from "@/components/accueil/icones-modules";
 import { alignerSociete, rayonsDe, societePour, voisine, type Tuile } from "@/components/accueil/tuiles";
 import { ChevronRight } from "@/components/icons";
 import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
-import type { AppCode } from "@/lib/config";
+import { APPS, ESPACES, type AppCode } from "@/lib/config";
 import type { Me } from "@/lib/types";
 
 /** Durée de la fermeture du panneau (son animation de sortie). */
@@ -17,9 +17,15 @@ const JEU_MS = 1500;
 
 type Etat = "ferme" | "ouvert" | "sortie";
 
-/** Module ouvert dans la page courante : l'accueil d'un espace ne s'active que sur lui-même. */
+/** Accueils des espaces (Finance, Transport, AxisPro, Analyse, RH). */
+const ACCUEILS = new Set<string>(ESPACES.map((a) => APPS[a].home));
+
+/**
+ * Module ouvert dans la page courante : l'accueil d'un espace ne s'active que sur lui-même (sinon la
+ * tuile « Transport » s'allumait avec « Suivi des rotations » sur tous les écrans du transport).
+ */
 function estOuvert(href: string, pathname: string) {
-  return href === "/finance" || href === "/axispro" || href === "/analyse" || href === "/rh" ? pathname === href : pathname === href || pathname.startsWith(href + "/");
+  return ACCUEILS.has(href) ? pathname === href : pathname === href || pathname.startsWith(href + "/");
 }
 
 /** Neuf points, comme le lanceur de Microsoft 365 ou de Google ; ils ondulent au survol. */
