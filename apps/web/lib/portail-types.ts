@@ -160,7 +160,9 @@ export interface ActionRow {
   porteur_comment: string | null;
   overdue: boolean;
   done_date: string | null;
-  source: string | null;
+  /** Origine dans les mots du porteur : jamais la clé interne (écart de la grille, saisie libre…). */
+  origin: "consultant" | "committee" | "risk";
+  origin_label: string;
   create_date: string;
 }
 

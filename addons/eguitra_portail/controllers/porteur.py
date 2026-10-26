@@ -26,6 +26,15 @@ MAX_DAILY_MESSAGES = 50
 MAX_OPEN_MEETING_REQUESTS = 3
 # Messages renvoyés par appel au fil : les plus récents d'abord, la page précédente sur demande.
 FIL_PAGE = 200
+# Origine d'une action telle que le porteur la lit. Un écart de la grille du cabinet se présente comme une
+# demande du consultant, au même titre qu'une saisie libre : rien ne laisse deviner la grille ni ses
+# critères. La clé interne (gap, manual…) ne sort jamais.
+ACTION_ORIGINS = {
+    "manual": ("consultant", "Demandée par votre consultant"),
+    "gap": ("consultant", "Demandée par votre consultant"),
+    "committee": ("committee", "Condition posée par le comité"),
+    "risk": ("risk", "Pour maîtriser un risque du projet"),
+}
 PORTAL_DOCUMENT_KEYS = ("document_type_id", "code", "name", "category", "required", "due", "gate", "guidance",
                         "state", "version")
 PROFILE_FIELDS = ("phone", "email", "street", "city", "website")
@@ -294,10 +303,14 @@ class EguitraPortailPorteur(http.Controller):
     def actions(self, dossier_id, **_kw):
         dossier = _own(dossier_id)
         today = fields.Date.context_today(_me())
-        return [{"id": a.id, "name": a.name, "description": a.description or None, "due_date": a.due_date,
-                 "state": a.state, "porteur_comment": a.porteur_comment or None, "overdue": a.is_overdue(today),
-                 "done_date": a.done_date, "source": a.source or None, "create_date": a.create_date}
-                for a in _tasks(dossier).sorted(lambda a: (a.state == "done", a.due_date or today + timedelta(days=3650), a.id))]
+        rows = []
+        for a in _tasks(dossier).sorted(lambda a: (a.state == "done", a.due_date or today + timedelta(days=3650), a.id)):
+            origin, origin_label = ACTION_ORIGINS.get(a.source, ACTION_ORIGINS["manual"])
+            rows.append({"id": a.id, "name": a.name, "description": a.description or None, "due_date": a.due_date,
+                         "state": a.state, "porteur_comment": a.porteur_comment or None,
+                         "overdue": a.is_overdue(today), "done_date": a.done_date, "origin": origin,
+                         "origin_label": origin_label, "create_date": a.create_date})
+        return rows
 
     # ─── Messagerie ──────────────────────────────────────────────────────
 

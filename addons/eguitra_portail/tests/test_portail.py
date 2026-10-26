@@ -1,4 +1,5 @@
 import io
+import json
 from datetime import timedelta
 
 from odoo import fields
@@ -255,3 +256,20 @@ class TestPortail(ApiCase):
         self.assertIn("Ville : Kindia", demande.body)
         self.assertIn("Site internet : https://briques.gn", demande.body)
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
+
+    def test_actions_sans_grille_ni_cle_interne(self):
+        Action = self.env["axispro.action"]
+        for source, name in (("gap", "Apport du promoteur"), ("manual", "Visite de la banque"),
+                             ("committee", "Lever la garantie"), ("risk", "Atténuer le risque : change")):
+            Action.create({"dossier_id": self.dossier_a.id, "name": name, "source": source, "assignee": "porteur"})
+        status, actions = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/actions", token=self.porteur)
+        self.assertEqual(status, 200, actions)
+        origines = {a["name"]: (a["origin"], a["origin_label"]) for a in actions}
+        self.assertEqual(origines["Apport du promoteur"], origines["Visite de la banque"],
+                         "Un écart de la grille se lit comme une demande du consultant")
+        self.assertEqual(origines["Lever la garantie"][0], "committee")
+        self.assertEqual(origines["Atténuer le risque : change"][0], "risk")
+        self.assertFalse([a for a in actions if "source" in a], "Jamais la clé interne de l'origine")
+        texte = json.dumps(actions, ensure_ascii=False).lower()
+        for mot in ("gap", "manual", "écart", "grille"):
+            self.assertNotIn(mot, texte)

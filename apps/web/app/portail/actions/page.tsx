@@ -55,7 +55,7 @@ function CarteAction({ a, ferme, onCompteRendu }: { a: ActionRow; ferme: boolean
           <span className="text-muted">Sans échéance</span>
         )}
       </div>
-      {a.source && <p className="mt-1 text-[12px] text-muted">Origine : {a.source}</p>}
+      <p className="mt-1 text-[12px] text-muted">{a.origin_label}</p>
       {a.porteur_comment && (
         <div className="mt-3 rounded-xl bg-panel-2 px-3 py-2">
           <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted">Votre compte rendu</div>
