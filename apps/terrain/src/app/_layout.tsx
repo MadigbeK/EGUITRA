@@ -6,6 +6,7 @@ import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider, useSession } from "../auth/session";
+import { Verrou } from "../auth/Verrou";
 import { EnvoiProvider } from "../sync/Envoi";
 import { API_URL, SIMULATION } from "../config";
 import { Connexion } from "../connexion/Connexion";
@@ -63,7 +64,9 @@ function Porte() {
   if (etape.nom !== "ouverte") return <Connexion />;
   return (
     <EnvoiProvider key={etape.user.id} store={store} api={api} userId={etape.user.id}>
-      <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+      <Verrou user={etape.user}>
+        <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+      </Verrou>
     </EnvoiProvider>
   );
 }

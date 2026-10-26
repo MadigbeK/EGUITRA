@@ -7,6 +7,7 @@ import { API_URL, APP_CODE, SIMULATION } from "../config";
 import { claimCache, forgetDevice } from "../store/device";
 import { openStore } from "../store";
 import type { Store } from "../store/types";
+import { codeAppareil } from "./codeAppareil";
 import { aRevoquer, coffreJeton, profilGarde, type Utilisateur } from "./coffre";
 
 /**
@@ -189,9 +190,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       }
       await forgetDevice(store);
+      // L'appareil oublie aussi le code personnel : la prochaine connexion en choisit un nouveau.
+      if (etape.nom === "ouverte") await codeAppareil.effacer(etape.user.id);
       setEtape({ nom: "connexion" });
     },
-    [api, store],
+    [api, store, etape],
   );
 
   const recommencer = useCallback(() => setEtape({ nom: "connexion" }), []);
