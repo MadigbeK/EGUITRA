@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { AlertTriangle, BadgeCheck, Calendar, CheckCircle2, ChevronDown, Clock, Link2, MapPin, Users } from "@/components/icons";
 import { Badge, Button, Card, Empty, ErrorBox, FEUILLE, Loading, Modal, Notice, ProgressBar, Tabs, Textarea, cx, type Tone } from "@/components/ui";
 import { EnTete, TexteRiche, ajouterAuCalendrier, dateLongue, heure, quand } from "@/components/portail/commun";
@@ -203,31 +203,42 @@ export default function Evenements() {
     };
   }, [data]);
 
-  // Lien profond (#evenement-12) : bon onglet, défilement et mise en évidence.
+  // Lien profond (#evenement-12) : bon onglet, défilement et mise en évidence, une fois par lien suivi. Une
+  // inscription qui met la liste à jour ne ramène plus l'écran vers l'événement du lien.
+  const [ancre, setAncre] = useState("");
+  const ancreTraitee = useRef<string | null>(null);
   useEffect(() => {
-    if (!data) return;
-    const m = /^#evenement-(\d+)$/.exec(window.location.hash);
+    const lire = () => setAncre(window.location.hash);
+    lire();
+    window.addEventListener("hashchange", lire);
+    return () => window.removeEventListener("hashchange", lire);
+  }, []);
+  useEffect(() => {
+    if (!data || !ancre || ancreTraitee.current === ancre) return;
+    const m = /^#evenement-(\d+)$/.exec(ancre);
     const cible = m ? data.find((e) => e.id === Number(m[1])) : undefined;
+    ancreTraitee.current = ancre;
     if (!cible) return;
     setVue(passe(cible) ? "passes" : "a-venir");
     setEclaire(cible.id);
-    const t1 = window.setTimeout(() => document.getElementById(`evenement-${cible.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
-    const t2 = window.setTimeout(() => setEclaire(null), 2600);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [data]);
+    window.setTimeout(() => document.getElementById(`evenement-${cible.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    window.setTimeout(() => setEclaire((id) => (id === cible.id ? null : id)), 2600);
+  }, [data, ancre]);
 
   function remplacer(row: EventRow) {
     void mutate((liste) => (liste ?? []).map((e) => (e.id === row.id ? row : e)), { revalidate: false });
   }
 
-  function fermer() {
+  function reinitialiser() {
     setInscription(null);
     setDesinscription(null);
     setNote("");
     setErreur(null);
+  }
+
+  /** Fermeture par le porteur, refusée pendant un envoi : son résultat, ou son erreur, doit rester visible. */
+  function fermer() {
+    if (!envoi) reinitialiser();
   }
 
   async function inscrire() {
@@ -244,7 +255,7 @@ export default function Evenements() {
           : "Inscription confirmée. Ajoutez l'événement à votre agenda pour ne pas l'oublier.",
       }));
       rafraichir();
-      fermer();
+      reinitialiser();
     } catch (e) {
       setErreur(e);
     } finally {
@@ -261,7 +272,7 @@ export default function Evenements() {
       remplacer(row);
       setMessages((m) => ({ ...m, [row.id]: "Vous êtes désinscrit. Votre place revient à un autre porteur." }));
       rafraichir();
-      fermer();
+      reinitialiser();
     } catch (e) {
       setErreur(e);
     } finally {
@@ -341,7 +352,7 @@ export default function Evenements() {
         onClose={fermer}
         footer={
           <>
-            <Button onClick={fermer}>Annuler</Button>
+            <Button onClick={fermer} disabled={envoi}>Annuler</Button>
             <Button variant="primary" loading={envoi} onClick={() => void inscrire()}>
               {inscription?.seats_left === 0 ? "Rejoindre la liste d'attente" : "Confirmer mon inscription"}
             </Button>
@@ -386,7 +397,7 @@ export default function Evenements() {
         onClose={fermer}
         footer={
           <>
-            <Button onClick={fermer}>Garder ma place</Button>
+            <Button onClick={fermer} disabled={envoi}>Garder ma place</Button>
             <Button variant="danger" loading={envoi} onClick={() => void desinscrire()}>
               Me désinscrire
             </Button>
