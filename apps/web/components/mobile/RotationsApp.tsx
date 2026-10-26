@@ -156,7 +156,20 @@ interface Echange {
 /** Bouton d'enregistrement : au repos, pendant l'écriture sur le téléphone, puis 1,5 s de confirmation. */
 type Phase = "repos" | "ecriture" | "enregistree";
 
-const today = () => new Date().toISOString().slice(0, 10);
+/**
+ * Jour et heure à Conakry, quel que soit le fuseau réglé sur le téléphone : la date de chargement
+ * proposée est celle du parc (toISOString donnait le jour en temps universel), comme celle du noyau.
+ */
+const FUSEAU = "Africa/Conakry";
+const JOUR = new Intl.DateTimeFormat("en-GB", { timeZone: FUSEAU, year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** « AAAA-MM-JJ » du jour à Conakry. */
+function jourA(d: Date): string {
+  const p = Object.fromEntries(JOUR.formatToParts(d).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+const today = () => jourA(new Date());
 const blank = (): Form => ({
   uuid: null, nouveau_uuid: newUuid(), date_loading: today(), vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
   delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
@@ -225,12 +238,13 @@ function grouper(v: string): string {
 
 /** « aujourd'hui 14:32 », « hier 18:05 », sinon « le 20/10 à 09:15 ». */
 function quand(d: Date): string {
-  const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  const veille = new Date();
-  veille.setDate(veille.getDate() - 1);
-  if (d.toDateString() === new Date().toDateString()) return `aujourd'hui ${heure}`;
-  if (d.toDateString() === veille.toDateString()) return `hier ${heure}`;
-  return `le ${d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} à ${heure}`;
+  const heure = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: FUSEAU });
+  const jour = jourA(d);
+  const maintenant = Date.now();
+  // Conakry est en temps universel toute l'année : la veille est exactement 24 heures plus tôt.
+  if (jour === jourA(new Date(maintenant))) return `aujourd'hui ${heure}`;
+  if (jour === jourA(new Date(maintenant - 86_400_000))) return `hier ${heure}`;
+  return `le ${d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", timeZone: FUSEAU })} à ${heure}`;
 }
 
 const NON_TEXTE = new Set(["date", "checkbox", "radio", "button", "submit", "file", "range", "color"]);
