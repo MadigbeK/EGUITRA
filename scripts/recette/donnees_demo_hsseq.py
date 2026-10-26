@@ -6,6 +6,10 @@ Un site (Parc de Matoto (démo)) et ses chefs de parc (test.parc, test.exploitat
 rattachés, le compte test.conducteur lié au dossier de Mamady Keïta (démo) (scripts/recette/donnees_demo_rh.py),
 trois événements à différents stades (déclaré, enquête, plan d'actions), deux actions, deux contrôles
 avant départ (l'un avec un point critique non conforme : motif V02 sur son ensemble) et un alcootest.
+Lot 2 : deux risques et leurs mesures, un audit interne et ses constats, deux exigences, un plan de trajet,
+un compte auditeur borné au site (test.auditeur, s'il existe) et un modèle de rapport mensuel générique et
+fictif (« Modèle générique de donneur d'ordre (démo) »), sans aucun indicateur ni libellé d'un donneur
+d'ordre réel.
 
   docker compose exec -T odoo-recette odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \\
       < ../scripts/recette/donnees_demo_hsseq.py
@@ -136,8 +140,88 @@ if driver_file.driver_id and not Test.search_count([("client_uuid", "=", "demo-h
         "company_id": groupe.id, "driver_id": driver_file.driver_id.id, "performed": True, "result": "negative",
         "device": "Éthylotest (démo)", "client_uuid": "demo-hsseq-breath-0", "reported_at": NOW - timedelta(hours=1)})
 
+# ─── Lot 2 : risques, audits, exigences, plan de trajet, auditeur ───────
+
+Risk = env["eguitra.hsseq.risk"]
+for feared, nature, raw, residual, measures in [
+        ("Inflammation des vapeurs au chargement en dôme (démo)", "safety_hazard", (4, 4), (4, 2),
+         [("engineering", "Chargement en source, bras étanche"), ("ppe", "Vêtements antistatiques")]),
+        ("Déversement de gasoil au dépotage (démo)", "environmental_aspect", (3, 3), (3, 1),
+         [("engineering", "Bac de rétention mobile"), ("administrative", "Mode opératoire de dépotage signé")])]:
+    if Risk.search_count([("feared_event", "=", feared)]):
+        continue
+    risk = Risk.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "nature": nature, "vehicle_kind": "tanker", "site_id": site.id,
+        "activity": "Chargement et dépotage (démo)", "hazard": "Produit inflammable (démo)", "feared_event": feared,
+        "owner_id": owner.id, "raw_severity": raw[0], "raw_probability": raw[1], "residual_severity": residual[0],
+        "residual_probability": residual[1]})
+    for level, description in measures:
+        env["eguitra.hsseq.risk.measure"].create({"risk_id": risk.id, "control_level": level,
+                                                  "description": f"{description} (démo)", "status": "in_place"})
+    risk.with_user(hsseq).sudo().action_activate()
+Requirement = env["eguitra.hsseq.requirement"]
+for source, standard, reference, title in [
+        ("standard", "iso_45001", "ISO 45001:2018, 8.2 (démo)", "Préparation et réponse aux situations d'urgence (démo)"),
+        ("law", False, "Texte réglementaire fictif, art. 1 (démo)", "Déclaration annuelle des déchets dangereux (démo)")]:
+    if not Requirement.search_count([("title", "=", title)]):
+        Requirement.with_user(hsseq).sudo().create({"company_id": groupe.id, "source": source,
+                                                    "standard": standard, "source_reference": reference,
+                                                    "title": title, "expected_evidence": "Compte rendu (démo)"})
+Audit = env["eguitra.hsseq.audit"]
+if not Audit.search_count([("title", "=", "Audit interne du parc (démo)")]):
+    audit = Audit.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "title": "Audit interne du parc (démo)", "standard": "iso_45001",
+        "site_id": site.id, "auditor_kind": "internal", "auditor_user_id": hsseq.id,
+        "planned_date": TODAY - timedelta(days=3), "scope": "Chargement, départs, dépotage (démo)"})
+    audit.with_user(hsseq).sudo().action_perform()
+    emergency = Requirement.search([("title", "=", "Préparation et réponse aux situations d'urgence (démo)")], limit=1)
+    for classification, description in (("major", "Aucun exercice d'urgence depuis 18 mois (démo)"),
+                                        ("observation", "Consignes d'urgence à réafficher (démo)")):
+        env["eguitra.hsseq.finding"].create({"audit_id": audit.id, "classification": classification,
+                                             "description": description,
+                                             "requirement_id": emergency.id if classification == "major" else False})
+Rotation = env["eguitra.transport.rotation"]
+planned = Rotation.search([("company_id", "=", groupe.id), ("state", "=", "draft"), ("vehicle_id", "in", vehicles.ids),
+                           ("hsseq_journey_ids", "=", False)], limit=1)
+if planned:
+    start = fields.Datetime.to_datetime(f"{planned.date_loading} 07:00:00")
+    env["eguitra.hsseq.journey"].create({
+        "rotation_id": planned.id, "itinerary": "Itinéraire de démonstration (démo)", "planned_departure": start,
+        "planned_arrival": start + timedelta(hours=8),
+        "stop_ids": [(0, 0, {"kind": "break", "place": "Pause (démo)", "planned_at": start + timedelta(hours=4),
+                             "duration_minutes": 45})]})
+auditor = user("test.auditeur")
+if auditor and auditor.has_group("eguitra_base.group_profile_auditeur"):
+    auditor.write({"hsseq_audit_until": TODAY + timedelta(days=30), "hsseq_audit_site_ids": [(6, 0, site.ids)]})
+
+# ─── Lot 2 : modèle générique et fictif de rapport mensuel ──────────────
+
+Template = env["eguitra.hsseq.report.template"].with_context(active_test=False)
+Template._ensure_nimova()
+generic = Template.search([("name", "=", "Modèle générique de donneur d'ordre (démo)")], limit=1)
+if not generic:
+    generic = Template.create({"name": "Modèle générique de donneur d'ordre (démo)", "company_id": groupe.id,
+                               "client_label": "Donneur d'ordre fictif (démo)"})
+    for code, label, nature, mode, key, unit, direction, aggregation, target in [
+            ("P-1", "Contrôles inopinés sur la route (démo)", "proactive", "manual", False, "nbre", "up", "sum", 1),
+            ("P-2", "Presque-accidents et situations dangereuses déclarés", "proactive", "computed", "weak_signals",
+             "nbre", "up", "sum", 5),
+            ("P-3", "Réalisation des contrôles avant départ", "proactive", "computed", "check_completion", "%", "up",
+             "average", 100),
+            ("P-4", "Réunion HSSE du mois (démo)", "proactive", "manual", False, "nbre", "up", "sum", 1),
+            ("R-1", "Accidents de la route", "reactive", "computed", "road_accidents", "nbre", "down", "sum", 0),
+            ("R-2", "Accidents du travail avec arrêt", "reactive", "computed", "work_accidents", "nbre", "down", "sum",
+             0),
+            ("R-3", "Déversements (démo)", "reactive", "manual", False, "litres", "down", "sum", 0)]:
+        env["eguitra.hsseq.report.indicator"].create({
+            "template_id": generic.id, "code": code, "label": label, "nature": nature, "mode": mode, "key": key,
+            "unit": unit, "direction": direction, "aggregation": aggregation, "targets": [target] * 12})
+
 env.cr.commit()
 print("HSSEQ (démo) :", Event.search_count([("title", "like", "(démo)")]), "événements,",
       Action.search_count([("description", "like", "(démo)")]), "actions,",
-      Check.search_count([("client_uuid", "like", "demo-hsseq-")]), "contrôles ; site", site.name, "; verrou",
+      Check.search_count([("client_uuid", "like", "demo-hsseq-")]), "contrôles,",
+      Risk.search_count([("feared_event", "like", "(démo)")]), "risques,",
+      Audit.search_count([("title", "like", "(démo)")]), "audit(s), modèle de rapport", generic.name, "; site", site.name,
+      "; verrou",
       f"en service depuis le {settings.lock_start_date}" if settings.lock_start_date else "pas encore en service")

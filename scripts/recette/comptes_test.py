@@ -28,7 +28,8 @@ sans autre profil, et test.exploitation et test.dg, chefs d'équipe).
 
 NIMOVA · HSSEQ : test.hsseq (Responsable HSSEQ, deux sociétés) et test.conducteur (NIMOVA Terrain seule,
 EGUITRA GROUP), que scripts/recette/donnees_demo_hsseq.py lie au dossier d'un chauffeur de démonstration ;
-test.parc et test.exploitation y sont chefs de parc du site de démonstration.
+test.parc et test.exploitation y sont chefs de parc du site de démonstration ; test.auditeur (lecture seule
+de NIMOVA · HSSEQ), que donnees_demo_hsseq.py borne au site de démonstration pour trente jours.
 """
 
 import os
@@ -62,6 +63,8 @@ COMPTES = [
     ("test.hsseq", "Test - Responsable HSSEQ", ["hsseq"], ["groupe", "cabinet"]),
     # Téléphone seul (NIMOVA Terrain) ; lié à un chauffeur de démonstration par donnees_demo_hsseq.py.
     ("test.conducteur", "Test - Conducteur", ["conducteur"], ["groupe"]),
+    # Lecture seule bornée : sites et date de fin d'accès posés par donnees_demo_hsseq.py.
+    ("test.auditeur", "Test - Auditeur HSSEQ", ["auditeur"], ["groupe"]),
     # Sans profil : le salarié qui n'a que « Mon espace » (lié à un dossier par donnees_demo_rh.py).
     ("test.salarie", "Test - Salarié", [], ["groupe"]),
     ("test.admin", "Test - Administrateur", ["admin"], ["groupe", "cabinet"]),
