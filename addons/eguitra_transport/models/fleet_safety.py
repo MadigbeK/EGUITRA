@@ -18,7 +18,7 @@ import json
 from datetime import timedelta
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ..blocking import RotationBlocked, motif
 
@@ -34,6 +34,8 @@ REQUIRED_DOCUMENTS = {"tanker": ("insurance", "inspection", "calibration", "tigh
                       "tipper": ("insurance", "inspection")}
 EXPIRY_WARNING_DAYS = 30
 # États d'un ensemble qui ne part pas (motif T01).
+# Profils qui font partir une rotation (voir _depart_refusal).
+DEPART_PROFILES = ("admin", "exploitation")
 UNAVAILABLE = {"maintenance": "en maintenance", "off": "hors service", "sold": "cédé"}
 
 
@@ -52,6 +54,7 @@ class EguitraTransportVehicleDocument(models.Model):
     expiry_date = fields.Date("Valable jusqu'au", required=True)
     attachment_id = fields.Many2one("ir.attachment", "Pièce jointe", ondelete="set null")
     note = fields.Text("Note")
+    active = fields.Boolean(default=True, help="Retiré de la fiche de l'ensemble : archivé, gardé à l'historique.")
 
     @api.constrains("date_start", "expiry_date")
     def _check_dates(self):
@@ -87,11 +90,18 @@ class EguitraTransportVehicle(models.Model):
         if any(v.payload_tonnes < 0 for v in self):
             raise ValidationError("La charge utile ne peut pas être négative.")
 
+    def _active_documents(self):
+        """Documents de la fiche, hors archivés, quel que soit le contexte : la liste des ensembles (archivés
+        compris) et les contrôles lisent la flotte en active_test=False, qui ramènerait aussi les documents
+        retirés de la fiche (audit du 25 octobre, M15)."""
+        self.ensure_one()
+        return self.document_ids.filtered("active")
+
     def _latest_documents(self):
-        """Document le plus récent (dernière expiration) de chaque nature."""
+        """Document le plus récent (dernière expiration) de chaque nature, hors archivés."""
         self.ensure_one()
         latest = {}
-        for doc in self.document_ids.sorted("expiry_date", reverse=True):
+        for doc in self._active_documents().sorted("expiry_date", reverse=True):
             latest.setdefault(doc.kind, doc)
         return latest
 
@@ -196,9 +206,21 @@ class EguitraTransportRotation(models.Model):
         le passage par « en route » des rotations chargées après sa mise en service."""
         return []
 
+    def _depart_refusal(self):
+        """Pourquoi l'utilisateur ne fait pas partir cette rotation ; None s'il le peut. Faire partir un camion
+        est un geste du parc : profils admin et exploitation, jamais finance ni direction, verrou en service
+        ou non (règle arrêtée avec HSSEQ le 26/10/2026). Le module HSSEQ y ajoute les sites du chef de parc."""
+        self.ensure_one()
+        if self.env.su or set(DEPART_PROFILES) & set(self.env.user._eguitra_profiles()):
+            return None
+        return "Le départ en route est donné par le parc (profil Exploitation) ou un administrateur."
+
     def action_depart(self):
         """Départ en route, évalué par le serveur au moment de la demande (jamais en file hors ligne)."""
         for rot in self:
+            refusal = rot._depart_refusal()
+            if refusal:
+                raise AccessError(refusal)
             if rot.state != "draft":
                 raise UserError(f"Rotation {rot._label()} : seule une rotation saisie part en route.")
             blockers = rot._departure_blockers()

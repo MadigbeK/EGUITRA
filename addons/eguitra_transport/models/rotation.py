@@ -20,11 +20,12 @@ société, l'excédent est déduit de la facture du client et/ou porté en créa
 """
 
 from odoo import Command, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tools import float_compare, float_round
 
 from odoo.addons.eguitra_finance.models.syscohada import OPENING_JOURNAL
 
+from ..nombres import fmt_int
 from .product import volume_correction_factor
 from .settings import CLAIMED, DEDUCTED, SHORTAGE_RULES
 
@@ -226,7 +227,7 @@ class EguitraTransportRotation(models.Model):
         self.ensure_one()
         if not self.route_id:
             return self.env["eguitra.transport.tariff"]
-        return self.route_id._tariff_for(self.partner_id, self.product_id)
+        return self.route_id._tariff_for(self.partner_id, self.product_id, self.date_loading)
 
     @api.depends("partner_id", "route_id", "product_id", "company_id")
     def _compute_shortage_tolerance(self):
@@ -387,18 +388,59 @@ class EguitraTransportRotation(models.Model):
                 route = self.env["eguitra.transport.route"].browse(vals["route_id"])
                 partner = self.env["res.partner"].browse(vals["partner_id"])
                 product = Product.browse(vals["product_id"]) if vals.get("product_id") else Product._default_product()
-                vals["rate"] = route._rate_for(partner, product)
+                # Tarif en vigueur à la date de chargement, même pour une saisie synchronisée plus tard.
+                vals["rate"] = route._rate_for(partner, product, fields.Date.to_date(vals.get("date_loading")))
             if vals.get("vehicle_id") and not vals.get("driver_id"):
                 vals["driver_id"] = self.env["eguitra.transport.vehicle"].browse(vals["vehicle_id"]).driver_id.id or False
         rotations = super().create(vals_list)
         rotations._apply_tax_rules()
         return rotations
 
+    @api.constrains("volume_loaded", "volume_delivered", "rate", "fuel_liters", "distance_km",
+                    *[c for c, _l in ENTRY_COSTS])
+    def _check_not_negative(self):
+        """Volumes, distance, carburant, tarif et frais ne sont jamais négatifs (audit du 25 octobre, M12) ;
+        la reprise n'y est pas soumise."""
+        if self.env.context.get("eguitra_transport_reprise"):
+            return
+        labels = {"volume_loaded": "volume chargé", "volume_delivered": "volume livré", "rate": "tarif",
+                  "fuel_liters": "carburant (litres)", "distance_km": "distance",
+                  **{c: label.lower() for c, label in ENTRY_COSTS}}
+        for rot in self:
+            negative = [label for field, label in labels.items() if (rot[field] or 0) < 0]
+            if negative:
+                raise ValidationError(f"Rotation {rot._label()} : valeur négative refusée ({', '.join(negative)}).")
+
+    def _lock_reason(self):
+        """Pourquoi une rotation validée ne bouge plus (audit du 25 octobre, I-T6) : son mois est clôturé
+        (comptes arrêtés, factures à établir passées), ou elle figure à un relevé de propriétaire dont les
+        pièces sont préparées. None si rien ne la fige."""
+        self.ensure_one()
+        company = self.company_id
+        lock = max([d for d in (company.fiscalyear_lock_date, company.hard_lock_date) if d], default=None)
+        if lock and self.date_loading and self.date_loading <= lock:
+            return f"le mois du {self.date_loading:%d/%m/%Y} est clôturé"
+        statement = self.env["eguitra.transport.owner.statement"].sudo().search(
+            [("rotation_ids", "in", self.id), ("state", "=", "posted")], limit=1)
+        if statement:
+            return f"elle figure au relevé {statement.name}, dont les pièces sont préparées"
+        return None
+
+    def _check_unlocked(self, action):
+        if self.env.context.get("eguitra_transport_reprise"):
+            return
+        for rot in self.filtered(lambda r: r.state in ("done", "invoiced")):
+            reason = rot._lock_reason()
+            if reason:
+                raise UserError(f"Rotation {rot._label()} : {action} impossible, {reason}.")
+
     def write(self, vals):
         vals = self._legacy_vals(vals)
         locked = self.filtered(lambda r: r.state == "invoiced")
         if locked and set(vals) - {"note", "state", "invoice_id", "shortage_claim_move_id"}:
             raise UserError("Une rotation facturée ne se modifie plus ; établissez un avoir si nécessaire.")
+        if set(vals) - {"note", "state", "invoice_id", "shortage_claim_move_id"}:
+            self._check_unlocked("modification")
         result = super().write(vals)
         if TAX_TRIGGERS & set(vals):
             self._apply_tax_rules()
@@ -434,10 +476,12 @@ class EguitraTransportRotation(models.Model):
     def action_cancel(self):
         if self.filtered(lambda r: r.state == "invoiced"):
             raise UserError("Une rotation facturée ne peut pas être annulée.")
+        self._check_unlocked("annulation")
         self.write({"state": "cancelled"})
         return True
 
     def action_reset(self):
+        self._check_unlocked("remise en saisie")
         self.filtered(lambda r: r.state in ("done", "cancelled")).write({"state": "draft"})
         return True
 
@@ -464,16 +508,20 @@ class EguitraTransportRotation(models.Model):
         }
 
     def _invoice_line_vals(self, account):
+        """Ligne de la rotation : quantité 1 au montant exact (volume facturable × tarif). La précision des
+        quantités de facture (deux décimales) arrondirait 39,875 m³ à 39,88 ; le volume à trois décimales et
+        le tarif au m³ sont écrits dans le libellé (audit du 25 octobre, I-T3)."""
         self.ensure_one()
         billed = self.volume_delivered or self.volume_loaded
-        label = f"Transport {self.product_id.name.lower()} {self.route_id.name}, {fmt_m3(billed)}"
+        label = (f"Transport {self.product_id.name.lower()} {self.route_id.name}, {fmt_m3(billed)} à "
+                 f"{fmt_int(self.rate)} {self.currency_id.name} le m³")
         if self.delivery_note:
             label += f", {fmt_bl(self.delivery_note)}"
         label += f" ({self.name}, {self.vehicle_id.name}, {self.date_loading:%d/%m/%Y})"
         return {
             "name": label,
-            "quantity": billed,
-            "price_unit": self.rate,
+            "quantity": 1,
+            "price_unit": self.revenue,
             "account_id": account.id,
             "analytic_distribution": self._analytic_distribution(),
         }

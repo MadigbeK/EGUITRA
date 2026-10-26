@@ -233,3 +233,49 @@ class TestAuth(ApiCase):
             self.assertEqual((status, body["error"]), (401, "invalid_credentials"))
         status, _b = self.call("POST", "/auth/password", dict(payload, old_password=PASSWORD), token=token)
         self.assertEqual(status, 429, "Essais de l'ancien mot de passe bornés")
+
+    def test_session_sans_code_refusee_au_retablissement_de_la_double_authentification(self):
+        """Audit du noyau, I-A4 : une session ouverte pendant la suspension ne survit pas à son rétablissement."""
+        params = self.env["ir.config_parameter"].sudo()
+        params.set_param("eguitra_api.mfa_required", "0")
+        status, session = self.call("POST", "/auth/login", {"login": "fatou", "password": PASSWORD, "app": "finance"})
+        self.assertEqual((status, session.get("status")), (200, "ok"), session)
+        status, nouvelle = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 200, "Pendant la suspension, la session se renouvelle")
+
+        params.set_param("eguitra_api.mfa_required", "1")
+        status, body = self.call("GET", "/auth/me", token=nouvelle["access_token"])
+        self.assertEqual((status, body["error"]), (401, "mfa_required"), "Refusée dès le rétablissement, sans attendre")
+        status, body = self.call("POST", "/auth/refresh", {"refresh_token": nouvelle["refresh_token"]})
+        self.assertEqual((status, body["error"]), (401, "mfa_required"), "Elle ne se renouvelle plus")
+        self.env.invalidate_all()  # jetons écrits par le serveur de test
+        Token = self.env["eguitra.api.token"]
+        lignee = Token._find(nouvelle["refresh_token"], "refresh").family
+        self.assertTrue(all(Token.search([("family", "=", lignee)]).mapped("revoked")), "Toute la lignée est révoquée")
+
+        # Une session ouverte avec le code garde sa marque d'un renouvellement à l'autre.
+        session = self.open_session("fatou")
+        status, nouvelle = self.call("POST", "/auth/refresh", {"refresh_token": session["refresh_token"]})
+        self.assertEqual(status, 200, nouvelle)
+        self.assertTrue(Token._find(nouvelle["refresh_token"], "refresh").mfa_passed)
+        status, _b = self.call("GET", "/auth/me", token=nouvelle["access_token"])
+        self.assertEqual(status, 200)
+
+    def test_session_de_rotations_limitee_a_la_saisie(self):
+        """Audit du noyau, I-A5 : la session de Rotations (jusqu'à 90 jours) n'ouvre que Rotations."""
+        self._create_user("mariam.admin", "admin")
+        session = self.open_session("mariam.admin", app="mobile")
+        mobile = session["access_token"]
+        status, me = self.call("GET", "/auth/me", token=mobile)
+        self.assertEqual((status, me["session_app"]), (200, "mobile"), me)
+        status, body = self.call("GET", "/admin/users", token=mobile)
+        self.assertEqual((status, body["error"]), (403, "session_restricted"), "Pas d'administration depuis Rotations")
+        status, body = self.call("POST", "/auth/password", {"old_password": "faux", "new_password": "Nouveau-2026-Mot"},
+                                 token=mobile)
+        self.assertEqual((status, body["error"]), (401, "invalid_credentials"), "Le mot de passe se change depuis Rotations")
+
+        bureau = self.open_session("mariam.admin", app="finance", secret=session["_secret"])["access_token"]
+        status, _users = self.call("GET", "/admin/users", token=bureau)
+        self.assertEqual(status, 200, "Connecté au bureau, le même compte garde tous ses droits")
+        status, me = self.call("GET", "/auth/me", token=bureau)
+        self.assertEqual(me["session_app"], "finance")

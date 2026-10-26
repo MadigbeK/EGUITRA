@@ -13,7 +13,7 @@ import { parseNumber, type Message, type OfficialRate, type RateGap, type Ref, t
 // Profils de la route d'écriture des routes et des tarifs du noyau (WRITE) : la direction lit seulement.
 const SAISIE: Profile[] = ["admin", "finance", "exploitation"];
 
-interface Tariff { id: number; partner: Ref; product: string | null; rate: number; shortage_tolerance: number | null; shortage_price: number | null; official_gap: RateGap | null }
+interface Tariff { id: number; partner: Ref; product: string | null; rate: number; date_from: string | null; shortage_tolerance: number | null; shortage_price: number | null; official_gap: RateGap | null }
 interface RouteRow extends RouteStandards {
   id: number; name: string; distance_km: number; distance_return_km: number | null; round_trip_km: number; round_trip_inconsistent: boolean;
   duration_days: number | null; default_rate: number; tariffs: Tariff[]; fuel_per_km: number | null;
@@ -23,22 +23,28 @@ interface RouteRow extends RouteStandards {
   official_suggestion: OfficialRate | null;
 }
 
-/** Tarif envoyé au noyau : un seul par client et par produit (le noyau met à jour celui qui existe). */
-interface TarifEnvoye { partner_id: number; product: string | null; rate: number }
+/**
+ * Tarif envoyé au noyau : un seul par client, par produit et par date de début (le noyau met à jour
+ * celui qui existe). Un tarif renégocié commence à sa date ; le précédent vaut pour les chargements d'avant.
+ */
+interface TarifEnvoye { partner_id: number; product: string | null; rate: number; date_from: string | null }
+
+const memeTarif = (a: TarifEnvoye, b: TarifEnvoye) =>
+  a.partner_id === b.partner_id && (a.product ?? null) === (b.product ?? null) && (a.date_from ?? null) === (b.date_from ?? null);
 
 /**
- * Tarifs d'une route à renvoyer en entier : celui du même client et du même produit est remplacé (un
- * tarif renégocié ne s'ajoute pas à l'ancien) ; retire : tarif supprimé (finance).
+ * Tarifs d'une route à renvoyer en entier : celui du même client, du même produit et de la même date est
+ * remplacé ; un autre s'ajoute ; retire : tarif supprimé (finance).
  */
 function tarifsDe(route: RouteRow, change?: TarifEnvoye, retire?: number): TarifEnvoye[] {
-  const liste = route.tariffs.filter((t) => t.id !== retire).map((t) => ({ partner_id: t.partner.id, product: t.product, rate: t.rate }));
+  const liste = route.tariffs.filter((t) => t.id !== retire).map((t) => ({ partner_id: t.partner.id, product: t.product, rate: t.rate, date_from: t.date_from }));
   if (!change) return liste;
-  const i = liste.findIndex((t) => t.partner_id === change.partner_id && (t.product ?? null) === (change.product ?? null));
+  const i = liste.findIndex((t) => memeTarif(t, change));
   return i >= 0 ? liste.map((t, j) => (j === i ? change : t)) : [...liste, change];
 }
 
 const VIDE_ROUTE = { name: "", distance_km: "", distance_return_km: "", duration_days: "", default_rate: "" };
-const VIDE_TARIF = { route_id: "", partner_id: "", product: "", rate: "" };
+const VIDE_TARIF = { route_id: "", partner_id: "", product: "", rate: "", date_from: "" };
 
 /** Routes, coûts standard, prix du carburant, tarifs négociés et conditions de manquant. */
 export function RoutesTarifs() {
@@ -94,11 +100,12 @@ export function RoutesTarifs() {
     const route = routes?.find((x) => x.id === Number(tariff.route_id));
     const rate = parseNumber(tariff.rate);
     if (!route || rate === null) return;
-    const change = { partner_id: Number(tariff.partner_id), product: tariff.product || null, rate };
-    const ancien = route.tariffs.find((t) => t.partner.id === change.partner_id && (t.product ?? null) === change.product);
+    const change = { partner_id: Number(tariff.partner_id), product: tariff.product || null, rate, date_from: tariff.date_from || null };
+    const ancien = route.tariffs.find((t) => memeTarif({ partner_id: t.partner.id, product: t.product, rate: t.rate, date_from: t.date_from }, change));
     setEnvoi("tarif");
     const ok = await patchRoute(route, { tariffs: tarifsDe(route, change) },
-      ancien ? `Tarif remplacé : ${fmtInt(ancien.rate)} → ${fmtInt(rate)} GNF par m³.` : "Tarif enregistré.");
+      ancien ? `Tarif remplacé : ${fmtInt(ancien.rate)} → ${fmtInt(rate)} GNF par m³.`
+        : change.date_from ? `Nouveau tarif à partir du ${fmtDate(change.date_from)} ; le précédent vaut pour les chargements d'avant.` : "Tarif enregistré.");
     setEnvoi(null);
     if (ok) setTariff(VIDE_TARIF);
   }
@@ -179,11 +186,12 @@ export function RoutesTarifs() {
             { key: "route", label: "Route", render: (t) => t.route.name, sortValue: (t) => t.route.name },
             { key: "partner", label: "Client", render: (t) => t.partner.name, sortValue: (t) => t.partner.name },
             { key: "product", label: "Produit", render: (t) => productLabel(t.product) },
+            { key: "date_from", label: "À partir du", render: (t) => (t.date_from ? fmtDate(t.date_from) : <span className="text-muted">Toujours</span>), sortValue: (t) => t.date_from ?? "" },
             { key: "rate", label: "Tarif par m³ (GNF)", align: "right", render: (t) => (
               <span className="inline-flex items-center gap-2">
                 <EcartBareme gap={t.official_gap} />
                 <NombreSurPlace label={`Tarif de ${t.partner.name} (GNF par m³)`} disabled={!saisie} className="w-28" value={t.rate}
-                  onCommit={(n) => void patchRoute(t.route, { tariffs: tarifsDe(t.route, { partner_id: t.partner.id, product: t.product, rate: n ?? 0 }) }, `Tarif de ${t.partner.name} enregistré.`)} />
+                  onCommit={(n) => void patchRoute(t.route, { tariffs: tarifsDe(t.route, { partner_id: t.partner.id, product: t.product, rate: n ?? 0, date_from: t.date_from }) }, `Tarif de ${t.partner.name} enregistré.`)} />
               </span>
             ) },
             { key: "shortage_tolerance", label: "Tolérance (%)", align: "right", render: (t) => <NombreSurPlace nullable label={`Tolérance de manquant de ${t.partner.name} (%)`} disabled={!finance} className="w-24" placeholder="–" value={t.shortage_tolerance} onCommit={(n) => void envoyer(`/transport/tariffs/${t.id}`, { shortage_tolerance: n }, `Conditions de manquant de ${t.partner.name} enregistrées.`)} /> },
@@ -194,12 +202,15 @@ export function RoutesTarifs() {
           ]} />
         )}
         {saisie && routes && (
-          <div className="grid grid-cols-1 items-start gap-2 border-t border-line p-3 md:grid-cols-5">
+          <div className="grid grid-cols-1 items-start gap-2 border-t border-line p-3 md:grid-cols-6">
             <Field label="Route"><Select value={tariff.route_id} onChange={(e) => setTariff({ ...tariff, route_id: e.target.value })} placeholder="Route…" options={routes.map((x) => ({ value: x.id, label: x.name }))} /></Field>
             <Field label="Client"><Select value={tariff.partner_id} onChange={(e) => setTariff({ ...tariff, partner_id: e.target.value })} placeholder="Client…" options={(ref?.clients ?? []).map((c) => ({ value: c.id, label: c.name }))} /></Field>
             <Field label="Produit"><Select value={tariff.product} onChange={(e) => setTariff({ ...tariff, product: e.target.value })} placeholder="Tous produits" options={(ref?.products ?? []).map((p) => ({ value: p.code, label: p.label }))} /></Field>
             <Field label="Tarif par m³ (GNF)" error={nombreIllisible(tariff.rate) ? AIDE_NOMBRE : undefined}>
               <Input inputMode="decimal" aria-invalid={nombreIllisible(tariff.rate) || undefined} className={cx("font-mono", CHAMP_INVALIDE)} value={tariff.rate} onChange={(e) => setTariff({ ...tariff, rate: e.target.value })} />
+            </Field>
+            <Field label="À partir du" hint="Vide : remplace le tarif sans date">
+              <Input type="date" value={tariff.date_from} onChange={(e) => setTariff({ ...tariff, date_from: e.target.value })} />
             </Field>
             <Button variant="primary" className="mt-6" loading={envoi === "tarif"} disabled={!tariff.route_id || !tariff.partner_id || !parseNumber(tariff.rate)} onClick={() => void enregistrerTarif()}>
               Enregistrer le tarif

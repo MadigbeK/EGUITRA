@@ -64,10 +64,34 @@ PROFILE_ENTITY = {
 }
 
 
+# Application dont la session n'ouvre que certaines routes (méthode, route déclarée) : la session de
+# Rotations, jusqu'à 90 jours sur un téléphone du parc, ne sert qu'à la saisie des rotations et au
+# compte (profil, mot de passe). Elle n'ouvre ni Transport (rentabilité, tarifs) ni Finance dans le même
+# navigateur : il faut s'y connecter.
+SESSION_ROUTES = {
+    "mobile": {
+        "name": "Rotations",
+        "routes": frozenset({
+            ("GET", "/auth/me"),
+            ("POST", "/auth/password"),
+            ("GET", "/transport/referentials"),
+            ("GET", "/transport/rotations"),
+            ("POST", "/transport/sync"),
+        }),
+    },
+}
+
+
 def module_entity(route):
     return next((entity for prefix, entity in MODULE_ENTITY.items() if route.startswith(prefix)), None)
 
 
+def _que(nom):
+    """« que » élidé devant une voyelle : « qu'EGUITRA GROUP », « que MB AxisPro Consulting »."""
+    return "qu'" if nom[:1].upper() in "AEIOUYÉÈÊÀÂÎÔÛ" else "que "
+
+
 def wrong_company_message(entity):
-    return (f"Ce module ne concerne que {ENTITY_NAMES[entity]} : choisissez cette société dans la colonne "
-            "de gauche, ou ouvrez l'application qui la sert.")
+    nom = ENTITY_NAMES[entity]
+    return (f"Ce module ne concerne {_que(nom)}{nom} : choisissez cette société en haut de l'écran, "
+            "ou ouvrez l'application qui la sert.")

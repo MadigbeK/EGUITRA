@@ -10,9 +10,11 @@ import { Rosace } from "@/components/guilloche";
 import { BarreMenus, ListeMenus } from "@/components/shell/Menus";
 import { APPS, ESPACES, appFromPath, type AppCode } from "@/lib/config";
 import { NAV, accueilFinance, accueilRh, navFor, type NavSection } from "@/lib/nav";
+import { MESSAGE_RESEAU } from "@/lib/erreurs";
 import type { Company, Me } from "@/lib/types";
 import { PANNEAU, Squelette, cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
+import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/VeilleInactivite";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
 
 function initials(name: string) {
@@ -105,11 +107,13 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
 
   const logout = useCallback(async () => {
     await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    // Les autres onglets du navigateur rejoignent aussi la page de connexion.
+    annoncerDeconnexion("volontaire");
     window.location.href = `/login?app=${app}`;
   }, [app]);
 
-  async function switchCompany(id: number) {
-    if (id === me.company_id) return;
+  /** Change de société ; rend le message d'échec, ou null quand la page se recharge. */
+  async function switchCompany(id: number): Promise<string | null> {
     const res = await fetch("/api/session/company", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -117,25 +121,59 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
     }).catch(() => null);
     // Rechargement complet : aucune donnée de l'autre société ne doit rester affichée (les écrans
     // gardent en mémoire les réponses déjà reçues).
-    if (res?.ok) window.location.reload();
+    if (res?.ok) {
+      window.location.reload();
+      return null;
+    }
+    return res ? "Changement de société refusé : rechargez la page puis réessayez." : MESSAGE_RESEAU;
   }
 
-  const passwordBanner = me.password_change_required && (
-    <div className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
-      <AlertTriangle className="h-4 w-4 flex-none text-warn" />
-      <span>
-        Votre mot de passe est provisoire.{" "}
-        <Link href="/compte/mot-de-passe" className="font-semibold text-warn underline underline-offset-2">
-          Choisissez votre mot de passe
-        </Link>
-        .
-      </span>
-    </div>
+  // Société mémorisée que l'administrateur a retirée au compte : la page s'est ouverte dans la société
+  // par défaut (requireUser). La mémoire périmée est oubliée, sans recharger, et un bandeau le dit.
+  const [societeRetiree, setSocieteRetiree] = useState(Boolean(me.societe_retiree));
+  useEffect(() => {
+    if (!me.societe_retiree) return;
+    void fetch("/api/session/company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company_id: null, app }),
+    }).catch(() => undefined);
+  }, [me.societe_retiree, app]);
+
+  // Déconnexion après inactivité (VeilleInactivite), sauf pour une session de Rotations (page du mot de
+  // passe ouverte depuis Rotations) : sa session longue et ses saisies hors réseau doivent rester.
+  const passwordBanner = (
+    <>
+      {me.session_app !== "mobile" && <VeilleInactivite app={app} />}
+      {me.password_change_required && (
+        <div className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
+          <AlertTriangle className="h-4 w-4 flex-none text-warn" />
+          <span>
+            Votre mot de passe est provisoire.{" "}
+            <Link href="/compte/mot-de-passe" className="font-semibold text-warn underline underline-offset-2">
+              Choisissez votre mot de passe
+            </Link>
+            .
+          </span>
+        </div>
+      )}
+      {societeRetiree && (
+        <div role="status" className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
+          <AlertTriangle className="h-4 w-4 flex-none text-warn" />
+          <span className="min-w-0 flex-1">
+            La société choisie précédemment n&apos;est plus ouverte à votre compte : vous travaillez dans les livres de <strong className="font-semibold">{company?.name ?? "votre société par défaut"}</strong>.
+          </span>
+          <button type="button" onClick={() => setSocieteRetiree(false)} className="grid h-7 w-7 flex-none place-items-center rounded-lg text-muted transition-colors hover:bg-panel/70 hover:text-ink" aria-label="Fermer ce message">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </>
   );
 
   if (app === "portail") {
     return (
-      <div data-app={app} data-societe="cabinet" className="min-h-screen bg-bg text-ink">
+      <div data-app={app} data-societe="cabinet" data-societe-id={me.company_id} data-utilisateur-id={me.id} data-compte={me.login} className="min-h-screen bg-bg text-ink">
         <a href="#contenu" className="sr-only z-[60] rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-ink shadow-[var(--ombre-flottante)] focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
           Aller au contenu
         </a>
@@ -158,7 +196,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   }
 
   return (
-    <div data-app={app} data-societe={entity} className="min-h-screen bg-bg text-ink">
+    // data-societe-id : société affichée, envoyée par le client de l'API à chaque appel (lib/api-client) ;
+    // data-utilisateur-id et data-compte : compte de la page, pour la reconnexion sur place (Reconnexion).
+    <div data-app={app} data-societe={entity} data-societe-id={me.company_id} data-utilisateur-id={me.id} data-compte={me.login} className="min-h-screen bg-bg text-ink">
       <a href="#contenu" className="sr-only z-[60] rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-ink shadow-[var(--ombre-flottante)] focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
         Aller au contenu
       </a>
@@ -331,8 +371,15 @@ function Bascule({ app, me, onNavigate }: { app: AppCode; me: Me; onNavigate?: (
 }
 
 /** Société de travail, en pastille dans la barre du haut ; si le compte est ouvert aux deux, on en change ici. */
-function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany: (id: number) => void }) {
-  const [open, setOpen] = useState(false);
+function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany: (id: number) => Promise<string | null> }) {
+  const [open, setOpenBrut] = useState(false);
+  // Changement en cours (société demandée) ou en échec (message) : la liste reste ouverte et le dit.
+  const [enCours, setEnCours] = useState<number | null>(null);
+  const [echec, setEchec] = useState<string | null>(null);
+  const setOpen = useCallback((v: boolean) => {
+    setOpenBrut(v);
+    if (!v) setEchec(null);
+  }, []);
   const box = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const company = me.companies.find((c) => c.id === me.company_id);
@@ -352,14 +399,27 @@ function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("mousedown", onClick);
     };
-  }, [open]);
+  }, [open, setOpen]);
 
+  async function choisir(id: number) {
+    if (id === me.company_id) return setOpen(false);
+    setEnCours(id);
+    setEchec(null);
+    const message = await onCompany(id);
+    if (message === null) return; // la page se recharge
+    setEnCours(null);
+    setEchec(message);
+  }
+
+  // Le nom de la société reste lisible à toutes les largeurs d'ordinateur (il ne l'était qu'à partir de
+  // 1 536 px) : sur deux lignes serrées sous 1 536 px (« EGUITRA GROUP / SARLU »), sur une au-delà ;
+  // seul le téléphone garde le logo seul.
   const pastille = (
     <>
       <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white shadow-[0_0_0_1px_rgb(16_36_31/0.08),0_4px_10px_-6px_rgb(16_36_31/0.3)]">
         <LogoSociete entite={entite} decoratif className="h-[18px]" />
       </span>
-      <span className="hidden max-w-[190px] truncate text-[13px] font-semibold text-ink-2 2xl:inline">{company?.name ?? "–"}</span>
+      <span className="line-clamp-2 max-w-[96px] text-left text-[11.5px] font-semibold leading-[1.2] text-ink-2 max-sm:hidden 2xl:line-clamp-1 2xl:max-w-[190px] 2xl:text-[13px]">{company?.name ?? "–"}</span>
     </>
   );
 
@@ -373,7 +433,7 @@ function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany
   }
   return (
     <div ref={box} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls={panelId} title={`Société : ${company?.name ?? ""}`} className="flex items-center gap-2 rounded-full p-0.5 pr-0.5 transition-colors hover:bg-white/80 2xl:pr-3">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={panelId} title={`Société : ${company?.name ?? ""}`} className="flex items-center gap-2 rounded-full p-0.5 pr-0.5 transition-colors hover:bg-white/80 sm:pr-2 2xl:pr-3">
         {pastille}
         <ChevronDown className={cx("hidden h-3.5 w-3.5 text-muted transition-transform duration-200 2xl:block", open && "rotate-180")} />
         <span className="sr-only">Changer de société</span>
@@ -388,20 +448,25 @@ function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany
                 key={c.id}
                 type="button"
                 aria-pressed={actif}
-                onClick={() => {
-                  setOpen(false);
-                  onCompany(c.id);
-                }}
-                className={cx("flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors", actif ? "bg-accent-doux" : "hover:bg-panel-2")}
+                disabled={enCours !== null}
+                onClick={() => void choisir(c.id)}
+                className={cx("flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors disabled:cursor-wait", actif ? "bg-accent-doux" : "hover:bg-panel-2")}
               >
                 <span className="grid h-9 w-9 flex-none place-items-center rounded-full bg-white shadow-[0_0_0_1px_rgb(16_36_31/0.08)]">
                   <LogoSociete entite={entityOf(c, app)} decoratif className="h-[18px]" />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-ink">{c.name}</span>
+                {c.id === enCours && <span aria-hidden className="n-tourne h-4 w-4 flex-none rounded-full border-2 border-accent-vif/25 border-t-accent-vif" />}
                 {actif && <Check className="h-4 w-4 flex-none text-accent" strokeWidth={2.2} />}
               </button>
             );
           })}
+          {enCours !== null && <p role="status" className="sr-only">Changement de société en cours</p>}
+          {echec && (
+            <p role="alert" className="mx-1 mb-1 mt-1.5 rounded-lg bg-danger-doux px-2.5 py-2 text-[12.5px] leading-snug text-danger">
+              {echec}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -479,6 +544,12 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
             <Link href="/compte/mot-de-passe" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
               <KeyRound className="h-4 w-4 text-muted" /> Changer le mot de passe
             </Link>
+            {/* Espace partagé de suivi des demandes au support : comptes internes seulement (pas le portail). */}
+            {app !== "portail" && (
+              <Link href="/compte/demandes" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
+                {ICONES.ListChecks && <ICONES.ListChecks className="h-4 w-4 text-muted" />} Mes demandes
+              </Link>
+            )}
             {others.map((a) => (
               <Link key={a} href={accueilDe(a, me, app)} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
                 <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: TEINTE_APP[a] }} />

@@ -118,6 +118,13 @@ class TestTransport(TransportCase):
         rot = self.env["eguitra.transport.rotation"].browse(body["results"][0]["id"])
         self.assertEqual(rot.source, "mobile")
         self.assertEqual(rot.state, "draft", "Validée ensuite au bureau")
+        status, sent = self.call("GET", "/transport/rotations?limit=30", token=token)
+        self.assertEqual(status, 200, "Rotations relit les saisies envoyées")
+        # La session de Rotations (jusqu'à 90 jours sur le téléphone) n'ouvre que la saisie : ni la
+        # rentabilité, ni le détail d'une rotation, ni les référentiels du bureau (audit du noyau, I-A5).
+        for path in ("/transport/profitability", f"/transport/rotations/{rot.id}", "/transport/vehicles"):
+            status, refus = self.call("GET", path, token=token)
+            self.assertEqual((status, refus.get("error")), (403, "session_restricted"), path)
 
         autre = self.env["res.company"].create({"name": "Société hors périmètre"})
         camion = self.env["eguitra.transport.vehicle"].create({"name": "ER-99", "capacity_liters": 30000, "company_id": autre.id})

@@ -158,7 +158,7 @@ class EguitraRhEmployee(models.Model):
                     "employee_id": emp.id, "date": emp.hire_date, "old_salary": 0, "new_salary": emp.base_salary,
                     "reason": "Embauche",
                 })
-        records._draft_payrolls()._mark_prepared()
+        records._draft_payrolls()._mark_stale()
         return records
 
     def write(self, vals):
@@ -172,7 +172,7 @@ class EguitraRhEmployee(models.Model):
         payrolls = self._draft_payrolls() if PAYROLL_FIELDS & set(vals) else None
         result = super().write(vals)
         if payrolls is not None:
-            (payrolls | self._draft_payrolls())._mark_prepared()
+            (payrolls | self._draft_payrolls())._mark_stale()
         for emp, old in changes:
             self.env["eguitra.rh.salary.change"].sudo().create({
                 "employee_id": emp.id, "date": fields.Date.context_today(self), "old_salary": old,
@@ -182,6 +182,17 @@ class EguitraRhEmployee(models.Model):
         if sync:
             self.partner_id.sudo().write({k: v or False for k, v in sync.items()})
         return result
+
+    def _base_salary_at(self, day):
+        """Salaire de base en vigueur à une date, d'après l'historique du salaire (date de chaque
+        changement) ; sans historique, le salaire du dossier. Un mois rouvert se recalcule ainsi avec son
+        salaire, et non avec celui d'aujourd'hui."""
+        self.ensure_one()
+        changes = self.sudo().salary_change_ids.sorted(lambda c: (c.date, c.id))
+        if not changes:
+            return self.base_salary
+        earlier = changes.filtered(lambda c: c.date <= day)
+        return earlier[-1].new_salary if earlier else changes[0].old_salary
 
     def _draft_payrolls(self):
         """Paies en préparation de la société du salarié dont le mois recoupe son contrat."""
@@ -315,17 +326,17 @@ class EguitraRhEmployeeLine(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         records = super().create(vals_list)
-        records.employee_id._draft_payrolls()._mark_prepared()
+        records.employee_id._draft_payrolls()._mark_stale()
         return records
 
     def write(self, vals):
         payrolls = self.employee_id._draft_payrolls()
         result = super().write(vals)
-        (payrolls | self.employee_id._draft_payrolls())._mark_prepared()
+        (payrolls | self.employee_id._draft_payrolls())._mark_stale()
         return result
 
     def unlink(self):
-        self.employee_id._draft_payrolls()._mark_prepared()
+        self.employee_id._draft_payrolls()._mark_stale()
         return super().unlink()
 
     def _amount(self, base_salary, params):

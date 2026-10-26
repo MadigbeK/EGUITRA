@@ -2,7 +2,7 @@ import json
 from datetime import date, timedelta
 from unittest.mock import patch
 
-from odoo.exceptions import ValidationError
+from odoo.exceptions import AccessError, ValidationError
 from odoo.tests import tagged
 
 from ..blocking import RotationBlocked, motif
@@ -117,7 +117,7 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual((row["payload_tonnes"], len(row["documents"])), (32, 2))
         self.assertEqual({i["code"] for i in row["document_issues"]},
                          {"document_missing:calibration", "document_missing:tightness"})
-        # Mise à jour par identifiant : le document garde son id (et sa pièce jointe), l'absent est retiré.
+        # Mise à jour par identifiant : le document garde son id (et sa pièce jointe), l'absent est archivé.
         insurance = next(d for d in row["documents"] if d["kind"] == "insurance")
         status, body = self.call("PATCH", f"/transport/vehicles/{self.truck.id}", {
             "documents": [{"id": insurance["id"], "kind": "insurance", "reference": "AS-78", "expiry_date": expiry}]}, token)
@@ -158,6 +158,27 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual(status, 403)
         status, _b = self.call("POST", f"/transport/rotations/{rot['id']}/depart", None, reader)
         self.assertEqual(status, 403)
+
+    def test_depart_reserve_au_parc(self):
+        """Faire partir un camion est un geste du parc : admin et exploitation, jamais finance ni direction."""
+        rot = self._rotation()
+        finance = self.open_session("fatou")["access_token"]
+        status, row = self.call("GET", f"/transport/rotations/{rot.id}", token=finance)
+        self.assertEqual(status, 200, row)
+        self.assertFalse(row["can_depart"])
+        self.assertIn("parc", row["depart_refusal"])
+        status, body = self.call("POST", f"/transport/rotations/{rot.id}/depart", None, finance)
+        self.assertEqual(status, 403, body)
+        self.assertEqual(rot.state, "draft")
+        fatou = self.env["res.users"].search([("login", "=", "fatou")])
+        with self.assertRaises(AccessError):
+            rot.with_user(fatou).action_depart()
+        agent = self.open_session("ibrahima")["access_token"]
+        status, listed = self.call("GET", "/transport/rotations?state=draft", token=agent)
+        row = next(r for r in listed["items"] if r["id"] == rot.id)
+        self.assertEqual((row["can_depart"], row["depart_refusal"]), (True, None))
+        status, body = self.call("POST", f"/transport/rotations/{rot.id}/depart", None, agent)
+        self.assertEqual((status, body["state"], body["can_depart"]), (200, "en_route", False), body)
 
     def test_pluriels_des_messages(self):
         self.assertEqual((pluriel(1, "rotation"), pluriel(3, "rotation"), pluriel(0, "ensemble")),

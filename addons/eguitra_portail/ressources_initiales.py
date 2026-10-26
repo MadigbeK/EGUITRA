@@ -156,8 +156,8 @@ Les anciens formats Word (.doc) et Excel (.xls), les archives ZIP et les fichier
         "rubrique": "Questions fréquentes", "kind": "faq",
         "tags": "confidentialité, accès",
         "name": "Qui voit mes documents ?",
-        "summary": "Vous et l'équipe du cabinet qui suit votre dossier, personne d'autre.",
-        "body": """Vos documents ne sont visibles que par vous et par les consultants de MB AxisPro Consulting chargés de votre dossier. Les autres porteurs n'y ont jamais accès.
+        "summary": "Vous, les personnes rattachées à votre dossier, l'équipe de MB AxisPro Consulting et sa direction ; jamais les autres porteurs.",
+        "body": """Vos documents sont visibles de vous et des autres personnes rattachées à votre dossier sur ce portail, ainsi que de l'équipe de MB AxisPro Consulting et de sa direction. Les autres porteurs n'y ont jamais accès.
 
 Le cabinet ne transmet un document à une banque ou à un bailleur qu'avec votre accord, dans le cadre de la recherche de financement.
 

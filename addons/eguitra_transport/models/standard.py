@@ -109,16 +109,27 @@ class EguitraTransportRotation(models.Model):
     billed_volume = fields.Float("Volume facturable (m³)", digits=(12, 3), compute="_compute_billed_volume",
                                  store=True, help="Volume livré, à défaut le volume chargé.")
 
-    @api.depends("revenue", "taxes_rebilled", "shortage_net_cost", "std_cost")
+    def _scale_taxes(self):
+        """Taxes du barème de la rotation (les « autres taxes payées » saisies à part n'en sont pas)."""
+        self.ensure_one()
+        return (self.specific_taxes or 0.0) - (self.specific_taxes_manual or 0.0)
+
+    @api.depends("revenue", "taxes_rebilled", "shortage_net_cost", "std_cost", "specific_taxes", "specific_taxes_manual")
     def _compute_estimated_margin(self):
         for rot in self:
-            rot.estimated_margin = rot.revenue + rot.taxes_rebilled - rot.shortage_net_cost - rot.std_cost
+            # Les taxes du barème sont connues dès la saisie : elles entrent dans la marge estimée
+            # (audit du 25 octobre, I-T4).
+            rot.estimated_margin = (rot.revenue + rot.taxes_rebilled - rot.shortage_net_cost - rot.std_cost
+                                    - rot._scale_taxes())
 
-    @api.depends("estimated_margin", "margin", "margin_rate", "revenue", "total_cost", "std_cost")
+    @api.depends("estimated_margin", "margin", "margin_rate", "revenue", "total_cost", "std_cost", "specific_taxes",
+                 "specific_taxes_manual")
     def _compute_margin_or_estimate(self):
         for rot in self:
             rot.estimated_margin_rate = (rot.estimated_margin / rot.revenue * 100) if rot.revenue else 0.0
-            rot.margin_estimated = not rot.total_cost and bool(rot.std_cost)
+            # « Aucun frais saisi » : hors taxes du barème, que le noyau calcule lui-même.
+            entered = rot.total_cost - rot._scale_taxes()
+            rot.margin_estimated = abs(entered) < 0.5 and bool(rot.std_cost)
             rot.margin_or_estimate = rot.estimated_margin if rot.margin_estimated else rot.margin
             rot.margin_or_estimate_rate = rot.estimated_margin_rate if rot.margin_estimated else rot.margin_rate
 

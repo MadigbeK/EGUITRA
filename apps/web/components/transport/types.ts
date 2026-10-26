@@ -17,7 +17,7 @@ export interface Product {
 export interface Referentials {
   vehicles: Array<{ id: number; name: string; tractor_plate: string | null; capacity_liters: number; driver_id: number | null; state: string; vehicle_kind?: VehicleKind; payload_tonnes?: number | null }>;
   drivers: Array<{ id: number; name: string; phone: string | null }>;
-  routes: Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ partner_id: number; product: string | null; rate: number }> } & RouteStandards>;
+  routes: Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ partner_id: number; product: string | null; rate: number; date_from?: string | null }> } & RouteStandards>;
   clients: Ref[];
   products: Array<{ id: number; code: string; label: string }>;
   costs: Array<{ code: string; label: string }>;

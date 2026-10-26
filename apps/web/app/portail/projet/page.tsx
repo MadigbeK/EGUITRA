@@ -9,9 +9,9 @@ import { EnTete, TexteRiche } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { CarteFinancement } from "@/components/portail/projet/Financements";
 import { FilProjet } from "@/components/portail/projet/FilProjet";
-import { Avatar, LienBouton, PasDeDossier, jour } from "@/components/portail/projet/outils";
+import { Avatar, LienBouton, PasDeDossier, jour, erreurLisible } from "@/components/portail/projet/outils";
 import { useApi } from "@/lib/api-client";
-import { fmtGNF, fmtShort } from "@/lib/format";
+import { INSECABLE, fmtGNF, fmtPct, fmtShort } from "@/lib/format";
 import type { DossierRef, Projet } from "@/lib/portail-types";
 
 const ETAT_DOSSIER: Record<DossierRef["state"], { tone: Tone; label: string }> = {
@@ -40,14 +40,18 @@ export default function MonProjet() {
   const { espace, dossier } = usePortail();
   const { data, error, mutate } = useApi<Projet>(dossier ? `/portail/dossiers/${dossier.id}/projet` : null);
   if (espace && !espace.dossiers.length) return <PasDeDossier />;
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement de votre projet…" />;
 
   const d = data.dossier;
   const devise = d.currency.name || d.currency.symbol || "GNF";
   const etat = ETAT_DOSSIER[d.state];
-  const sollicite = data.fundings.filter((f) => f.state !== "rejected" && f.state !== "withdrawn").reduce((s, f) => s + (f.amount_requested || 0), 0);
-  const accorde = data.fundings.reduce((s, f) => s + (f.amount_granted || 0), 0);
+  // Résumé du noyau, le même qu'à l'accueil : pistes actives seulement, dans la devise des financements.
+  const resume = data.fundings_summary;
+  const deviseFinancements = resume.currency || devise;
+  const sollicite = resume.requested;
+  const accorde = resume.granted;
+  const couverture = accorde > 0 && d.financing_need > 0 && deviseFinancements === devise ? Math.min(100, Math.round((accorde / d.financing_need) * 100)) : null;
   const part = d.investment > 0 && d.financing_need > 0 ? Math.round((d.financing_need / d.investment) * 100) : null;
   const ouvertes = data.fundings.filter((f) => f.state !== "rejected" && f.state !== "withdrawn");
   const closes = data.fundings.filter((f) => f.state === "rejected" || f.state === "withdrawn");
@@ -99,18 +103,18 @@ export default function MonProjet() {
 
       {/* Chiffres clés */}
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 xl:gap-4">
-        <Kpi label="Investissement prévu" value={d.investment ? `${fmtShort(d.investment)} ${devise}` : "À préciser"} hint={d.investment ? fmtGNF(d.investment, devise) : undefined} />
+        <Kpi label="Investissement prévu" value={d.investment ? `${fmtShort(d.investment)}${INSECABLE}${devise}` : "À préciser"} hint={d.investment ? fmtGNF(d.investment, devise) : undefined} />
         <Kpi
           label="Besoin de financement"
-          value={d.financing_need ? `${fmtShort(d.financing_need)} ${devise}` : "À préciser"}
-          hint={part !== null ? `${part} % de l'investissement` : undefined}
+          value={d.financing_need ? `${fmtShort(d.financing_need)}${INSECABLE}${devise}` : "À préciser"}
+          hint={part !== null ? `${fmtPct(part, 0)} de l'investissement` : undefined}
         />
-        <Kpi label="Financements sollicités" value={`${fmtShort(sollicite)} ${devise}`} hint={`${ouvertes.length} piste${ouvertes.length > 1 ? "s" : ""} en cours`} />
+        <Kpi label="Financements sollicités" value={`${fmtShort(sollicite)}${INSECABLE}${deviseFinancements}`} hint={`${resume.count} piste${resume.count > 1 ? "s" : ""} en cours`} />
         <Kpi
           label="Financements accordés"
-          value={`${fmtShort(accorde)} ${devise}`}
+          value={`${fmtShort(accorde)}${INSECABLE}${deviseFinancements}`}
           tone={accorde > 0 ? "ok" : "neutral"}
-          hint={accorde <= 0 ? "En attente des décisions" : d.financing_need > 0 ? `${Math.min(100, Math.round((accorde / d.financing_need) * 100))} % du besoin couvert` : "Accordés par les financeurs"}
+          hint={accorde <= 0 ? "En attente des décisions" : couverture !== null ? `${fmtPct(couverture, 0)} du besoin couvert` : "Accordés par les financeurs"}
         />
       </div>
 
@@ -133,7 +137,7 @@ export default function MonProjet() {
             <Ligne icon={Coins} label="Investissement">{d.investment ? fmtGNF(d.investment, devise) : "À préciser"}</Ligne>
             <Ligne icon={HandCoins} label="Besoin de financement">
               {d.financing_need ? fmtGNF(d.financing_need, devise) : "À préciser"}
-              {part !== null && <span className="block text-[12px] font-normal text-muted">soit {part} % de l'investissement</span>}
+              {part !== null && <span className="block text-[12px] font-normal text-muted">soit {fmtPct(part, 0)} de l'investissement</span>}
             </Ligne>
           </dl>
         </Card>

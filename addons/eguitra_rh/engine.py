@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
 STAGIAIRE_EXEMPTION = 1_200_000
+# Ligne du bulletin qui retire du net un avantage en nature (code de la rubrique suivi de ce suffixe).
+IN_KIND_SUFFIX = "_NAT"
 
 
 def gnf(value):
@@ -70,6 +72,21 @@ def fmt_days(value):
     return fixe(value, 1)
 
 
+def accord(n, un, plusieurs=None):
+    """Forme accordée au nombre, sans le nombre : singulier jusqu'à 1 (« 0 jour », « 1,5 jour »)."""
+    return un if abs(n) < 2 else (plusieurs or un + "s")
+
+
+def pluriel(n, un, plusieurs=None):
+    """Nombre entier suivi de sa forme accordée : « 1 rotation validée », « 3 rotations validées »."""
+    return f"{fmt_int(n)} {accord(n, un, plusieurs)}"
+
+
+def jours(value):
+    """« 2,5 jours », « 1,0 jour » : durée à une décimale, accordée."""
+    return f"{fmt_days(value)} {accord(value, 'jour')}"
+
+
 def fmt_ratio(value):
     """Ratio sans unité, toujours à deux décimales : « 1,25 »."""
     return fixe(value, 2)
@@ -95,6 +112,8 @@ class Params:
     vf_rate: float = 6.0
     training_tax_rate: float = 2.0
     monthly_hours: float = 173.33
+    # Stagiaires : rémunération exonérée de VF et de taxe de formation jusqu'à ce montant (CGI, art. 203 ter).
+    intern_exemption: float = STAGIAIRE_EXEMPTION
 
 
 @dataclass
@@ -111,6 +130,10 @@ class Item:
     base: float | None = None
     rate: float | None = None
     quantity: float | None = None
+    # Avantage en nature (logement, véhicule…) : soumis comme un gain, mais fourni et non versé, il est
+    # retiré du net (ligne « fourni en nature », contrepartie in_kind_account dans l'écriture de paie).
+    in_kind: bool = False
+    in_kind_account: str = ""
 
 
 def rts_amount(base, brackets):
@@ -156,7 +179,11 @@ def compute(params, gains, deductions, contract_type="cdi", presence=1.0):
 
     taxable_gross = sum(i.amount for i in gains if i.taxable)
     allowances = sum(i.amount for i in gains if i.taxable and i.exempt)
-    exempt = gnf(min(max(allowances, 0), max(gross, 0) * params.allowance_exempt_cap / 100.0))
+    # Plafond des indemnités exonérées : un pourcentage des gains soumis (CNSS ou RTS), hors
+    # remboursements de frais, qui l'élargissaient (2 000 000 de frais annulaient la RTS). Assiette à
+    # faire valider par l'expert-comptable (CGI, art. 55-3 : « du salaire brut »).
+    subject = max(sum(i.amount for i in gains if i.cnss or i.taxable), 0)
+    exempt = gnf(min(max(allowances, 0), subject * params.allowance_exempt_cap / 100.0))
     taxable_base = max(taxable_gross - exempt, 0)
     rts_base = max(taxable_base - cnss_employee, 0)
     rts, marginal = rts_amount(rts_base, params.brackets)
@@ -167,13 +194,15 @@ def compute(params, gains, deductions, contract_type="cdi", presence=1.0):
     if contract_type == "apprentissage":
         employer_base = 0
     elif contract_type == "stage":
-        employer_base = max(paid - STAGIAIRE_EXEMPTION, 0)
+        employer_base = max(paid - params.intern_exemption, 0)
     else:
         employer_base = paid
     vf = gnf(employer_base * params.vf_rate / 100.0)
     training_tax = gnf(employer_base * params.training_tax_rate / 100.0)
 
-    other = sum(i.amount for i in deductions)
+    # Avantages en nature : comptés dans le brut et les assiettes, retirés du net (fournis, non versés).
+    in_kind = [i for i in gains if i.in_kind]
+    other = sum(i.amount for i in deductions) + sum(i.amount for i in in_kind)
     net = gross - cnss_employee - rts - other
     lines = [_line(i) for i in gains]
     if cnss_employee:
@@ -183,6 +212,9 @@ def compute(params, gains, deductions, contract_type="cdi", presence=1.0):
         lines.append({"code": "RTS", "name": "Retenue sur traitements et salaires", "kind": "deduction",
                       "base": rts_base, "rate": None, "quantity": None, "amount": rts})
     lines += [_line(i) for i in deductions]
+    lines += [{"code": f"{i.code}{IN_KIND_SUFFIX}", "name": f"{i.name} (fourni en nature)", "kind": "deduction",
+               "base": None, "rate": None, "quantity": None, "amount": i.amount, "account_code": i.in_kind_account}
+              for i in in_kind if i.amount]
     if cnss_employer:
         lines.append({"code": "CNSS_PAT", "name": "Cotisation CNSS patronale", "kind": "employer", "base": cnss_base,
                       "rate": params.cnss_employer_rate, "quantity": None, "amount": cnss_employer})

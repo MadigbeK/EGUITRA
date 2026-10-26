@@ -212,6 +212,15 @@ class TestProfilAchats(FinanceDataMixin, ApiCase):
         }, token=self.token)
         self.assertEqual(status, 200, body)
         self.assertEqual(body["account"]["id"], self.acc_purchase.id, "Le compte vient de la catégorie")
+        status, patched = self.call("PATCH", f"/finance/commitments/{body['id']}", {
+            "object": "Contrat de nettoyage des bureaux et des ateliers", "amount": 13_000_000,
+            "category_id": self.category.id,
+        }, token=self.token)
+        self.assertEqual((status, patched.get("amount")), (200, 13_000_000), patched)
+        self.assertEqual(patched["account"]["id"], self.acc_purchase.id, "Modifié : le compte vient toujours de la catégorie")
+        status, _b = self.call("PATCH", f"/finance/commitments/{body['id']}", {"account_id": self.acc_interest.id},
+                               token=self.token)
+        self.assertEqual(status, 403, "Ni à la modification, un compte choisi hors catégorie")
         status, quoted = self._upload(f"/finance/commitments/{body['id']}/quote", name="devis.pdf")
         self.assertEqual(status, 200, quoted)
         self.assertEqual(quoted["quote"]["name"], "devis.pdf")

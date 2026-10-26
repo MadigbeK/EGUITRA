@@ -19,6 +19,9 @@ from . import test_treasury
 from . import test_budget
 from . import test_categories
 from . import test_partners
+from . import test_pieces_reglement
+from . import test_pieces_brouillons
+from . import test_noyau_pieces
 from . import test_disputes
 from . import test_chart
 from . import test_audit_coverage
@@ -27,3 +30,9 @@ from . import test_consolidation
 from . import test_saisie_libre
 from . import test_takeover_conventions
 from . import test_tableau_de_bord_design
+from . import test_api_dette
+from . import test_api_seuils
+from . import test_dette_reglements
+from . import test_tva_credit_reporte
+from . import test_pilotage_definitions
+from . import test_api_assets_garde_fous

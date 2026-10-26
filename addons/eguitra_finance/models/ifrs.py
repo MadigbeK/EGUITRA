@@ -120,10 +120,14 @@ class EguitraIfrsPolicy(models.Model):
 
     @api.model
     def _ecl_move(self, company, day):
-        return self.env["account.move"].sudo().search([
+        """Pertes attendues comptabilisées pour le mois de la date. Une pièce extournée (extourne validée)
+        ne compte plus : le recalcul est alors permis, comme le dit le refus de post_expected_credit_loss."""
+        moves = self.env["account.move"].sudo().search([
             ("company_id", "=", company.id), ("eguitra_close_kind", "=", "ecl"), ("state", "=", "posted"),
+            ("reversed_entry_id", "=", False),
             ("date", ">=", day.replace(day=1)), ("date", "<=", day.replace(day=1) + relativedelta(months=1, days=-1)),
-        ], limit=1)
+        ])
+        return moves.filtered(lambda m: not m.reversal_move_ids.filtered(lambda r: r.state == "posted"))[:1]
 
     @api.model
     def post_expected_credit_loss(self, company, day):
@@ -156,30 +160,43 @@ class EguitraIfrsPolicy(models.Model):
 
     @api.model
     def restatements(self, companies, day):
-        """Retraitements SYSCOHADA vers IFRS de l'exercice jusqu'à la date, toutes sociétés demandées."""
+        """Retraitements SYSCOHADA vers IFRS du résultat de l'exercice jusqu'à la date, toutes sociétés
+        demandées. Un retraitement du résultat est une variation : l'écart non comptabilisé à la date moins
+        celui de l'ouverture de l'exercice (veille du premier jour), qui appartient aux exercices antérieurs
+        (capitaux propres d'ouverture en IFRS). Ajouter le solde ferait compter deux fois, d'un exercice sur
+        l'autre, la perte attendue, les prestations non facturées et les écarts de change déjà retraités."""
         metrics = self.env["eguitra.finance.metrics"].sudo()
         syscohada = self.env["eguitra.syscohada"].sudo()
         Close = self.env["eguitra.period.close"].sudo()
         main = companies[:1]
         fy_start, _fy_end = metrics.fiscal_year_bounds(main, day)
+        opening = fy_start - relativedelta(days=1)
         net = syscohada.income_statement(companies, fy_start, day)["totals"].get("XI", 0.0)
         ifrs9 = ifrs15 = ias21 = 0.0
         ecl_notes, accrual_notes = [], []
-        for company in companies:
-            ecl = self.expected_credit_loss(company, day)
-            if ecl["posted"]:
-                ecl_notes.append(f"{company.name} : pertes attendues comptabilisées")
-            else:
-                ifrs9 -= ecl["adjustment"]
+
+        def unbilled(company, at):
+            """Prestations livrées non facturées à la date, faute de factures à établir passées ce jour-là."""
             booked = self.env["account.move"].sudo().search_count([
                 ("company_id", "=", company.id), ("eguitra_close_kind", "=", "accrual"), ("state", "=", "posted"),
-                ("date", "=", day),
+                ("date", "=", at),
             ])
             if booked:
+                return 0.0, True
+            return sum(t["amount"] for t in Close._close_accrual_targets(company, at).values()), False
+
+        for company in companies:
+            # Ajustement non comptabilisé (perte attendue moins dépréciation déjà passée) : sa variation sur
+            # l'exercice ; comptabilisé (pièce ECL), il est nul à la date.
+            ecl = self.expected_credit_loss(company, day)
+            ifrs9 -= ecl["adjustment"] - self.expected_credit_loss(company, opening)["adjustment"]
+            if ecl["posted"]:
+                ecl_notes.append(f"{company.name} : pertes attendues comptabilisées")
+            amount, booked = unbilled(company, day)
+            if booked:
                 accrual_notes.append(f"{company.name} : factures à établir passées au {day:%d/%m/%Y}")
-            else:
-                ifrs15 += sum(t["amount"] for t in Close._close_accrual_targets(company, day).values())
-            ias21 += sum(Close._fx_open_items(company, day).values())
+            ifrs15 += amount - unbilled(company, opening)[0]
+            ias21 += sum(Close._fx_open_items(company, day).values()) - sum(Close._fx_open_items(company, opening).values())
         rate = max(self._get(main).deferred_tax_rate, 0.0)
         quantified = ifrs9 + ifrs15 + ias21
         ias12 = -quantified * rate / 100 if rate else None

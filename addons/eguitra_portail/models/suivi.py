@@ -22,6 +22,7 @@ NOTIFICATION_KINDS = [
     ("event", "Événement"),
     ("funding", "Financement"),
     ("resource", "Ressource"),
+    ("feedback", "Avis d'un porteur"),
 ]
 FEEDBACK_TOPICS = [
     ("global", "Accompagnement"),
@@ -96,7 +97,7 @@ class PortailNotification(models.Model):
             self._isolated(meeting, lambda m: self._remind(
                 m.dossier_id.portal_user_ids, f"meeting:{m.id}:{m.start:%Y-%m-%d %H:%M}", "meeting",
                 f"Rappel : rendez-vous {jour(m.start)} à {local(m.start):%H h %M}", m.subject,
-                "/portail/rendez-vous", dossier=m.dossier_id))
+                f"/portail/rendez-vous?dossier={m.dossier_id.id}", dossier=m.dossier_id))
         for event in self.env["portail.event"].sudo().search(
                 [("state", "=", "published"), ("start", ">=", now), ("start", "<", horizon)]):
             self._isolated(event, lambda e: self._remind(

@@ -12,7 +12,7 @@ from odoo.addons.eguitra_finance.controllers.exporting import export_meta, table
 from ..models.ownership import OWNERSHIPS
 from ..models.settings import OWNER_COST_BASES
 from ..nombres import fixe, fmt_money, fmt_rate, fmt_volume
-from .transport import ACCOUNTING, READ, SETTINGS, _get, _move_ref, _partner, _ref
+from .transport import ACCOUNTING, READ, SETTINGS, _get, _int, _move_ref, _partner, _ref
 
 STATES = {"draft": "Établi", "posted": "Pièces préparées"}
 KINDS = {"charge": "Charge de l'ensemble", "commission": "Commission", "owner": "Part du propriétaire"}
@@ -38,7 +38,7 @@ def _rule_values(data):
     if "vehicle_id" in data:
         vehicle = request.env["eguitra.transport.vehicle"]
         if data["vehicle_id"]:
-            vehicle = _get("eguitra.transport.vehicle", int(data["vehicle_id"]), "Ensemble routier")
+            vehicle = _get("eguitra.transport.vehicle", _int(data["vehicle_id"], "Ensemble routier"), "Ensemble routier")
         values["vehicle_id"] = vehicle.id or False
     if "ownership" in data:
         if data["ownership"] and data["ownership"] not in dict(OWNERSHIPS):
@@ -140,8 +140,9 @@ class EguitraTransportOwners(http.Controller):
     # ─── Règles de répartition ────────────────────────────────────────────
 
     @api_route("/transport/share-rules", profiles=ACCOUNTING)
-    def share_rules(self, **_kw):
-        Rule = request.env["eguitra.transport.share.rule"].with_context(active_test=False)
+    def share_rules(self, **kw):
+        """Règles en vigueur ; archived=1 : avec les règles archivées (retirées, gardées pour les relevés passés)."""
+        Rule = request.env["eguitra.transport.share.rule"].with_context(active_test=not kw.get("archived"))
         return [_rule_row(r) for r in Rule.search([])]
 
     @api_route("/transport/share-rules", methods=("POST",), profiles=SETTINGS)
@@ -170,8 +171,8 @@ class EguitraTransportOwners(http.Controller):
         rule = request.env["eguitra.transport.share.rule"].with_context(active_test=False).browse(rule_id).exists()
         if not rule:
             raise ApiError(404, "not_found", "Règle introuvable.")
-        rule.unlink()
-        return {"status": "ok"}
+        rule.active = False
+        return _rule_row(rule)
 
     # ─── Prix du carburant ────────────────────────────────────────────────
 
@@ -227,7 +228,7 @@ class EguitraTransportOwners(http.Controller):
         start, end = _period(data)
         Statement = request.env["eguitra.transport.owner.statement"]
         if data.get("vehicle_id"):
-            vehicles = _get("eguitra.transport.vehicle", int(data["vehicle_id"]), "Ensemble routier")
+            vehicles = _get("eguitra.transport.vehicle", _int(data["vehicle_id"], "Ensemble routier"), "Ensemble routier")
         else:
             vehicles = Statement._vehicles_with_statement(request.env.company)
         if not vehicles:

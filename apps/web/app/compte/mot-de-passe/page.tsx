@@ -21,9 +21,10 @@ export async function generateViewport(): Promise<Viewport> {
 export default async function PasswordPage() {
   const fromCookie = (await cookies()).get(COOKIES.app)?.value;
   // Application de connexion (y compris Rotations) ; l'application mobile n'a pas de cadre : celui de la finance sert.
+  // Le compte est lu sous l'application de connexion : une session de Rotations change ici son mot de passe.
   const loginApp = isAppCode(fromCookie) ? fromCookie : "finance";
   const app = loginApp === "mobile" ? "finance" : loginApp;
-  const me = await requireUser(app, { allowTemporaryPassword: true });
+  const me = await requireUser(loginApp, { allowTemporaryPassword: true });
   return (
     <AppShell app={app} me={me}>
       <PasswordForm app={loginApp} required={me.password_change_required} />

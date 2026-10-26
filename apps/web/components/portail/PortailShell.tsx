@@ -8,12 +8,14 @@ import {
   AlertTriangle, BadgeCheck, Bell, BookOpen, Calculator, Calendar, Check, ChevronDown, Clock, FileStack, FolderOpen,
   KeyRound, LayoutDashboard, ListChecks, LogOut, Mail, Menu, Sparkles, UserCog, Users, X, type Icon,
 } from "@/components/icons";
-import { ErrorBox, FEUILLE, PANNEAU, cx } from "@/components/ui";
+import { VeilleInactivite } from "@/components/shell/VeilleInactivite";
+import { Button, ErrorBox, FEUILLE, PANNEAU, Select, cx, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi } from "@/lib/api-client";
-import { fmtDateTime } from "@/lib/format";
+import { pluriel } from "@/lib/format";
 import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
 import type { Me } from "@/lib/types";
-import { KIND_ICON } from "./commun";
+import { KIND_ICON, dateHeure, lienNotification } from "./commun";
+import { erreurLisible } from "./projet/outils";
 
 /* ─── Contexte du portail : l'espace du porteur et le dossier choisi ─────── */
 
@@ -27,6 +29,24 @@ type PortailContext = {
 
 const Contexte = createContext<PortailContext | null>(null);
 const MEMOIRE = "portail-dossier";
+
+/** Dossier choisi lors d'une visite précédente (rien côté serveur, ni si le stockage est indisponible). */
+function lireMemoire(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return Number(window.localStorage.getItem(MEMOIRE)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function ecrireMemoire(id: number) {
+  try {
+    window.localStorage.setItem(MEMOIRE, String(id));
+  } catch {
+    // Stockage indisponible : le choix vaut pour la visite.
+  }
+}
 
 /** Espace du porteur, dossier choisi (plusieurs dossiers possibles) et rafraîchissement des compteurs. */
 export function usePortail(): PortailContext {
@@ -142,8 +162,17 @@ function Navigation({ counts, onNavigate }: { counts: Espace["counts"] | undefin
 
 function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined; dossier: PortailContext["dossier"]; choisir: (id: number) => void }) {
   const [open, setOpen] = useState(false);
-  if (!dossier) return <div className="h-[74px] animate-pulse rounded-2xl bg-panel-2" />;
-  const plusieurs = (espace?.dossiers.length ?? 0) > 1;
+  // Squelette pendant le chargement seulement : un espace sans dossier le dit, au lieu d'attendre sans fin.
+  if (!espace) return <div className="h-[74px] animate-pulse rounded-2xl bg-panel-2" />;
+  if (!dossier) {
+    return (
+      <div className={cx(FEUILLE, "p-3")}>
+        <div className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-muted">Mon dossier</div>
+        <div className="mt-1 text-[13.5px] leading-snug text-ink-2">Aucun dossier n'est encore ouvert à votre nom.</div>
+      </div>
+    );
+  }
+  const plusieurs = espace.dossiers.length > 1;
   return (
     <div className="relative">
       <button
@@ -180,6 +209,27 @@ function ChoixDossier({ espace, dossier, choisir }: { espace: Espace | undefined
   );
 }
 
+/**
+ * Sur téléphone et tablette, la colonne du dossier est dans le tiroir : un porteur à plusieurs dossiers voit
+ * ici, sur chaque page, le dossier où il écrit et dépose, et en change sans ouvrir le menu.
+ */
+function BandeauDossier({ espace, dossier, choisir }: { espace: Espace | undefined; dossier: PortailContext["dossier"]; choisir: (id: number) => void }) {
+  if (!espace || espace.dossiers.length < 2 || !dossier) return null;
+  return (
+    <div className="no-print flex items-center gap-2.5 border-b border-line bg-panel-2 px-4 py-2 sm:px-6 lg:hidden">
+      <FolderOpen className="h-4 w-4 flex-none text-accent" />
+      <span className="flex-none text-[12.5px] font-medium text-muted">Dossier</span>
+      <Select
+        aria-label="Dossier en cours"
+        value={dossier.id}
+        onChange={(e) => choisir(Number(e.target.value))}
+        options={espace.dossiers.map((d) => ({ value: d.id, label: `${d.reference} · ${d.name}` }))}
+        className="min-h-8 min-w-0 flex-1 py-1 text-[13px] font-semibold"
+      />
+    </div>
+  );
+}
+
 function Consultant({ dossier }: { dossier: PortailContext["dossier"] }) {
   const c = dossier?.consultant;
   if (!c) return null;
@@ -203,16 +253,30 @@ function Consultant({ dossier }: { dossier: PortailContext["dossier"] }) {
 
 /* ─── Cloche des notifications ─────────────────────────────────────────── */
 
+const CLOCHE = 12;
+
+/** Question de la confirmation « Tout marquer comme lu » (l'action ne se défait pas). */
+export function texteToutLire(n: number): string {
+  return n > 1
+    ? `Les ${pluriel(n, "notification non lue", "notifications non lues")} resteront consultables, mais ne seront plus signalées comme nouvelles.`
+    : "La notification non lue restera consultable, mais ne sera plus signalée comme nouvelle.";
+}
+
 function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const id = useId();
   const router = useRouter();
-  const { data, error, mutate } = useApi<Notifications>(open ? "/portail/notifications" : null);
+  // La cloche n'affiche que les dernières : la page Notifications donne la suite.
+  const { data, error, mutate } = useApi<Notifications>(open ? `/portail/notifications?limit=${CLOCHE}` : null);
+  const [toutEnCours, setToutEnCours] = useState(false);
+  const [erreurLecture, setErreurLecture] = useState<unknown>(null);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    const onClick = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    // Une fenêtre de confirmation ouverte par-dessus garde les touches et les clics pour elle.
+    const fenetre = () => Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !fenetre() && setOpen(false);
+    const onClick = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && !fenetre() && setOpen(false);
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onClick);
     return () => {
@@ -221,10 +285,31 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
     };
   }, [open]);
 
-  async function lire(ids?: number[]) {
-    await apiSend("POST", "/portail/notifications/lues", { ids }).catch(() => undefined);
+  /** Une notification ouverte : marquée lue en passant, la page visée s'ouvre quoi qu'il arrive. */
+  async function lire(ids: number[]) {
+    try {
+      await apiSend("POST", "/portail/notifications/lues", { ids });
+    } catch {
+      // Elle reste signalée comme nouvelle : le porteur la retrouvera telle quelle.
+    }
     void mutate();
     onChange();
+  }
+
+  async function toutLire() {
+    const oui = await demanderConfirmation(texteToutLire(count), { titre: "Tout marquer comme lu ?", action: "Tout marquer comme lu" });
+    if (!oui) return;
+    setToutEnCours(true);
+    setErreurLecture(null);
+    try {
+      await apiSend("POST", "/portail/notifications/lues", {});
+      void mutate();
+      onChange();
+    } catch (e) {
+      setErreurLecture(e);
+    } finally {
+      setToutEnCours(false);
+    }
   }
 
   return (
@@ -237,32 +322,46 @@ function Cloche({ count, onChange }: { count: number; onChange: () => void }) {
         <div id={id} className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-[min(92vw,380px)]")}>
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="text-sm font-semibold">Notifications</span>
-            {count > 0 && <button type="button" onClick={() => lire()} className="text-[12.5px] font-semibold text-accent hover:underline">Tout marquer comme lu</button>}
+            {count > 0 && (
+              <Button variant="ghost" size="sm" loading={toutEnCours} onClick={() => void toutLire()} className="-mr-2 text-accent">
+                Tout marquer comme lu
+              </Button>
+            )}
           </div>
+          {erreurLecture !== null && (
+            <div className="border-b border-line p-1.5">
+              <ErrorBox error={erreurLisible(erreurLecture)} titre="Les notifications n'ont pas pu être marquées comme lues." onRetry={() => void toutLire()} />
+            </div>
+          )}
           <ul className="max-h-[420px] overflow-y-auto p-1.5">
             {!data &&
               (error ? (
                 <li className="p-1.5">
-                  <ErrorBox error={error} onRetry={() => mutate()} />
+                  <ErrorBox error={erreurLisible(error)} onRetry={() => mutate()} />
                 </li>
               ) : (
                 <li className="px-3 py-6 text-center text-sm text-muted">Chargement…</li>
               ))}
             {data?.items.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Aucune notification.</li>}
-            {data?.items.slice(0, 12).map((n) => {
+            {data?.items.slice(0, CLOCHE).map((n) => {
               const I = KIND_ICON[n.kind] ?? Bell;
               return (
                 <li key={n.id}>
                   <button
                     type="button"
-                    onClick={() => { if (!n.read) void lire([n.id]); setOpen(false); if (n.link) router.push(n.link); }}
+                    onClick={() => {
+                      if (!n.read) void lire([n.id]);
+                      setOpen(false);
+                      const lien = lienNotification(n);
+                      if (lien) router.push(lien);
+                    }}
                     className={cx("flex w-full gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-panel-2", !n.read && "bg-accent-doux/45")}
                   >
                     <span className="mt-0.5 grid h-8 w-8 flex-none place-items-center rounded-full bg-panel-2 text-accent"><I className="h-4 w-4" /></span>
                     <span className="min-w-0 flex-1">
                       <span className={cx("block text-[13.5px] leading-snug", n.read ? "text-ink-2" : "font-semibold text-ink")}>{n.title}</span>
                       {n.body && <span className="mt-0.5 block truncate text-[12.5px] text-muted">{n.body}</span>}
-                      <span className="mt-0.5 block text-[11.5px] text-muted/80">{fmtDateTime(n.date)}</span>
+                      <span className="mt-0.5 block text-[11.5px] text-muted/80">{dateHeure(n.date)}</span>
                     </span>
                     {!n.read && <span aria-hidden className="mt-2 h-2 w-2 flex-none rounded-full bg-accent-vif" />}
                   </button>
@@ -339,34 +438,36 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
   const router = useRouter();
   const [tiroir, setTiroir] = useState(false);
   const { data: espace, error: erreurEspace, mutate } = useApi<Espace>("/portail/espace", { refreshInterval: 60_000 });
-  const [choisi, setChoisi] = useState<number | null>(null);
+  const voulu = Number(params.get("dossier")) || null;
+  const [memo, setMemo] = useState<number | null>(lireMemoire);
 
+  // Un dossier désigné par l'adresse (lien d'une notification, d'une étape, d'un agenda) devient le dossier
+  // choisi et mémorisé : les pages ouvertes ensuite par le menu restent sur lui, au lieu de revenir en
+  // silence au dossier d'avant. Une adresse qui désigne un dossier qui n'est pas le sien est ignorée.
   useEffect(() => {
-    const voulu = Number(params.get("dossier"));
-    if (voulu) {
-      setChoisi(voulu);
-      return;
+    if (!espace || !voulu || voulu === memo) return;
+    if (espace.dossiers.some((d) => d.id === voulu)) {
+      setMemo(voulu);
+      ecrireMemoire(voulu);
     }
-    try {
-      const memo = Number(window.localStorage.getItem(MEMOIRE));
-      if (memo) setChoisi(memo);
-    } catch {
-      // stockage indisponible : premier dossier
-    }
-  }, [params]);
+  }, [espace, voulu, memo]);
 
-  const dossier = useMemo(() => espace?.dossiers.find((d) => d.id === choisi) ?? espace?.dossiers[0], [espace, choisi]);
+  const dossier = useMemo(() => {
+    const dossiers = espace?.dossiers ?? [];
+    return dossiers.find((d) => d.id === voulu) ?? dossiers.find((d) => d.id === memo) ?? dossiers[0];
+  }, [espace, voulu, memo]);
   const choisir = useCallback(
     (id: number) => {
-      setChoisi(id);
-      try {
-        window.localStorage.setItem(MEMOIRE, String(id));
-      } catch {
-        // stockage indisponible : le choix vaut pour la page
+      setMemo(id);
+      ecrireMemoire(id);
+      // L'adresse ne doit plus imposer l'autre dossier ; ses autres paramètres restent.
+      if (voulu && voulu !== id) {
+        const reste = new URLSearchParams(params.toString());
+        reste.delete("dossier");
+        router.replace(reste.size ? `${pathname}?${reste.toString()}` : pathname);
       }
-      if (params.get("dossier")) router.replace(pathname);
     },
-    [params, pathname, router],
+    [voulu, params, pathname, router],
   );
   const rafraichir = useCallback(() => void mutate(), [mutate]);
   const valeur = useMemo(() => ({ espace, dossier, choisir, rafraichir, me }), [espace, dossier, choisir, rafraichir, me]);
@@ -391,6 +492,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
   return (
     <Contexte.Provider value={valeur}>
       <div data-app="portail" data-societe="cabinet" className="min-h-screen bg-bg text-ink">
+        <VeilleInactivite app="portail" />
         {tiroir && (
           <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
             <div className="n-apparaitre absolute inset-0 bg-foret/45" onClick={() => setTiroir(false)} />
@@ -433,6 +535,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
             </div>
             <div aria-hidden className="h-[3px] bg-accent" />
           </header>
+          <BandeauDossier espace={espace} dossier={dossier} choisir={choisir} />
           {me.password_change_required && (
             <div className="flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink lg:px-10">
               <AlertTriangle className="h-4 w-4 flex-none text-warn" />
@@ -443,7 +546,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
             </div>
           )}
           <main key={pathname} className="n-page mx-auto min-w-0 max-w-[1240px] px-4 pb-28 pt-6 sm:px-6 md:pt-8 lg:px-10 lg:pb-12">
-            {erreurEspace && !espace ? <ErrorBox error={erreurEspace} onRetry={rafraichir} /> : children}
+            {erreurEspace && !espace ? <ErrorBox error={erreurLisible(erreurEspace)} onRetry={rafraichir} /> : children}
           </main>
         </div>
 
