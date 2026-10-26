@@ -8,6 +8,8 @@ source, et facultativement valeur, seuil, durée, lieu et identifiant de la viol
 L'import est tout ou rien : une ligne illisible le refuse en entier, avec la liste des lignes en cause ; une
 violation déjà importée (même identifiant et même source, ou même véhicule, type et horodatage) est ignorée.
 La rotation en cours du véhicule à cette date est rattachée, et son chauffeur à défaut d'un chauffeur reconnu.
+La date et l'heure peuvent venir d'une seule colonne ou de deux (« Date » et « Heure »). Un import refusé
+laisse sa trace (import « refusé » avec ses erreurs).
 
 Le cockpit compte les violations par 100 voyages (départs du mois)."""
 
@@ -20,7 +22,8 @@ from odoo import api, fields, models
 from .common import VIOLATION_TYPES, departed_states
 
 HEADERS = {
-    "occurred_at": ("date", "date heure", "date et heure", "horodatage", "heure", "occurred at", "timestamp"),
+    "occurred_at": ("date", "date heure", "date et heure", "horodatage", "occurred at", "timestamp"),
+    "time": ("heure", "heure de l evenement", "heure locale", "time"),
     "vehicle": ("vehicule", "ensemble", "immatriculation", "code vehicule", "vehicle", "plaque"),
     "driver": ("chauffeur", "conducteur", "driver"),
     "violation_type": ("type", "type de violation", "violation", "infraction", "evenement", "alerte"),
@@ -76,6 +79,27 @@ def parse_datetime(value):
     raise ValueError(f"date illisible : {text}")
 
 
+def parse_time(value):
+    """Heure d'une cellule : heure du classeur, horodatage (son heure), fraction de jour, ou texte hh:mm[:ss]
+    (« 8h30 » accepté)."""
+    if isinstance(value, time):
+        return value.replace(microsecond=0)
+    if isinstance(value, datetime):
+        return value.time().replace(microsecond=0)
+    if isinstance(value, (int, float)) and 0 <= value < 1:
+        seconds = min(round(value * 86400), 86399)
+        return time(seconds // 3600, seconds % 3600 // 60, seconds % 60)
+    text = str(value or "").strip().lower().replace(" ", "").replace("h", ":").rstrip(":")
+    if not text:
+        raise ValueError("heure absente")
+    for fmt in ("%H:%M:%S", "%H:%M", "%H"):
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    raise ValueError(f"heure illisible : {value}")
+
+
 def parse_number(value):
     if value in (None, ""):
         return None
@@ -108,6 +132,10 @@ class EguitraHsseqTelematicsImport(models.Model):
 
     name = fields.Char("Fichier", required=True)
     company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
+    state = fields.Selection([("done", "Importé"), ("rejected", "Refusé")], "État", required=True, default="done",
+                             index=True)
+    errors = fields.Json("Erreurs", help="Lignes en erreur d'un import refusé : [{line, message}].")
+    error_count = fields.Integer("Lignes en erreur")
     source = fields.Char("Source", help="Système ou fournisseur : OBC, GPS, IVMS…")
     imported_by = fields.Many2one("res.users", "Importé par", required=True, default=lambda self: self.env.uid)
     imported_at = fields.Datetime("Importé le", required=True, default=fields.Datetime.now)
@@ -192,8 +220,11 @@ class EguitraHsseqTelematicsViolation(models.Model):
                 continue
             try:
                 moment = parse_datetime(cell(row, "occurred_at"))
+                # Colonne « Heure » à part : elle complète la date.
+                if "time" in index and cell(row, "time") not in (None, ""):
+                    moment = datetime.combine(moment.date(), parse_time(cell(row, "time")))
             except ValueError as e:
-                errors.append({"line": number, "message": f"Date : {e}."})
+                errors.append({"line": number, "message": f"Date ou heure : {e}."})
                 continue
             if moment > fields.Datetime.now() + timedelta(minutes=5):
                 errors.append({"line": number, "message": "Date dans le futur."})
@@ -217,9 +248,11 @@ class EguitraHsseqTelematicsViolation(models.Model):
             external = str(cell(row, "external_id") or "").strip()[:128] or False
             key = ("ext", source, external) if external else ("row", vehicle.id, kind, moment)
             Violation = self.sudo()
-            exists = Violation.search_count([("external_id", "=", external), ("source", "=", source)]) if external \
-                else Violation.search_count([("vehicle_id", "=", vehicle.id), ("violation_type", "=", kind),
-                                             ("occurred_at", "=", moment)])
+            company = [("company_id", "=", vehicle.company_id.id)]
+            exists = Violation.search_count(company + [("external_id", "=", external), ("source", "=", source)]) \
+                if external else Violation.search_count(company + [("vehicle_id", "=", vehicle.id),
+                                                                   ("violation_type", "=", kind),
+                                                                   ("occurred_at", "=", moment)])
             if key in seen or exists:
                 duplicates += 1
                 continue
@@ -230,8 +263,8 @@ class EguitraHsseqTelematicsViolation(models.Model):
             if label:
                 driver = drivers.get((vehicle.company_id.id, plain(label)), driver)
                 if not driver:
-                    warnings.append({"line": number, "message": "Chauffeur non reconnu : celui de la rotation est "
-                                                                "retenu s'il y en a une."})
+                    warnings.append({"line": number, "message": f"Chauffeur non reconnu : « {label} » ; celui de la "
+                                                                "rotation est retenu s'il y en a une."})
             driver = driver or rotation.driver_id
             values.append({
                 "company_id": vehicle.company_id.id, "occurred_at": moment, "vehicle_id": vehicle.id,
