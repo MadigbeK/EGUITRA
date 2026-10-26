@@ -239,8 +239,13 @@ native, sans solution d'attente dans Rotations web ; conducteurs équipés de t�
   mot de passe provisoire, ouverture hors réseau, Rotations reprises de Rotations web (file d'envoi
   SQLite, envoi idempotent), mise en page téléphone et tablette, bureau simulé en développement.
   29 tests, `tsc`, `expo-doctor` et paquet Android au vert ; parcours vérifiés dans l'aperçu web.
-- Bloquant pour brancher la recette : une entrée de la passerelle pour les applications natives
-  (`Authorization: Bearer`, routes de session rendant les jetons), à demander à l'intégrateur.
+- Entrée native de la passerelle faite le 26/10 au soir sur la branche, après l'audit de Local :
+  `apps/web/app/api/natif` (jeton porté par l'application, routes de session rendant les jetons,
+  seuls les codes terrain et mobile et les routes du compte, de /transport/ et de /hsseq/ ; 9 tests
+  `npm test`) et sessions `terrain` bornées à leurs routes dans le noyau
+  (`SESSION_ROUTES["terrain"]`, seule action `depart` sur une rotation ; tests eguitra_api et
+  eguitra_transport écrits, à lancer sur le serveur). `next build` non lancé : disque du poste plein.
+  Intégration par la recette après RH et HSSEQ (Local).
 - 26 octobre : relecture indépendante du socle, défauts corrigés (renouvellement de session,
   réseau Android, envois concurrents, bord à bord) ; système de conception « terrain » de DESIGN ;
   « Ma journée » par profil, file d'envoi commune, contrôle avant départ, alcootest masqué et

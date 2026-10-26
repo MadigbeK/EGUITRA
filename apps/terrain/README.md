@@ -72,8 +72,8 @@ Socle :
   réseau, au retour au premier plan et toutes les deux minutes.
 - Mise en page téléphone (onglets) et tablette ou paysage (saisie à gauche, listes à droite).
 
-Pas encore branché sur la recette : la passerelle publique n'accepte aujourd'hui que les cookies du
-navigateur et refuse les envois sans en-tête `Origin`. Voir « Prérequis côté serveur ».
+Pas encore branché sur la recette : l'entrée native de la passerelle est prête sur cette branche
+(voir « Côté serveur ») ; l'intégration passe par la recette après RH et HSSEQ.
 
 ## Lancer
 
@@ -132,16 +132,17 @@ Configuration : copier `.env.example` en `.env` (jamais versionné).
 - Déconnexion confirmée. Sans réseau (changement d'équipe), la session est oubliée sur l'appareil
   tout de suite et révoquée au bureau au premier échange réussi.
 
-## Prérequis côté serveur
+## Côté serveur
 
-À demander à la session qui conduit l'intégration, après son audit :
-
-1. Une entrée de la passerelle pour l'application native : `Authorization: Bearer` accepté sans
-   cookie ni contrôle d'origine, et des routes de session qui rendent les jetons en JSON
-   (connexion, double authentification, renouvellement, déconnexion). Le noyau reste fermé à
-   internet.
-2. Sans doute une application « terrain » dans `organisation.APPS` (noyau) et `lib/config.ts`
-   (web), quand les modules HSSEQ arriveront.
+- Entrée de la passerelle pour l'application native : `apps/web/app/api/natif` (règles dans
+  `apps/web/lib/natif.ts`, `npm test` dans `apps/web`). Jeton porté par l'application
+  (`Authorization: Bearer`), sans cookie ; routes de session rendues avec leurs jetons ; seuls
+  passent les codes `terrain` et `mobile` et les routes du compte, de `/transport/` et de `/hsseq/`.
+  `EXPO_PUBLIC_API_URL` = `https://<adresse de l'application web>/api/natif`.
+- Noyau : l'application `terrain` est déclarée par le module HSSEQ (`organisation.APPS`, branche
+  `hsseq`) ; ses sessions sont bornées à leurs routes (`organisation.SESSION_ROUTES["terrain"]`),
+  et sur une rotation à la seule action `depart`.
+- Intégration : par la recette, après RH et HSSEQ (session Local).
 
 ## Suite
 
