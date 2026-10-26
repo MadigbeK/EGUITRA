@@ -35,15 +35,22 @@ const TITRES: Record<Step["kind"], string> = {
   setup: "Double authentification",
 };
 
-export function LoginForm({ app, next, message }: { app: AppCode; next: string; message: string | null }) {
+/**
+ * Connexion en trois étapes (identifiant, code, activation de la double authentification). Sur la
+ * page de connexion, elle mène ensuite à `next`. Dans la fenêtre de reconnexion (`enFenetre`, session
+ * expirée sur une page ouverte), elle appelle `onConnecte` sans quitter la page, l'identifiant du
+ * compte déjà saisi (`identifiant`) ; la fenêtre porte alors le titre.
+ */
+export function LoginForm({ app, next, message, enFenetre = false, identifiant = "", onConnecte }: { app: AppCode; next: string; message: string | null; enFenetre?: boolean; identifiant?: string; onConnecte?: () => void | Promise<void> }) {
   const [step, setStep] = useState<Step>({ kind: "credentials" });
-  const [login, setLogin] = useState("");
+  const [login, setLogin] = useState(identifiant);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   function done() {
+    if (onConnecte) return void onConnecte();
     window.location.href = next;
   }
 
@@ -98,24 +105,27 @@ export function LoginForm({ app, next, message }: { app: AppCode; next: string; 
 
   return (
     <div>
-      <h1 className="font-display text-[30px] font-semibold leading-tight text-ink">{TITRES[step.kind]}</h1>
-      <p className="mt-2 text-sm leading-relaxed text-muted">
-        {step.kind === "credentials" && introduction(app)}
-        {step.kind === "mfa" && "Saisissez le code à 6 chiffres affiché par votre application d'authentification."}
-        {step.kind === "setup" && "Première connexion : reliez votre compte à une application d'authentification."}
-      </p>
+      {!enFenetre && <h1 className="font-display text-[30px] font-semibold leading-tight text-ink">{TITRES[step.kind]}</h1>}
+      {(!enFenetre || step.kind !== "credentials") && (
+        <p className={cx("text-sm leading-relaxed text-muted", !enFenetre && "mt-2")}>
+          {step.kind === "credentials" && introduction(app)}
+          {step.kind === "mfa" && "Saisissez le code à 6 chiffres affiché par votre application d'authentification."}
+          {step.kind === "setup" && "Première connexion : reliez votre compte à une application d'authentification."}
+        </p>
+      )}
 
-      <div className="mt-8 space-y-4">
+      <div className={cx("space-y-4", enFenetre ? (step.kind === "credentials" ? "" : "mt-4") : "mt-8")}>
         {message && step.kind === "credentials" && <Notice>{message}</Notice>}
         {error && <Notice tone="danger">{error}</Notice>}
 
         {step.kind === "credentials" && (
           <form onSubmit={submitCredentials} className="space-y-4">
             <Field label="Identifiant">
-              <Input autoComplete="username" autoFocus value={login} onChange={(e) => setLogin(e.target.value)} required className="min-h-11" />
+              <Input autoComplete="username" autoFocus={!identifiant} value={login} onChange={(e) => setLogin(e.target.value)} required className="min-h-11" />
             </Field>
             <Field label="Mot de passe">
-              <PasswordInput autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required className="min-h-11" />
+              {/* Identifiant déjà connu (reconnexion) : le mot de passe prend le focus (data-autofocus, lu par Modal). */}
+              <PasswordInput autoComplete="current-password" autoFocus={Boolean(identifiant)} data-autofocus={identifiant ? "" : undefined} value={password} onChange={(e) => setPassword(e.target.value)} required className="min-h-11" />
             </Field>
             <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" loading={busy}>
               Se connecter

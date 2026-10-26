@@ -162,7 +162,7 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
 
   if (app === "portail") {
     return (
-      <div data-app={app} data-societe="cabinet" data-societe-id={me.company_id} className="min-h-screen bg-bg text-ink">
+      <div data-app={app} data-societe="cabinet" data-societe-id={me.company_id} data-utilisateur-id={me.id} data-compte={me.login} className="min-h-screen bg-bg text-ink">
         <a href="#contenu" className="sr-only z-[60] rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-ink shadow-[var(--ombre-flottante)] focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
           Aller au contenu
         </a>
@@ -185,8 +185,9 @@ export function AppShell({ app, me, children }: { app: AppCode; me: Me; children
   }
 
   return (
-    // data-societe-id : société affichée, envoyée par le client de l'API à chaque appel (lib/api-client).
-    <div data-app={app} data-societe={entity} data-societe-id={me.company_id} className="min-h-screen bg-bg text-ink">
+    // data-societe-id : société affichée, envoyée par le client de l'API à chaque appel (lib/api-client) ;
+    // data-utilisateur-id et data-compte : compte de la page, pour la reconnexion sur place (Reconnexion).
+    <div data-app={app} data-societe={entity} data-societe-id={me.company_id} data-utilisateur-id={me.id} data-compte={me.login} className="min-h-screen bg-bg text-ink">
       <a href="#contenu" className="sr-only z-[60] rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-ink shadow-[var(--ombre-flottante)] focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
         Aller au contenu
       </a>

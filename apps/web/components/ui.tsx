@@ -997,8 +997,8 @@ export function Modal({ open, title, onClose, children, footer, wide }: { open: 
     if (!open) return;
     const avant = document.activeElement as HTMLElement | null;
     const boite = fenetre.current;
-    // Le premier champ prend le focus ; à défaut, la fenêtre elle-même.
-    const premier = boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
+    // Le champ marqué data-autofocus, sinon le premier champ, prend le focus ; à défaut, la fenêtre elle-même.
+    const premier = boite?.querySelector<HTMLElement>("[data-autofocus]:not([disabled])") ?? boite?.querySelector<HTMLElement>("input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled])");
     (premier ?? boite)?.focus();
     PILE.push(titreId);
     const onKey = (e: globalThis.KeyboardEvent) => {

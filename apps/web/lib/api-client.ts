@@ -16,10 +16,29 @@ export interface AppelOptions {
 /** Page où l'utilisateur au mot de passe provisoire choisit le sien. */
 const PAGE_MOT_DE_PASSE = "/compte/mot-de-passe";
 
-function onUnauthenticated() {
-  const here = window.location.pathname + window.location.search;
-  const app = window.location.pathname.split("/")[1] || "finance";
-  window.location.href = `/login?app=${app}&next=${encodeURIComponent(here)}`;
+/**
+ * Session expirée pendant que la page est ouverte (401) : au lieu de partir vers la page de connexion,
+ * ce qui perdait la saisie en cours, une fenêtre propose de se reconnecter sur place (chargée à la
+ * demande). Vrai une fois reconnecté sous le même compte : l'appel repart alors une fois.
+ */
+async function reconnecter(): Promise<boolean> {
+  try {
+    const { demanderReconnexion } = await import("@/components/shell/Reconnexion");
+    return await demanderReconnexion();
+  } catch {
+    // Fenêtre impossible à charger (réseau coupé entre-temps) : l'appel échoue avec « Session expirée ».
+    return false;
+  }
+}
+
+/** Appel qui, sur une session expirée, attend la reconnexion puis repart une fois. */
+async function avecSession<R>(appel: () => Promise<R>): Promise<R> {
+  try {
+    return await appel();
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 401 || !(await reconnecter())) throw e;
+    return appel();
+  }
 }
 
 /**
@@ -55,7 +74,7 @@ function lireJson(texte: string): unknown {
  */
 async function parse(res: Response) {
   if (res.status === 401) {
-    onUnauthenticated();
+    await res.body?.cancel().catch(() => undefined);
     throw new ApiError(401, { error: "unauthenticated", message: "Session expirée : reconnectez-vous." });
   }
   const body = lireJson(await res.text());
@@ -88,9 +107,9 @@ async function envoyer<R>(path: string, init: RequestInit, lire: (res: Response)
   }
 }
 
-/** Requête JSON à la passerelle. */
+/** Requête JSON à la passerelle (reconnexion sur place si la session a expiré). */
 function appeler(path: string, init: RequestInit, timeout?: number): Promise<unknown> {
-  return envoyer(path, init, parse, timeout);
+  return avecSession(() => envoyer(path, init, parse, timeout));
 }
 
 export async function apiGet<T>(path: string, options?: AppelOptions): Promise<T> {
@@ -130,7 +149,7 @@ export async function apiDownload(path: string, fallbackName: string, corps?: un
     corps === undefined
       ? { headers: appHeader() }
       : { method: "POST", headers: { "Content-Type": "application/json", ...appHeader() }, body: JSON.stringify(corps) };
-  await envoyer(path, init, async (res) => {
+  const enregistrer = async (res: Response) => {
     if (!res.ok) {
       await parse(res);
       return;
@@ -147,7 +166,8 @@ export async function apiDownload(path: string, fallbackName: string, corps?: un
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-  });
+  };
+  await avecSession(() => envoyer(path, init, enregistrer));
 }
 
 export function useApi<T>(path: string | null, config?: SWRConfiguration<T, ApiError>) {
