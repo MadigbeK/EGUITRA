@@ -200,6 +200,19 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 25 octobre 2026, après-midi : audit approfondi, interrompu par la limite d'usage
+
+- Fait et poussé (branche claude/bold-shannon-gpg2hv, 87a097c), pas encore en production :
+  - exploitation : supervision du proxy, des accès HTTPS et des certificats ; rappels quotidiens des écarts connus ; `infra/maj-securite.sh` ; `infra/export-reversibilite.sh` ; `restore-test.sh --offsite` ; 15 jours de journaux hors site ; disponibilité hors seules maintenances annoncées (`release.sh --annoncee`) ;
+  - noyau : piste d'audit complète, avec un test qui signale tout modèle oublié ; contrôle « cohérence des références » ; exports jusqu'à 100 000 lignes ; politique rappelée dans le PDF « Pièces à fournir » ; lien de l'Analyse corrigé ;
+  - Transport : fiche rotation ; rotation validée par un autre compte (décision du 22/10, jamais appliquée jusque-là) ; règles de répartition modifiables ; branche du barème officiel fusionnée (correctif critique des tarifs C6, écrans corrigés) ;
+  - web : lecture unique des nombres saisis (`lireNombre`) ;
+  - documents : dossier de conception à jour, dossier technique, PV de recette et de mise en production, compte rendu de comité, registre des prérequis.
+- Recette : images de base mises à jour (Odoo 19.0 du 17/10, PostgreSQL 16 du 21/10) ; 404 tests sur 404, avant la fusion du barème.
+- En cours, non fusionné, dans des copies isolées : corrections des écrans Finance (deux lots), AxisPro, portail des porteurs, Transport et Rotations hors ligne, RH, Analyse et socle web ; clôture de l'exercice avec bilan corrigé (le résultat de 2026 ne doit plus rester dans CJ en 2027) ; espace de suivi des demandes. L'audit du noyau Python n'a pas encore rendu son rapport.
+- Reste à faire : fusionner ces branches ; `infra/test.sh` sur tous les modules ; `-u` en recette ; répétition sur une copie de la production ; `infra/release.sh` ; puis libérer le verrou et prévenir RH (rh-hsseq), TRANSPORT et OTHER (HSSEQ, lot 1).
+- À faire par le gérant : destinations des alertes (`ALERT_NTFY_URL`, `HEARTBEAT_URL` dans infra/.env) ; stockage hors site (infra/backup.env) ; relais SMTP ; double authentification à rétablir avant les données réelles ; disque de 160 Go ou accord écrit du client ; T0 et premier comité de pilotage ; signature du dossier de conception.
+
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :
 - Module `eguitra_portail` 19.0.1.0.0 (dépend d'`eguitra_axispro` sans modifier ses fichiers), 8 tests au

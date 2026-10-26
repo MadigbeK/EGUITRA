@@ -142,6 +142,18 @@ class EguitraTransportTariff(models.Model):
     )
 
     @api.depends("product_id.code")
+    @api.constrains("route_id", "partner_id", "product_id")
+    def _check_one_rate_per_client(self):
+        """Un seul tarif par client et par produit sur une route : un tarif renégocié remplace l'ancien,
+        sans quoi la rotation prendrait le premier des deux (audit du 25 octobre, C6)."""
+        for tariff in self:
+            twins = self.search_count([("id", "!=", tariff.id), ("route_id", "=", tariff.route_id.id),
+                                       ("partner_id", "=", tariff.partner_id.id),
+                                       ("product_id", "=", tariff.product_id.id)])
+            if twins:
+                raise ValidationError(f"{tariff.route_id.name} : un tarif existe déjà pour {tariff.partner_id.name} "
+                                      "et ce produit ; modifiez-le au lieu d'en ajouter un second.")
+
     def _compute_product_code(self):
         for tariff in self:
             tariff.product = tariff.product_id.code or False

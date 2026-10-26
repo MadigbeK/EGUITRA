@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, Tag } from "@/components/ui";
+import { Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, Tag, cx } from "@/components/ui";
 import { ApiError, apiSend, useApi } from "@/lib/api-client";
-import { fmtDate, fmtDec, fmtInt } from "@/lib/format";
-import { INSECABLE } from "./commun";
+import { AIDE_NOMBRE, fmtDate, fmtDec, fmtInt, nombreIllisible } from "@/lib/format";
+import { CHAMP_INVALIDE, INSECABLE, NombreSurPlace } from "./commun";
 import { SHORTAGE_RULES, parseNumber, type AccountRef, type ClientTerms, type Message, type Product, type Ref, type ShortageRule, type TransportSettings } from "./types";
 
 /** Envoi d'une modification avec message de retour ; renvoie vrai si elle a réussi. */
@@ -87,6 +87,7 @@ function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
       )}
       {editing && data && (
         <TaxForm tax={editing === "new" ? null : editing} natures={data.natures} bases={data.bases} onClose={() => setEditing(null)}
+          erreur={message?.tone === "danger" ? message.text : null}
           onSave={async (body) => {
             const ok = editing === "new" ? await send("POST", "/transport/taxes", body, "Taxe ajoutée au barème.") : await send("PATCH", `/transport/taxes/${editing.id}`, body, "Taxe modifiée.");
             if (ok) setEditing(null);
@@ -96,7 +97,7 @@ function BaremeTaxes({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function TaxForm({ tax, natures, bases, onClose, onSave }: { tax: TaxRule | null; natures: Choice[]; bases: Choice[]; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void> }) {
+function TaxForm({ tax, natures, bases, onClose, onSave, erreur }: { tax: TaxRule | null; natures: Choice[]; bases: Choice[]; onClose: () => void; onSave: (body: Record<string, unknown>) => Promise<void>; erreur: string | null }) {
   const { data: products } = useApi<Product[]>("/transport/products");
   const { data: routes } = useApi<Ref[]>("/transport/routes");
   const { data: charges } = useApi<AccountRef[]>("/finance/accounts?prefix=6&limit=2000");
@@ -109,22 +110,28 @@ function TaxForm({ tax, natures, bases, onClose, onSave }: { tax: TaxRule | null
   });
   const [busy, setBusy] = useState(false);
   const toggle = (key: "product_ids" | "route_ids", id: number) => setF({ ...f, [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id] });
+  const tauxIllisible = nombreIllisible(f.rate);
   async function save() {
+    const rate = parseNumber(f.rate);
+    if (rate === null) return;
     setBusy(true);
     await onSave({
-      ...f, rate: parseNumber(f.rate) ?? 0, account_id: f.account_id ? Number(f.account_id) : null,
+      ...f, rate, account_id: f.account_id ? Number(f.account_id) : null,
       income_account_id: f.income_account_id ? Number(f.income_account_id) : null, date_from: f.date_from || null, date_to: f.date_to || null,
     });
     setBusy(false);
   }
   return (
-    <Modal open wide title={tax ? `Taxe : ${tax.name}` : "Nouvelle taxe spécifique"} onClose={onClose} footer={<Button variant="primary" loading={busy} disabled={!f.name.trim() || !f.rate} onClick={() => void save()}>Enregistrer</Button>}>
+    <Modal open wide title={tax ? `Taxe : ${tax.name}` : "Nouvelle taxe spécifique"} onClose={() => !busy && onClose()} footer={<Button variant="primary" loading={busy} disabled={!f.name.trim() || parseNumber(f.rate) === null} onClick={() => void save()}>Enregistrer</Button>}>
       <div className="space-y-4">
+        {erreur && <Notice tone="danger">{erreur}</Notice>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <Field label="Libellé" className="md:col-span-2"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
           <Field label="Nature"><Select value={f.nature} onChange={(e) => setF({ ...f, nature: e.target.value })} options={natures.map((n) => ({ value: n.code, label: n.label }))} /></Field>
           <Field label="Base"><Select value={f.base} onChange={(e) => setF({ ...f, base: e.target.value as TaxRule["base"] })} options={bases.map((b) => ({ value: b.code, label: b.label }))} /></Field>
-          <Field label={`Taux (${RATE_UNIT[f.base]})`}><Input inputMode="decimal" className="font-mono" value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} /></Field>
+          <Field label={`Taux (${RATE_UNIT[f.base]})`} error={tauxIllisible ? AIDE_NOMBRE : undefined}>
+            <Input inputMode="decimal" aria-invalid={tauxIllisible || undefined} className={cx("font-mono", CHAMP_INVALIDE)} value={f.rate} onChange={(e) => setF({ ...f, rate: e.target.value })} />
+          </Field>
           <Field label="Applicable du"><Input type="date" value={f.date_from} onChange={(e) => setF({ ...f, date_from: e.target.value })} /></Field>
           <Field label="au" hint="Un changement de taux : clore la taxe et en créer une nouvelle."><Input type="date" value={f.date_to} onChange={(e) => setF({ ...f, date_to: e.target.value })} /></Field>
           <Field label="Compte de charge"><Select value={f.account_id} placeholder="–" onChange={(e) => setF({ ...f, account_id: e.target.value })} options={(charges ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} /></Field>
@@ -223,6 +230,10 @@ function Manquants({ settings, onSaved }: { settings: TransportSettings; onSaved
             onChange={(e) => void send("PATCH", "/transport/settings", { activity_id: e.target.value ? Number(e.target.value) : null }, "Activité enregistrée.")}
             options={(settings.activities.length ? settings.activities : settings.activity ? [settings.activity] : []).map((a) => ({ value: a.id, label: a.code ? `${a.code} ${a.name}` : a.name }))} />
         </Field>
+        <Field label="Écart toléré au barème officiel (%)" hint="Au-delà, un tarif de route, de client ou de rotation éloigné du barème est signalé.">
+          <Input disabled={ro} inputMode="decimal" className="font-mono" defaultValue={String(settings.official_rate_tolerance ?? 1).replace(".", ",")}
+            onBlur={(e) => { const v = parseNumber(e.target.value); if (v !== null && v !== settings.official_rate_tolerance) void send("PATCH", "/transport/settings", { official_rate_tolerance: v }, "Écart toléré enregistré."); }} />
+        </Field>
         <Field label="Compte des créances sur les chauffeurs" hint="Vide : 4211, sinon 421.">
           <Select disabled={ro} value={settings.claim_account?.id ?? ""} placeholder="Compte par défaut"
             onChange={(e) => void send("PATCH", "/transport/settings", { claim_account_id: e.target.value ? Number(e.target.value) : null }, "Compte enregistré.")}
@@ -254,8 +265,8 @@ function ConditionsClients({ canEdit }: { canEdit: boolean }) {
         <DataTable rows={data} rowKey={(c) => c.id} empty="Aucun client du transport (tarif ou rotation)." columns={[
           { key: "name", label: "Client" },
           { key: "shortage_tolerance", label: "Tolérance (%)", render: (c) => (
-            <Input disabled={!canEdit} className="w-28 text-right font-mono" placeholder="Société" defaultValue={c.shortage_tolerance === null ? "" : String(c.shortage_tolerance).replace(".", ",")}
-              onBlur={(e) => { const v = parseNumber(e.target.value); if (v !== c.shortage_tolerance) void send("PATCH", `/transport/clients/${c.id}`, { shortage_tolerance: v }, `Tolérance de ${c.name} enregistrée.`); }} />
+            <NombreSurPlace nullable label={`Tolérance de manquant de ${c.name} (%)`} disabled={!canEdit} className="w-28" placeholder="Société" value={c.shortage_tolerance}
+              onCommit={(v) => void send("PATCH", `/transport/clients/${c.id}`, { shortage_tolerance: v }, `Tolérance de ${c.name} enregistrée.`)} />
           ) },
           { key: "shortage_rule", label: "Manquant excédentaire", render: (c) => (
             canEdit ? <Select value={c.shortage_rule ?? ""} placeholder="Règle de la société" onChange={(e) => void send("PATCH", `/transport/clients/${c.id}`, { shortage_rule: e.target.value || null }, `Traitement des manquants de ${c.name} enregistré.`)} options={SHORTAGE_RULES} />
@@ -280,8 +291,8 @@ function Produits({ canEdit }: { canEdit: boolean }) {
         <DataTable rows={data} rowKey={(p) => p.id} empty="Aucun produit." columns={[
           { key: "name", label: "Produit", render: (p) => <Input disabled={!canEdit} className="w-48" defaultValue={p.name} onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== p.name && patch(p, { name: e.target.value.trim() }, "Produit renommé.")} /> },
           { key: "code", label: "Code", render: (p) => <span className="font-mono text-xs">{p.code}</span> },
-          { key: "density_15", label: "Masse vol. à 15 °C (kg/m³)", align: "right", render: (p) => <Input disabled={!canEdit} className="w-28 text-right font-mono" defaultValue={p.density_15 ? String(p.density_15).replace(".", ",") : ""} onBlur={(e) => { const v = parseNumber(e.target.value) ?? 0; if (v !== (p.density_15 ?? 0)) patch(p, { density_15: v }, "Masse volumique enregistrée."); }} /> },
-          { key: "shortage_price", label: "Prix du m³ manquant (GNF)", align: "right", render: (p) => <Input disabled={!canEdit} className="w-40 text-right font-mono" defaultValue={p.shortage_price ? fmtInt(p.shortage_price) : ""} placeholder="À saisir" onBlur={(e) => { const v = parseNumber(e.target.value) ?? 0; if (v !== p.shortage_price) patch(p, { shortage_price: v }, "Prix de valorisation enregistré."); }} /> },
+          { key: "density_15", label: "Masse vol. à 15 °C (kg/m³)", align: "right", render: (p) => <NombreSurPlace label={`Masse volumique de ${p.name} à 15 °C`} disabled={!canEdit} className="w-28" value={p.density_15} onCommit={(v) => patch(p, { density_15: v ?? 0 }, "Masse volumique enregistrée.")} /> },
+          { key: "shortage_price", label: "Prix du m³ manquant (GNF)", align: "right", render: (p) => <NombreSurPlace label={`Prix du m³ manquant de ${p.name} (GNF)`} disabled={!canEdit} className="w-40" placeholder="À saisir" value={p.shortage_price} onCommit={(v) => patch(p, { shortage_price: v ?? 0 }, "Prix de valorisation enregistré.")} /> },
           { key: "shared", label: "Portée", render: (p) => <Tag>{p.shared ? "Commun" : "Société"}</Tag> },
           { key: "active", label: "Actif", render: (p) => <input type="checkbox" disabled={!canEdit} checked={p.active} onChange={(e) => patch(p, { active: e.target.checked }, e.target.checked ? "Produit réactivé." : "Produit retiré des listes de saisie.")} /> },
         ]} />
