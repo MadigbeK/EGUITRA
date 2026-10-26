@@ -6,7 +6,7 @@
     "version": "0.1.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#142f29",
     "ios": {
       "supportsTablet": true,
@@ -44,6 +44,15 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "NIMOVA Terrain relève la position d'une déclaration ou d'un contrôle, au moment de la saisie seulement."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#142f29"
         }
       ]
     ]
