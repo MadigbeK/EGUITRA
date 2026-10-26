@@ -54,6 +54,7 @@ from .common import (
     number,
     page,
     page_args,
+    personal_data_hidden,
     profiles,
     reads_all,
     reported_at,
@@ -65,7 +66,7 @@ from .common import (
     vehicle_ref,
 )
 
-READ = ("admin", "direction", "hsseq", "exploitation", "conducteur")
+READ = ("admin", "direction", "hsseq", "exploitation", "conducteur", "auditeur")
 DECLARE = ("admin", "direction", "hsseq", "exploitation", "conducteur")
 SORTS = {"occurred_at": "occurred_at", "criticality": "criticality", "reference": "reference", "status": "status"}
 TRANSITIONS = ("classify", "investigate", "plan", "close", "reopen")
@@ -138,7 +139,8 @@ def event_line(event):
         "site": site_ref(event.site_id), "vehicle": vehicle_ref(event.vehicle_id), "rotation": rotation_ref(event.rotation_id),
         "actual_severity": event.actual_severity or None, "potential_severity": event.potential_severity or None,
         "probability": event.probability or None, "criticality": event.criticality or None, "level": event.level or None,
-        "reported_by": user_ref(event.reported_by), "open_actions": len(event._open_actions()),
+        "reported_by": None if personal_data_hidden() else user_ref(event.reported_by),
+        "open_actions": len(event._open_actions()),
         "investigation_due": event.investigation_due or None, "investigation_overdue": event._investigation_overdue(),
         "total_cost": event.total_cost or 0,
     }
@@ -147,8 +149,9 @@ def event_line(event):
 def person_row(person):
     person = person.sudo()
     target = person.driver_id or person.employee_id
-    return {"id": person.id, "kind": person.kind, "person_id": target.id or None, "name": person._display(),
-            "role": person.role, "days_off": person.days_off or 0}
+    hidden = personal_data_hidden()
+    return {"id": person.id, "kind": person.kind, "person_id": None if hidden else target.id or None,
+            "name": None if hidden else person._display(), "role": person.role, "days_off": person.days_off or 0}
 
 
 def investigation_row(event):

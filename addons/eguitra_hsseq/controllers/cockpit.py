@@ -15,7 +15,17 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError
 from ..models.cockpit import month_end, month_label, parse_month
 from ..models.common import matrix_cells
 from .actions import overdue_lines
-from .common import COCKPIT, companies, forbidden, get, hsseq_route, my_sites, scope_level, site_allowed
+from .common import (
+    COCKPIT_READ,
+    companies,
+    forbidden,
+    get,
+    hsseq_route,
+    my_sites,
+    personal_data_hidden,
+    scope_level,
+    site_allowed,
+)
 from .lock import departures
 from .referentials import deadline_items
 
@@ -37,7 +47,7 @@ def event_matrix(comps, month, period, sites, vehicle_kind):
 
 
 class EguitraHsseqCockpit(http.Controller):
-    @hsseq_route("/hsseq/cockpit", profiles=COCKPIT)
+    @hsseq_route("/hsseq/cockpit", profiles=COCKPIT_READ)
     def cockpit(self, **kw):
         env = request.env
         day = fields.Date.context_today(env.user)
@@ -66,6 +76,12 @@ class EguitraHsseqCockpit(http.Controller):
         now = fields.Datetime.now()
         date_to = min(month_end(month), day)
         matrix, unclassified = event_matrix(comps, month, period, sites, vehicle_kind)
+        blocked = departures(comps, day, sites or None, vehicle_kind, blocked_only=True)
+        deadlines = deadline_items(comps, 30, site=sites if len(sites) == 1 else None, vehicle_kind=vehicle_kind)
+        if personal_data_hidden():
+            # Auditeur : ni conducteurs des départs bloqués, ni échéances des personnes.
+            blocked["items"] = []
+            deadlines = [d for d in deadlines if d["kind"] == "vehicle_document"]
         return {
             "period": {"type": period, "month": month.strftime("%Y-%m"), "date_from": month, "date_to": date_to,
                        "label": month_label(month), "frozen": result["frozen"], "frozen_on": result["frozen_on"]},
@@ -77,11 +93,9 @@ class EguitraHsseqCockpit(http.Controller):
                                        for s in Site.search([("company_id", "in", comps.ids)])]},
             "hours_basis": result["hours_basis"],
             "indicators": result["indicators"],
-            "blocked_departures": departures(comps, day, sites or None, vehicle_kind, blocked_only=True),
+            "blocked_departures": blocked,
             "overdue_actions": overdue_lines(comps, sites or None),
-            "deadlines": {"horizon_days": 30,
-                          "items": deadline_items(comps, 30, site=sites if len(sites) == 1 else None,
-                                                  vehicle_kind=vehicle_kind)},
+            "deadlines": {"horizon_days": 30, "items": deadlines},
             "events": {
                 "to_classify": Event.search_count(event_domain + [("status", "=", "reported")]),
                 "overdue_investigations": Event.search_count(event_domain + [

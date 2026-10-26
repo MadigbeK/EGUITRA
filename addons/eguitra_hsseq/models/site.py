@@ -5,7 +5,10 @@ est rattaché à un ou plusieurs sites et ne lit alors que leurs objets. Aucun s
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
-from .common import EXPLOITATION_GROUP, VEHICLE_KINDS
+from .common import EXPLOITATION_GROUP, VEHICLE_KINDS, today
+
+# Profils qui ouvrent NIMOVA · HSSEQ sans être bornés comme l'auditeur.
+HSSEQ_APP_PROFILES = {"admin", "direction", "hsseq", "exploitation"}
 
 
 class EguitraHsseqSite(models.Model):
@@ -47,6 +50,19 @@ class EguitraTransportVehicle(models.Model):
 class ResUsers(models.Model):
     _inherit = "res.users"
 
+    # Profil auditeur (spécification §8) : lecture seule bornée à un périmètre et à une durée.
+    hsseq_audit_until = fields.Date("Accès d'auditeur HSSEQ jusqu'au",
+                                    help="Au-delà de cette date (ou sans date), le compte auditeur n'ouvre plus NIMOVA "
+                                         "· HSSEQ et chaque route lui répond 403.")
+    hsseq_audit_site_ids = fields.Many2many("eguitra.hsseq.site", "eguitra_hsseq_auditor_site_rel", "user_id", "site_id",
+                                            "Sites audités", help="Vide : tous les sites des sociétés du compte.")
+
+    def _hsseq_audit_expired(self, day=None):
+        """Accès d'auditeur échu (ou sans date de fin)."""
+        self.ensure_one()
+        until = self.sudo().hsseq_audit_until
+        return not until or (day or today(self.env)) > until
+
     def _hsseq_site_ids(self):
         """Sites auxquels le compte est rattaché comme chef de parc (vide : aucun bornage)."""
         self.ensure_one()
@@ -67,6 +83,11 @@ class ResUsers(models.Model):
         """Un compte qui n'a que le profil conducteur n'ouvre que NIMOVA Terrain : aucune application web, pas
         même « Mon espace » de la RH que lui vaudrait son dossier salarié."""
         apps = super()._eguitra_apps()
-        if self._eguitra_profiles() == ["conducteur"]:
+        user_profiles = self._eguitra_profiles()
+        if user_profiles == ["conducteur"]:
             return [app for app in apps if app == "terrain"]
+        # Auditeur seul, au-delà de sa date de fin d'accès : plus d'application HSSEQ.
+        if ("auditeur" in user_profiles and not set(user_profiles) & HSSEQ_APP_PROFILES
+                and self._hsseq_audit_expired()):
+            return [app for app in apps if app != "hsseq"]
         return apps

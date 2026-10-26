@@ -41,6 +41,7 @@ from .common import (
     number,
     page,
     page_args,
+    personal_data_hidden,
     profiles,
     reads_all,
     ref,
@@ -54,9 +55,9 @@ from .common import (
     vehicle_ref,
 )
 
-TEMPLATE_READ = ("admin", "direction", "hsseq", "exploitation", "conducteur")
-CHECK_READ = ("admin", "direction", "hsseq", "exploitation", "conducteur")
-NC_READ = ("admin", "direction", "hsseq", "exploitation")
+TEMPLATE_READ = ("admin", "direction", "hsseq", "exploitation", "conducteur", "auditeur")
+CHECK_READ = ("admin", "direction", "hsseq", "exploitation", "conducteur", "auditeur")
+NC_READ = ("admin", "direction", "hsseq", "exploitation", "auditeur")
 LIFT = ("hsseq", "exploitation")
 SORTS = {"reported_at": "reported_at", "result": "result", "reference": "reference"}
 MAX_SIGNATURE = 512 * 1024
@@ -161,7 +162,8 @@ def check_line(check):
         "template": {"id": check.template_id.id, "name": check.template_id.name, "version": check.template_version},
         "kind": check.kind, "vehicle_kind": check.vehicle_kind, "vehicle": vehicle_ref(check.vehicle_id),
         "rotation": rotation_ref(check.rotation_id), "driver": driver_ref(check.driver_id), "site": site_ref(check.site_id),
-        "author": user_ref(check.author_id), "reported_at": check.reported_at, "result": check.result,
+        "author": None if personal_data_hidden() else user_ref(check.author_id), "reported_at": check.reported_at,
+        "result": check.result,
         "open_nonconformities": len(check.nonconformity_ids.filtered(lambda n: n.status == "open")),
         "photos_missing": check._photos_missing(),
         "complement_of": {"id": check.complement_of_id.id, "reference": check.complement_of_id.reference}

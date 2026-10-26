@@ -81,8 +81,51 @@ OBJECT_MODELS = {
     "nonconformity": "eguitra.hsseq.nonconformity",
     "waiver": "eguitra.hsseq.waiver",
     "breath_test": "eguitra.hsseq.breath.test",
+    "risk": "eguitra.hsseq.risk",
+    "audit": "eguitra.hsseq.audit",
+    "finding": "eguitra.hsseq.finding",
+    "requirement": "eguitra.hsseq.requirement",
+    "journey": "eguitra.hsseq.journey",
+    "immobilization": "eguitra.hsseq.immobilization",
+    "report": "eguitra.hsseq.report.month",
 }
-ATTACHMENT_OBJECTS = ("event", "action", "check", "nonconformity", "waiver")
+ATTACHMENT_OBJECTS = ("event", "action", "check", "nonconformity", "waiver", "risk", "audit", "finding", "requirement")
+
+# ─── Lot 2 ────────────────────────────────────────────────────────────────
+
+# Registre des risques (§3, §7).
+RISK_NATURES = [("safety_hazard", "Danger pour la sécurité"), ("health_hazard", "Danger pour la santé"),
+                ("environmental_aspect", "Aspect environnemental"), ("security_threat", "Menace de sûreté")]
+RISK_STATUSES = [("draft", "À évaluer"), ("active", "En vigueur"), ("archived", "Archivé")]
+MEASURE_STATUSES = [("planned", "Prévue"), ("in_place", "En place"), ("to_review", "À revoir")]
+
+# Habilitations (statuts de RH, en anglais pour l'API) et aptitude en statut seul.
+QUALIFICATION_STATUSES = {"valide": "valid", "a_renouveler": "to_renew", "expiree": "expired", "absente": "missing"}
+FITNESS_STATUSES = {"apte": "fit", "apte_reserve": "review", "inapte": "unfit", "echue": "unfit", "inconnu": "review"}
+
+# Plan de trajet (V08).
+JOURNEY_STATUSES = [("draft", "À valider"), ("validated", "Validé")]
+STOP_KINDS = [("stop", "Arrêt"), ("break", "Pause"), ("rest", "Repos")]
+
+# Audits et conformité (§3, §7).
+AUDIT_STANDARDS = [("iso_45001", "ISO 45001"), ("iso_14001", "ISO 14001"), ("iso_9001", "ISO 9001"),
+                   ("client", "Audit client ou donneur d'ordre"), ("internal", "Audit interne")]
+AUDIT_STATUSES = [("planned", "Planifié"), ("done", "Réalisé"), ("closed", "Clos"), ("cancelled", "Annulé")]
+AUDITOR_KINDS = [("internal", "Auditeur interne"), ("external", "Auditeur externe")]
+FINDING_CLASSES = [("major", "Écart majeur"), ("minor", "Écart mineur"), ("observation", "Observation")]
+FINDING_STATUSES = [("open", "Ouvert"), ("closed", "Soldé")]
+REQUIREMENT_SOURCES = [("law", "Loi ou règlement"), ("standard", "Norme"), ("client_contract", "Contrat client")]
+REQUIREMENT_STATUSES = [("compliant", "Conforme"), ("partial", "Partiellement conforme"),
+                        ("non_compliant", "Non conforme"), ("not_evaluated", "Non évalué")]
+STANDARDS = [("iso_45001", "ISO 45001"), ("iso_14001", "ISO 14001"), ("iso_9001", "ISO 9001"), ("other", "Autre")]
+
+# Rapport mensuel au format d'un donneur d'ordre.
+REPORT_NATURES = [("proactive", "Proactif"), ("reactive", "Réactif")]
+REPORT_MODES = [("computed", "Calculé par NIMOVA"), ("manual", "Saisi")]
+AGGREGATIONS = [("sum", "Somme des mois"), ("average", "Moyenne des mois"), ("last", "Dernier mois renseigné")]
+REPORT_STATES = [("draft", "Brouillon"), ("validated", "Validé")]
+INDICATOR_STATUSES = [("compliant", "Conforme"), ("watch", "Sous surveillance"), ("non_compliant", "Non conforme"),
+                      ("no_data", "Pas de donnée")]
 NOTIFICATION_CHANNELS = [("app", "Dans l'application"), ("email", "Courriel")]
 
 # Profils (codes de PROFILE_GROUPS) qui lisent toute fiche HSSEQ de leurs sociétés.
@@ -91,6 +134,8 @@ HSSEQ_GROUP = "eguitra_base.group_profile_hsseq"
 DIRECTION_GROUP = "eguitra_base.group_profile_direction"
 ADMIN_GROUP = "eguitra_base.group_profile_admin"
 EXPLOITATION_GROUP = "eguitra_base.group_profile_exploitation"
+AUDITOR_GROUP = "eguitra_base.group_profile_auditeur"
+RH_GROUP = "eguitra_base.group_profile_rh"
 
 
 class HsseqError(UserError):

@@ -30,7 +30,7 @@ from .common import (
 
 EVALUATE = ("admin", "direction", "hsseq", "exploitation", "conducteur")
 DEPARTURES = ("admin", "direction", "hsseq", "exploitation")
-REASONS_READ = ("admin", "direction", "hsseq", "exploitation")
+REASONS_READ = ("admin", "direction", "hsseq", "exploitation", "auditeur")
 MY_ROTATIONS = ("admin", "hsseq", "exploitation", "conducteur")
 
 

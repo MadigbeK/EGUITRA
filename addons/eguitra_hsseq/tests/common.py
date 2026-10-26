@@ -75,6 +75,8 @@ class HsseqCase(TransportCase):
 
     def api(self, login, method, path, payload=None, app=None):
         token = self.token(login, app)
+        # Écritures du test : en base avant la requête.
+        self.env.flush_all()
         result = self.call(method, path, payload, token=token, headers=self.headers(login))
         # Écritures faites par la requête : relues depuis la base.
         self.env.invalidate_all()
@@ -85,6 +87,7 @@ class HsseqCase(TransportCase):
 
     def upload(self, login, content=PNG, name="photo.png", **fields_):
         token = self.token(login)
+        self.env.flush_all()
         headers = {"Authorization": f"Bearer {token}", **(self.headers(login) or {})}
         response = self.url_open("/api/v1/hsseq/attachments", data={k: str(v) for k, v in fields_.items()},
                                  files={"file": (name, io.BytesIO(content), "image/png")}, headers=headers,

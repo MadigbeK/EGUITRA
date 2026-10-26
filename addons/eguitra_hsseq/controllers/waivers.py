@@ -31,7 +31,7 @@ from .common import (
     vehicle_ref,
 )
 
-READ = ("admin", "direction", "hsseq", "exploitation")
+READ = ("admin", "direction", "hsseq", "exploitation", "auditeur")
 REQUEST = ("exploitation",)
 DECIDE = ("hsseq",)
 CANCEL = ("exploitation", "hsseq")

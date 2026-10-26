@@ -1,9 +1,13 @@
 """Briques communes de l'API HSSEQ (contrat : docs/design/hsseq-contrat.md de la session design).
 
 Les fiches HSSEQ sont lues et écrites en sudo, après le contrôle explicite du profil, de la société, du
-site (chef de parc rattaché à des sites) et de la propriété (conducteur, déclarant, responsable d'une
-action), comme le libre-service RH : l'identité du compte est conservée (create_uid, journal, piste
-d'audit). Le résultat d'un alcootest n'est servi qu'au profil hsseq.
+site (chef de parc ou auditeur rattaché à des sites) et de la propriété (conducteur, déclarant,
+responsable d'une action), comme le libre-service RH : l'identité du compte est conservée (create_uid,
+journal, piste d'audit). Le résultat d'un alcootest n'est servi qu'au profil hsseq.
+
+Profil auditeur : lecture seule (toute route d'écriture refusée), bornée à ses sites comme un chef de
+parc, et à sa date de fin d'accès (au-delà, ou sans date, toute route est refusée en 403) ; jamais les
+alcootests, et les noms des personnes en cause retirés (personal_data_hidden).
 """
 
 import functools
@@ -14,27 +18,45 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route
 
-from ..models.common import READ_ALL, HsseqError
+from ..models.common import READ_ALL, HsseqError, today
 
 # Profils des routes (codes de PROFILE_GROUPS).
-APP = ("admin", "direction", "hsseq", "exploitation", "conducteur", "rh")
+APP = ("admin", "direction", "hsseq", "exploitation", "conducteur", "rh", "auditeur")
 MANAGERS = ("admin", "direction", "hsseq")
 COCKPIT = ("admin", "direction", "hsseq", "exploitation")
+COCKPIT_READ = COCKPIT + ("auditeur",)
 DEADLINES = ("admin", "direction", "hsseq", "exploitation", "rh")
 CONFIG = ("admin", "hsseq")
 FIELD = ("hsseq", "exploitation", "conducteur")
 HSSEQ = ("hsseq",)
 LOG = ("direction", "hsseq")
+# Lecture de l'auditeur (lecture seule, bornée à ses sites et à sa date de fin d'accès).
+AUDITOR = ("auditeur",)
 MAX_LIMIT = 500
 
 
+def auditor_guard():
+    """Compte auditeur : refusé (403) au-delà de sa date de fin d'accès, ou sans date ; en lecture seule."""
+    if "auditeur" not in profiles():
+        return
+    until = request.env.user.sudo().hsseq_audit_until
+    if not until or today(request.env) > until:
+        raise ApiError(403, "forbidden", "Accès d'auditeur échu ou sans date de fin : demandez sa prolongation au "
+                                         "Responsable HSSEQ." if until else
+                                         "Accès d'auditeur sans date de fin : le Responsable HSSEQ la fixe d'abord.")
+    if request.httprequest.method not in ("GET", "HEAD"):
+        raise ApiError(403, "forbidden", "Profil auditeur : lecture seule.")
+
+
 def hsseq_route(route, methods=("GET",), profiles=None):
-    """Route de l'API dont les refus métier portent leur code précis (HsseqError -> error)."""
+    """Route de l'API dont les refus métier portent leur code précis (HsseqError -> error) ; le compte
+    auditeur y est borné (auditor_guard)."""
 
     def decorator(func):
         @functools.wraps(func)
         def inner(self, **kw):
             try:
+                auditor_guard()
                 return func(self, **kw)
             except HsseqError as e:
                 extra = {"fields": e.fields} if e.fields else {}
@@ -61,19 +83,29 @@ def reads_all():
     return bool(profiles() & READ_ALL)
 
 
+def is_auditor():
+    return "auditeur" in profiles()
+
+
 def is_yard():
-    """Chef de parc : profil exploitation sans profil de lecture intégrale."""
-    return "exploitation" in profiles() and not reads_all()
+    """Lecture bornée aux sites du compte : chef de parc (profil exploitation) ou auditeur, sans profil de
+    lecture intégrale."""
+    return bool(profiles() & {"exploitation", "auditeur"}) and not reads_all()
+
+
+def personal_data_hidden():
+    """Les noms des personnes (conducteurs, victimes, témoins, déclarants) ne sont pas servis à l'auditeur."""
+    return is_auditor() and not reads_all()
 
 
 def scope_level():
     """Portée du compte, accordée par privilège positif : « all » (administration, direction, hsseq),
-    « site » (chef de parc, borné à ses sites), « self » pour tout autre compte (conducteur, ou compte d'un
-    autre profil métier) : ses propres saisies et rotations seulement."""
+    « site » (chef de parc ou auditeur, borné à ses sites), « self » pour tout autre compte (conducteur, ou
+    compte d'un autre profil métier) : ses propres saisies et rotations seulement."""
     user_profiles = profiles()
     if user_profiles & READ_ALL:
         return "all"
-    if "exploitation" in user_profiles:
+    if user_profiles & {"exploitation", "auditeur"}:
         return "site"
     return "self"
 
@@ -83,8 +115,11 @@ def is_self_only():
 
 
 def my_sites():
-    """Sites du chef de parc (vide : aucun bornage)."""
-    return request.env.user._hsseq_site_ids()
+    """Sites du chef de parc, sinon ceux de l'auditeur (vide : aucun bornage)."""
+    user = request.env.user
+    if is_auditor() and "exploitation" not in profiles():
+        return user.sudo().hsseq_audit_site_ids
+    return user._hsseq_site_ids()
 
 
 def my_driver():
@@ -116,7 +151,8 @@ def companies(kw=None):
 
 
 def site_allowed(site):
-    """Un chef de parc rattaché à des sites ne lit que leurs objets (un objet sans site reste visible)."""
+    """Un chef de parc ou un auditeur rattaché à des sites ne lit que leurs objets (un objet sans site reste
+    visible)."""
     if not is_yard():
         return True
     sites = my_sites()
@@ -282,7 +318,9 @@ def rotation_ref(rotation):
 
 
 def driver_ref(driver):
-    return {"id": driver.id, "name": driver.sudo().name} if driver else None
+    if not driver:
+        return None
+    return {"id": driver.id, "name": None if personal_data_hidden() else driver.sudo().name}
 
 
 def company_ref(company):

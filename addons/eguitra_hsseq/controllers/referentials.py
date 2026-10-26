@@ -9,7 +9,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, read_json, require
 
-from ..models.common import EXPLOITATION_GROUP, OBJECT_MODELS, VEHICLE_KINDS
+from ..models.common import AUDITOR_GROUP, EXPLOITATION_GROUP, OBJECT_MODELS, VEHICLE_KINDS
 from .common import (
     APP,
     CONFIG,
@@ -33,6 +33,7 @@ from .common import (
     my_sites,
     page,
     page_args,
+    personal_data_hidden,
     profiles,
     rotation_ref,
     scope_level,
@@ -137,6 +138,13 @@ def deadline_items(comps, horizon, kind=None, site=None, vehicle_kind=None):
     return sorted(items, key=lambda i: (i["expires_on"], i["subject"]["name"] or ""))
 
 
+def auditor_row(user):
+    user = user.sudo()
+    return {"id": user.id, "name": user.name, "login": user.login, "access_until": user.hsseq_audit_until or None,
+            "expired": user._hsseq_audit_expired(), "sites": [site_ref(s) for s in user.hsseq_audit_site_ids],
+            "companies": [company_ref(c) for c in user.company_ids]}
+
+
 def employee_rows(comps, vehicles):
     """Salariés en poste des sociétés (identifiant, nom, société, site de l'ensemble du chauffeur s'il est
     connu), pour désigner les personnes en cause d'un événement ; aucune autre donnée du dossier RH."""
@@ -172,6 +180,8 @@ class EguitraHsseqReferentials(http.Controller):
         field_only = is_self_only()
         drivers = driver if field_only else env["eguitra.transport.driver"].sudo().search(
             [("company_id", "in", comps.ids)])
+        if personal_data_hidden():
+            drivers = env["eguitra.transport.driver"]  # auditeur : pas de liste nominative des conducteurs
         on_site = driver_sites(vehicles)
         owners = env["res.users"]
         if not field_only:
@@ -280,6 +290,42 @@ class EguitraHsseqReferentials(http.Controller):
         site.write(values)
         self._assign_vehicles(site, data)
         return site_row(site)
+
+    # ─── Auditeurs (§8) ───────────────────────────────────────────────────
+
+    def _auditor_accounts(self, kw=None):
+        users = request.env["res.users"].sudo().search([("share", "=", False),
+                                                        ("company_ids", "in", companies(kw).ids)])
+        return users.filtered(lambda u: u.has_group(AUDITOR_GROUP))
+
+    @hsseq_route("/hsseq/auditors", profiles=CONFIG)
+    def auditors(self, **kw):
+        """Comptes du profil auditeur des sociétés : date de fin d'accès et sites audités."""
+        return [auditor_row(u) for u in self._auditor_accounts(kw)]
+
+    @hsseq_route("/hsseq/auditors/<int:user_id>", methods=("PATCH",), profiles=CONFIG)
+    def update_auditor(self, user_id, **_kw):
+        """Périmètre et durée d'un auditeur : {access_until, site_ids} (sites de ses sociétés)."""
+        user = self._auditor_accounts().filtered(lambda u: u.id == user_id)
+        if not user:
+            raise ApiError(404, "not_found", "Auditeur introuvable.")
+        data = read_json()
+        values = {}
+        if "access_until" in data:
+            values["hsseq_audit_until"] = date_value(data, "access_until")
+        if "site_ids" in data:
+            sites = request.env["eguitra.hsseq.site"].sudo().browse(ids_list(data, "site_ids")).exists()
+            if sites.filtered(lambda s: s.company_id not in user.company_ids):
+                raise ApiError(422, "business_rule", "Un site audité appartient à une société de l'auditeur.",
+                               fields=["site_ids"])
+            values["hsseq_audit_site_ids"] = [(6, 0, sites.ids)]
+        before = auditor_row(user)
+        user.sudo().write(values)
+        after = auditor_row(user)
+        request.env["eguitra.hsseq.journal"]._log(
+            "auditor", user, "write", note="Périmètre ou durée de l'auditeur", field="access_until",
+            old=str(before["access_until"] or ""), new=str(after["access_until"] or ""))
+        return after
 
     # ─── Paramètres ───────────────────────────────────────────────────────
 
