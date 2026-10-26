@@ -1,11 +1,91 @@
 "use client";
 
-import { AreaChart, Badge, Card, DataTable, SERIES, cx } from "@/components/ui";
+import { useState } from "react";
+import { AreaChart, Badge, Button, Card, DataTable, ErrorBox, Field, Input, SERIES, cx } from "@/components/ui";
 import { CarteChaleur, Eventail, Puces } from "@/components/analyse/charts";
 import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, pctOu, pluriel, usePeriode } from "@/components/analyse/commun";
-import { useApi } from "@/lib/api-client";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import type { CabinetActivite } from "@/lib/analyse-types";
-import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";
+import { AIDE_NOMBRE, fmtDec, fmtGNF, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
+
+/** Réglages de la valeur du temps (route /analyse/cabinet/reglages). */
+interface Reglages {
+  hourly_rate: number | null;
+  hourly_rate_invalid: string | null;
+  cost_ratio_pct: number | null;
+  cost_ratio_invalid: string | null;
+  cost_ratio_default_pct: number;
+}
+
+/**
+ * Taux horaire de référence et taux de revient du temps : lus par tous les profils de l'écran, fixés par
+ * l'administration et la direction (le noyau le vérifie). Un champ vidé revient au taux déduit des
+ * factures ou au taux de revient par défaut ; une saisie illisible bloque l'envoi.
+ */
+function ReglagesTemps({ rateSource, onChange }: { rateSource: string | null; onChange: () => void }) {
+  const peutRegler = useAutorise(["admin", "direction"]);
+  const { data, error, mutate } = useApi<Reglages>("/analyse/cabinet/reglages");
+  const [taux, setTaux] = useState<string | null>(null);
+  const [revient, setRevient] = useState<string | null>(null);
+  const [envoi, setEnvoi] = useState(false);
+  const [erreur, setErreur] = useState<unknown>(null);
+  const [fait, setFait] = useState(false);
+  if (!data) return error ? <ErreurLecture error={error} onRetry={() => void mutate()} titre="Les réglages de la valeur du temps n'ont pas pu être lus." /> : null;
+  const valeurTaux = taux ?? (data.hourly_rate !== null ? String(data.hourly_rate) : "");
+  const valeurRevient = revient ?? (data.cost_ratio_pct !== null ? String(data.cost_ratio_pct).replace(".", ",") : "");
+  const illisible = nombreIllisible(valeurTaux) || nombreIllisible(valeurRevient);
+  async function enregistrer() {
+    if (illisible) return;
+    setEnvoi(true);
+    setErreur(null);
+    setFait(false);
+    try {
+      const res = await apiSend<Reglages>("PATCH", "/analyse/cabinet/reglages", { hourly_rate: lireNombre(valeurTaux), cost_ratio_pct: lireNombre(valeurRevient) });
+      await mutate(res, { revalidate: false });
+      setTaux(null);
+      setRevient(null);
+      setFait(true);
+      onChange();
+    } catch (e) {
+      setErreur(e instanceof ApiError ? e : new Error("Le serveur ne répond pas : les réglages ne sont pas enregistrés."));
+    } finally {
+      setEnvoi(false);
+    }
+  }
+  return (
+    <Card title="Réglages de la valeur du temps" actions={<span className="text-[12.5px] text-muted">{peutRegler ? "Administration et direction" : "Fixés par l'administration ou la direction"}</span>}>
+      <p className="text-[12.5px] leading-relaxed text-muted">
+        Le taux horaire de référence valorise le temps saisi (réalisation, carnet) ; le taux de revient, en part du taux de vente, donne le coût du temps et la marge par dossier.
+        {rateSource === "derived" && " Sans taux réglé, il est déduit des factures d'honoraires des douze derniers mois."}
+      </p>
+      {(data.hourly_rate_invalid || data.cost_ratio_invalid) && <p className="mt-2 text-[12.5px] font-semibold text-warn">Une valeur enregistrée est illisible et reste ignorée : saisissez-la de nouveau.</p>}
+      {peutRegler ? (
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <Field label="Taux horaire de référence (GNF/h)" hint="Vide : déduit des factures" error={nombreIllisible(valeurTaux) ? AIDE_NOMBRE : undefined}>
+            <Input inputMode="decimal" value={valeurTaux} onChange={(e) => setTaux(e.target.value)} className="w-[190px]" />
+          </Field>
+          <Field label="Taux de revient (% du taux de vente)" hint={`Vide : ${fmtPct(data.cost_ratio_default_pct, 0)}`} error={nombreIllisible(valeurRevient) ? AIDE_NOMBRE : undefined}>
+            <Input inputMode="decimal" value={valeurRevient} onChange={(e) => setRevient(e.target.value)} className="w-[150px]" />
+          </Field>
+          <Button variant="primary" onClick={() => void enregistrer()} loading={envoi} disabled={illisible || (taux === null && revient === null)}>
+            Enregistrer
+          </Button>
+          {fait && <span role="status" className="text-[12.5px] font-semibold text-ok-texte">Réglages enregistrés : l&apos;écran est recalculé.</span>}
+        </div>
+      ) : (
+        <p className="mt-3 text-[13px] text-ink-2">
+          Taux horaire de référence : <span className="font-semibold">{data.hourly_rate !== null ? fmtGNF(data.hourly_rate) : "non réglé"}</span> · taux de revient :{" "}
+          <span className="font-semibold">{fmtPct(data.cost_ratio_pct ?? data.cost_ratio_default_pct, (data.cost_ratio_pct ?? 0) % 1 ? 1 : 0)}</span>
+        </p>
+      )}
+      {erreur !== null && (
+        <div className="mt-3">
+          <ErrorBox error={erreur} />
+        </div>
+      )}
+    </Card>
+  );
+}
 
 /** Activité et honoraires : heures par consultant et semaine, taux de réalisation, rentabilité par dossier, honoraires par ligne, prévision. */
 export function Activite() {
@@ -91,7 +171,7 @@ function Corps() {
               {tauxConnu && r.by_consultant.some((c) => c.realization_pct !== null) ? (
                 <Puces label="Taux de réalisation par consultant" format={(v) => fmtPct(v, 0)} items={r.by_consultant.filter((c) => c.realization_pct !== null).map((c) => ({ key: String(c.id), label: c.name, value: c.realization_pct ?? 0, target: 85, ranges: [70, 85, 100], detail: `${heures(c.hours)} · ${fmtShort(c.billed)} GNF facturés sur ${gnfOu(c.value)}` }))} />
               ) : (
-                <Vide compact titre={tauxConnu ? "Aucune facture d'honoraires sur la période" : "Taux horaire standard non paramétré"} hint={tauxConnu ? undefined : "Paramètre eguitra_analytics.cabinet_hourly_rate : sans lui, la valeur du temps n'existe pas."} />
+                <Vide compact titre={tauxConnu ? "Aucune facture d'honoraires sur la période" : "Taux horaire de référence non réglé"} hint={tauxConnu ? undefined : "Réglez-le plus bas, dans les réglages de la valeur du temps : sans lui, la valeur du temps n'existe pas."} />
               )}
               <div className="mt-4 grid grid-cols-3 gap-2.5">
                 <Chiffre label="Réalisation globale" value={pctOu(r.overall_pct, 0)} tone={r.overall_pct === null ? undefined : r.overall_pct < 80 ? "warn" : "ok"} hint={r.value !== null ? `${fmtShort(r.billed)} facturés sur ${fmtShort(r.value)} GNF` : `${fmtShort(r.billed)} GNF facturés`} />
@@ -139,6 +219,8 @@ function Corps() {
               )}
             </Card>
           </div>
+
+          <ReglagesTemps rateSource={r.rate_source} onChange={() => void mutate()} />
 
           <Card title="Rentabilité par dossier" padded={false} actions={<span className="text-[12.5px] text-muted">Coût du temps : {d.profitability.cost_rate_pct} % du taux de vente{d.profitability.cost_hourly !== null ? ` (${fmtInt(d.profitability.cost_hourly)} GNF/h)` : ""}</span>}>
             <DataTable

@@ -19,6 +19,7 @@ Conventions :
   (taux de revient du temps, en part du taux de vente ; 0,40 par défaut).
 """
 
+import math
 from collections import defaultdict
 from datetime import timedelta
 from functools import cached_property
@@ -26,7 +27,7 @@ from urllib.parse import quote
 
 from dateutil.relativedelta import relativedelta
 
-from odoo import models
+from odoo import api, models
 
 from odoo.addons.eguitra_axispro.models.dossier import COMMITTEE_DECISIONS, RECOMMENDATIONS
 from odoo.addons.eguitra_axispro.models.pilotage import (
@@ -165,6 +166,19 @@ def _section_link(section, anchor=None, **params):
     et le bloc qui explique le constat en ancre (#temps), jusqu'où l'écran fait défiler."""
     query = "&".join(f"{key}={quote(str(value), safe='')}" for key, value in params.items() if value not in (None, ""))
     return f"/analyse/{section}" + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else "")
+
+
+def _lire_reglage(raw):
+    """Valeur d'un réglage enregistré (« 450 000 », « 0,4 ») : nombre, None s'il est vide, False s'il est
+    illisible."""
+    text = str(raw or "").replace(" ", "").replace(" ", "").replace("\xa0", "").replace(",", ".")
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        return False
+    return value if math.isfinite(value) else False
 
 
 def _historique_clos(months, values, day):
@@ -1873,15 +1887,42 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
 
     # ─── 6.6 Activité et honoraires ───────────────────────────────────────
 
+    @api.model
+    def reglages(self):
+        """Réglages de la valeur du temps du cabinet (écran Activité et honoraires) : taux horaire de
+        référence (GNF/h, à défaut déduit des factures) et taux de revient du temps (part du taux de vente,
+        40 % par défaut) ; une saisie illisible est dite, au lieu d'être ignorée en silence."""
+        params = self.env["ir.config_parameter"].sudo()
+        raw_rate = params.get_param(PARAM_HOURLY_RATE) or ""
+        raw_ratio = params.get_param(PARAM_COST_RATIO) or ""
+        rate, ratio = _lire_reglage(raw_rate), _lire_reglage(raw_ratio)
+        rate_ok = rate is None or (rate is not False and rate > 0)
+        ratio_ok = ratio is None or (ratio is not False and 0 < ratio <= 1.5)
+        return {
+            "hourly_rate": rate if rate_ok and rate else None, "hourly_rate_invalid": None if rate_ok else raw_rate,
+            "cost_ratio_pct": _r(ratio * 100) if ratio_ok and ratio else None,
+            "cost_ratio_invalid": None if ratio_ok else raw_ratio,
+            "cost_ratio_default_pct": _r(COST_RATIO_DEFAULT * 100),
+        }
+
+    @api.model
+    def ecrire_reglages(self, values):
+        """Écrit les réglages contrôlés par la route : hourly_rate (GNF/h, > 0) et cost_ratio_pct (0 à 150 %) ;
+        None efface le réglage (taux déduit des factures, taux de revient par défaut)."""
+        params = self.env["ir.config_parameter"].sudo()
+        if "hourly_rate" in values:
+            rate = values["hourly_rate"]
+            params.set_param(PARAM_HOURLY_RATE, str(round(rate)) if rate else False)
+        if "cost_ratio_pct" in values:
+            pct_ = values["cost_ratio_pct"]
+            params.set_param(PARAM_COST_RATIO, str(round(pct_ / 100, 4)) if pct_ else False)
+        return self.reglages()
+
     def _standard_rate(self, b, sheets):
         """Taux horaire standard : paramètre système, à défaut taux moyen des factures d'honoraires
         validées des 12 derniers mois (montant hors taxes / heures facturées)."""
-        raw = b.env["ir.config_parameter"].sudo().get_param(PARAM_HOURLY_RATE) or ""
-        try:
-            value = float(str(raw).replace(" ", "").replace(",", "."))
-        except ValueError:
-            value = 0.0
-        if value > 0:
+        value = _lire_reglage(b.env["ir.config_parameter"].sudo().get_param(PARAM_HOURLY_RATE) or "")
+        if value and value > 0:
             return value, "parameter"
         year_ago = b.date_to - relativedelta(years=1)
         invoices = sheets.invoice_id.filtered(
@@ -1893,12 +1934,8 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
         return None, None
 
     def _cost_ratio(self, b):
-        raw = b.env["ir.config_parameter"].sudo().get_param(PARAM_COST_RATIO) or ""
-        try:
-            value = float(str(raw).replace(",", "."))
-        except ValueError:
-            value = 0.0
-        return value if 0 < value <= 1.5 else COST_RATIO_DEFAULT
+        value = _lire_reglage(b.env["ir.config_parameter"].sudo().get_param(PARAM_COST_RATIO) or "")
+        return value if value and 0 < value <= 1.5 else COST_RATIO_DEFAULT
 
     def _income_lines(self, b, xmlid):
         """Produits (comptes 70) par compte analytique d'un axe et par jour, jusqu'à la date d'arrêté."""
@@ -2183,13 +2220,19 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
             "overdue": revenue_block["receivables"]["overdue"],
         }
         notes = []
+        reglages = self.reglages()
+        if reglages["hourly_rate_invalid"]:
+            notes.append((f"Taux horaire de référence enregistré illisible (« {reglages['hourly_rate_invalid']} ») : "
+                          "ignoré ; à corriger dans les réglages d'Activité et honoraires.", 10))
+        if reglages["cost_ratio_invalid"]:
+            notes.append((f"Taux de revient enregistré illisible ou hors de 0 à 150 % (« {reglages['cost_ratio_invalid']} ») : "
+                          f"{_fr(COST_RATIO_DEFAULT * 100)} % appliqué ; à corriger dans les réglages.", 10))
         if rate_source is None:
-            notes.append(("Taux horaire standard non paramétré et aucune facture d'honoraires validée sur 12 mois : "
-                          "valeur du temps et réalisation non calculables (paramètre "
-                          f"{PARAM_HOURLY_RATE}).", 30))
+            notes.append(("Taux horaire de référence non réglé et aucune facture d'honoraires validée sur 12 mois : "
+                          "valeur du temps et réalisation non calculables (réglages d'Activité et honoraires).", 30))
         elif rate_source == "derived":
-            notes.append((f"Taux horaire standard déduit des factures d'honoraires des 12 derniers mois "
-                          f"({gnf(rate)}/h) : à fixer par le paramètre {PARAM_HOURLY_RATE}.", 5))
+            notes.append((f"Taux horaire de référence déduit des factures d'honoraires des 12 derniers mois "
+                          f"({gnf(rate)}/h) : à fixer dans les réglages d'Activité et honoraires.", 5))
         if period_total and abs(unassigned_period) >= 1:
             notes.append((f"{gnf(unassigned_period)} de chiffre d'affaires sans activité analytique sur la période.",
                           min(20, 20 * abs(unassigned_period) / abs(period_total))))

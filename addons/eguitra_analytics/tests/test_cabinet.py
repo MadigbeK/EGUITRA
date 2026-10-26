@@ -552,6 +552,32 @@ class TestAnalyseCabinet(ApiCase):
                                msg="35 h sur la période, deux consultants : moyenne par consultant")
         self.assertIn("cabinet.temps_non_facture", [i["id"] for i in body["insights"]])
 
+    def test_reglages_du_temps(self):
+        """Taux horaire de référence et taux de revient réglés depuis la plateforme (administration et
+        direction) ; une valeur enregistrée illisible est signalée au lieu d'être ignorée en silence."""
+        params = self.env["ir.config_parameter"].sudo()
+        self.addCleanup(params.set_param, "eguitra_analytics.cabinet_hourly_rate", False)
+        self.addCleanup(params.set_param, "eguitra_analytics.cabinet_cost_ratio", False)
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        status, body = self.call("GET", "/analyse/cabinet/reglages", token=token)
+        self.assertEqual((status, body.get("hourly_rate"), body.get("cost_ratio_default_pct")), (200, None, 40.0), body)
+        status, _body = self.call("PATCH", "/analyse/cabinet/reglages", {"hourly_rate": 600000}, token=token)
+        self.assertEqual(status, 403, "Le cabinet lit les réglages, la direction les fixe")
+        dg = self.open_session("dg.deux.societes", app="analyse")["access_token"]
+        cabinet = {"X-Eguitra-Company": str(self.cabinet.id)}
+        status, body = self.call("PATCH", "/analyse/cabinet/reglages", {"hourly_rate": 600000, "cost_ratio_pct": 35},
+                                 token=dg, headers=cabinet)
+        self.assertEqual((status, body.get("hourly_rate"), body.get("cost_ratio_pct")), (200, 600000.0, 35.0), body)
+        status, body = self._get("activite", token)
+        self.assertEqual((body["realization"]["standard_rate"], body["realization"]["rate_source"],
+                          body["profitability"]["cost_rate_pct"]), (600000, "parameter", 35.0))
+        status, body = self.call("PATCH", "/analyse/cabinet/reglages", {"hourly_rate": -5}, token=dg, headers=cabinet)
+        self.assertEqual((status, body.get("error")), (422, "invalid_parameter"), body)
+        params.set_param("eguitra_analytics.cabinet_hourly_rate", "six cents")
+        status, body = self._get("activite", token)
+        self.assertEqual(body["realization"]["rate_source"], "derived", "Valeur illisible ignorée")
+        self.assertTrue(any("illisible" in note for note in body["quality"]["notes"]), body["quality"])
+
     def test_avoir_et_carnet(self):
         """Honoraires facturés nets des avoirs (partiels, lettrés ou non) ; « à facturer » : la définition
         d'AxisPro, temps facturable rattaché à aucune facture."""
