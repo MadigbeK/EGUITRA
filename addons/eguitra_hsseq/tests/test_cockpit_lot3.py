@@ -56,8 +56,10 @@ class TestCockpitLot3(HsseqCase):
         fuel_km = first.distance_km + second.distance_km + third.distance_km
         self.assertEqual(values["fuel_consumption"], round(1280 * 100 / fuel_km, 1))
         self.assertEqual(values["co2_emissions"], round(1280 * 2.5 / fuel_km, 2), "Facteur d'émission des paramètres")
-        self.assertEqual(values["tanker_shortage"], round((first.shortage + second.shortage) * 1000
-                                                          / (first.volume_delivered + second.volume_delivered), 2))
+        shortage_15 = sum(max(0.0, r.volume_loaded_15 - r.volume_delivered_15) for r in (first, second))
+        self.assertEqual(values["tanker_shortage"], round(shortage_15 * 1000 / (first.volume_delivered_15
+                                                                                + second.volume_delivered_15), 2),
+                         "Manquant et livré à 15 °C")
         self.assertEqual(values["tipper_variance"], 25.0, "Écart de tonnage ÷ tonnage chargé (‰)")
         self.assertEqual((values["spills"], values["dust_exceedances"], values["complaints"]), (1, 1, 1))
         self.assertEqual(values["telematics_violations"], round(2 * 100 / 3, 2), "Violations par 100 voyages")

@@ -200,3 +200,48 @@ class TestCorrectionsLot3(HsseqCase):
         self.auditor.hsseq_audit_until = self.day - timedelta(days=1)
         status, _b = self.api("awa.auditrice", "GET", f"/hsseq/actions/{mine.id}")
         self.assertEqual(status, 403, "Après la date de fin d'accès")
+
+    def test_environnement_bordereau_poussieres_lignes_auditeur_et_manquants(self):
+        """Enlèvement sans bordereau : document_missing ; fiche d'une mesure de poussières ; description des
+        contaminations et réclamations dans les listes ; auteurs sans nom pour l'auditeur ; manquant des citernes
+        à 15 °C des deux côtés ; constat de contamination jamais dans le futur."""
+        status, waste = self.api("ibrahima", "POST", "/hsseq/wastes",
+                                 {"site_id": self.site.id, "waste_kind": "tyres", "quantity": 4})
+        status, body = self.api("ibrahima", "POST", f"/hsseq/wastes/{waste['id']}/collect", {
+            "provider_name": "Recycleur (fictif)", "manifest_reference": "BSD-1", "pickup_date": str(self.day)})
+        self.assertEqual((status, body["error"]), (422, "document_missing"))
+        status, measure = self.api("ibrahima", "POST", "/hsseq/dust-measurements",
+                                   {"site_id": self.site.id, "value": 4, "threshold": 10})
+        self.api("ibrahima", "PATCH", f"/hsseq/dust-measurements/{measure['id']}", {"value": 12})
+        status, detail = self.api("awa.auditrice", "GET", f"/hsseq/dust-measurements/{measure['id']}")
+        self.assertEqual((status, detail["exceeded"]), (200, True), detail)
+        self.assertIn("value", [h["field"] for h in detail["history"]])
+        self.assertEqual({(h["by"]["name"], h["by"]["function"]) for h in detail["history"]}, {(None, "Chef de parc")},
+                         "Auditeur : la fonction, jamais le nom")
+        status, own = self.api("kadi.hsseq", "GET", f"/hsseq/dust-measurements/{measure['id']}")
+        self.assertEqual(own["history"][0]["by"]["name"], self.parc.name, "Les autres profils lisent le nom")
+        status, spill = self.api("ibrahima", "POST", "/hsseq/spills", {
+            "occurred_at": fields.Datetime.to_string(fields.Datetime.now() - timedelta(hours=2)),
+            "site_id": self.site.id, "volume_liters": 5})
+        self.upload("ibrahima", model="spill", id=spill["id"])
+        status, read = self.api("awa.auditrice", "GET", f"/hsseq/spills/{spill['id']}")
+        self.assertEqual(read["attachments"][0]["created_by"], {"id": None, "name": None, "function": "Chef de parc"})
+        self.api("kadi.hsseq", "POST", "/hsseq/contaminations",
+                 {"nature": "water", "description": "Eau au fond", "site_id": self.site.id})
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/contaminations")
+        self.assertEqual(listing["items"][0]["description"], "Eau au fond")
+        status, body = self.api("kadi.hsseq", "POST", "/hsseq/contaminations", {
+            "nature": "water", "description": "Demain", "detected_on": str(self.day + timedelta(days=1))})
+        self.assertEqual((status, body["error"], body["fields"]), (400, "invalid_parameter", ["detected_on"]))
+        self.env["eguitra.hsseq.complaint"].create({"company_id": self.company.id, "partner_id": self.customer.id,
+                                                    "nature": "delay", "description": "Livraison en retard"})
+        status, listing = self.api("kadi.hsseq", "GET", "/hsseq/complaints")
+        self.assertEqual(listing["items"][0]["description"], "Livraison en retard")
+        # Chargée plus froide qu'à la livraison : le manquant observé (0,2 m³) n'est pas celui à 15 °C.
+        rotation = self._rotation(temperature_loaded=25, temperature_delivered=35, density_15=840)
+        rotation.write({"state": "done"})
+        status, deliveries = self.api("kadi.hsseq", "GET", "/hsseq/environment/deliveries")
+        tanker = deliveries["tanker"]["totals"]
+        shortage_15 = max(0.0, rotation.volume_loaded_15 - rotation.volume_delivered_15)
+        self.assertEqual(tanker["per_mille"], round(shortage_15 * 1000 / rotation.volume_delivered_15, 2),
+                         "Manquant et livré à 15 °C")

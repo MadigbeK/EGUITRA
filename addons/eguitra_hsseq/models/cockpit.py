@@ -25,6 +25,7 @@ from .common import (
     WASTE_KINDS,
     WEAK_SIGNAL_TYPES,
     indicator_status,
+    tanker_shortage_15,
     tipper_tonnages,
     vehicle_kind,
 )
@@ -65,7 +66,7 @@ INDICATORS = [
     ("co2_emissions", "Émissions de CO₂", "kg_co2_km", "down", "Transport",
      "kg de CO₂ par km (facteur d'émission des paramètres, 2,68 kg par litre de gazole par défaut)", False, True),
     ("tanker_shortage", "Écarts de livraison des citernes", "per_mille", "down", "Transport",
-     "Volume manquant ÷ volume livré", False, True),
+     "Volume manquant ÷ volume livré, les deux à 15 °C", False, True),
     ("tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport (pesées et livraisons)",
      "Écart de tonnage ÷ tonnage chargé", False, True),
     # Lot 2.
@@ -239,8 +240,9 @@ class EguitraHsseqCockpit(models.AbstractModel):
                 row["fuel_km"] += rot.distance_km or 0.0
                 row["co2_kg"] += rot.fuel_liters * factors.get(rot.company_id.id, CO2_PER_LITER)
             if vehicle_kind(rot.vehicle_id) == "tanker":
-                row["tanker_shortage"] += rot.shortage or 0.0
-                row["tanker_delivered"] += rot.volume_delivered or 0.0
+                # Volumes de même base : manquant et livré à 15 °C.
+                row["tanker_shortage"] += tanker_shortage_15(rot)
+                row["tanker_delivered"] += rot.volume_delivered_15 or 0.0
             else:
                 loaded, delivered = tipper_tonnages(rot)
                 if delivered:

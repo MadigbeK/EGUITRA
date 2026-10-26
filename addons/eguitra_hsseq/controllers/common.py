@@ -368,8 +368,32 @@ def company_ref(company):
     return {"id": company.id, "name": company.name} if company else None
 
 
+# Fonction d'un compte, servie à l'auditeur à la place de son nom (premier profil trouvé).
+FUNCTIONS = (("hsseq", "Responsable HSSEQ"), ("exploitation", "Chef de parc"), ("rh", "Ressources humaines"),
+             ("conducteur", "Conducteur"), ("admin", "Administration"), ("direction", "Direction générale"),
+             ("finance", "Finance"), ("auditeur", "Auditeur"))
+
+
+def actor_ref(user):
+    """Auteur d'une écriture (journal, pièce jointe) : son nom, sauf pour l'auditeur, qui ne lit que sa
+    fonction (à défaut, « Utilisateur interne »)."""
+    if not user:
+        return None
+    if not personal_data_hidden():
+        return user_ref(user)
+    codes = set(user.sudo()._eguitra_profiles())
+    function = next((label for code, label in FUNCTIONS if code in codes), "Utilisateur interne")
+    return {"id": None, "name": None, "function": function}
+
+
 def attachments_rows(object_key, records, role=None):
-    return [a._row() for a in request.env["eguitra.hsseq.attachment"]._for(object_key, records, role=role)]
+    rows = []
+    for attachment in request.env["eguitra.hsseq.attachment"]._for(object_key, records, role=role):
+        row = attachment._row()
+        if personal_data_hidden():
+            row["created_by"] = actor_ref(attachment.sudo().author_id)
+        rows.append(row)
+    return rows
 
 
 def history(object_key, record, limit=200):
@@ -379,7 +403,7 @@ def history(object_key, record, limit=200):
 
 
 def journal_row(entry):
-    return {"id": entry.id, "model": entry.model, "res_id": entry.res_id, "at": entry.at, "by": user_ref(entry.user_id),
+    return {"id": entry.id, "model": entry.model, "res_id": entry.res_id, "at": entry.at, "by": actor_ref(entry.user_id),
             "action": entry.action, "field": entry.field or None, "old_value": entry.old_value or None,
             "new_value": entry.new_value or None, "note": entry.note or None}
 

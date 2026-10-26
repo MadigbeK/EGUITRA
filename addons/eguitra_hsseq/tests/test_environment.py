@@ -84,7 +84,7 @@ class TestEnvironment(HsseqCase):
         payload = {"provider_name": "Recycleur (fictif)", "manifest_reference": "BSD-0042",
                    "pickup_date": str(self.day)}
         status, body = self.api("ibrahima", "POST", f"{path}/collect", payload)
-        self.assertEqual((status, body["error"]), (422, "proof_required"), "Bordereau joint obligatoire")
+        self.assertEqual((status, body["error"]), (422, "document_missing"), "Bordereau joint obligatoire")
         status, manifest = self.upload("ibrahima", content=PDF, name="bordereau.pdf", model="waste", id=waste["id"])
         self.assertEqual((status, manifest["role"]), (200, "document"), manifest)
         for login in ("sekou.parc", "dg.hsseq", "admin.hsseq", "awa.auditrice"):
@@ -243,7 +243,8 @@ class TestEnvironment(HsseqCase):
         status, deliveries = self.api("kadi.hsseq", "GET", "/hsseq/environment/deliveries")
         self.assertEqual(status, 200, deliveries)
         tanker = deliveries["tanker"]["totals"]
-        expected = round((first.shortage + second.shortage) * 1000 / (first.volume_delivered + second.volume_delivered), 2)
+        shortage_15 = sum(max(0.0, r.volume_loaded_15 - r.volume_delivered_15) for r in (first, second))
+        expected = round(shortage_15 * 1000 / (first.volume_delivered_15 + second.volume_delivered_15), 2)
         self.assertEqual((tanker["rotations"], tanker["per_mille"]), (2, expected), "Manquant ÷ livré (‰)")
         tipper_total = deliveries["tipper"]["totals"]
         self.assertEqual((tipper_total["loaded_t"], tipper_total["delivered_t"], tipper_total["per_mille"]),

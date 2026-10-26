@@ -250,6 +250,15 @@ def tipper_tonnages(rotation):
     return loaded, delivered
 
 
+def tanker_shortage_15(rotation):
+    """Manquant d'une citerne livrée, sur des volumes de même base : chargé à 15 °C moins livré à 15 °C (jamais
+    négatif) ; 0 tant que la livraison n'est pas saisie."""
+    rotation = rotation.sudo()
+    if not rotation.volume_delivered:
+        return 0.0
+    return max(0.0, (rotation.volume_loaded_15 or 0.0) - (rotation.volume_delivered_15 or 0.0))
+
+
 def day_start(day):
     """Horodatage (UTC, comme le fuseau d'Africa/Conakry) du début d'un jour, pour les « depuis » d'un motif."""
     return datetime.combine(day, time.min) if day else None

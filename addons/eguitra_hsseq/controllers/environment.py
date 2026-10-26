@@ -271,13 +271,16 @@ def waste_values(data, partial=False):
 # ─── Poussières ───────────────────────────────────────────────────────────
 
 
-def dust_row(measure):
+def dust_row(measure, detail=False):
     measure = measure.sudo()
-    return {"id": measure.id, "site": site_ref(measure.site_id), "measured_on": measure.measured_on,
-            "point": measure.point or None, "value": measure.value, "unit": measure.unit,
-            "threshold": measure.threshold, "exceeded": measure.exceeded, "method": measure.method or None,
-            "note": measure.note or None, "measured_by": person(measure.measured_by),
-            "rights": {"can_edit": can_write(measure), "can_close": False, "can_approve": False}}
+    row = {"id": measure.id, "site": site_ref(measure.site_id), "measured_on": measure.measured_on,
+           "point": measure.point or None, "value": measure.value, "unit": measure.unit,
+           "threshold": measure.threshold, "exceeded": measure.exceeded, "method": measure.method or None,
+           "note": measure.note or None, "measured_by": person(measure.measured_by),
+           "rights": {"can_edit": can_write(measure), "can_close": False, "can_approve": False}}
+    if detail:
+        row.update({"company": company_ref(measure.company_id), "history": history("dust", measure)})
+    return row
 
 
 def dust_values(data, partial=False):
@@ -307,7 +310,7 @@ def contamination_row(record, detail=False):
     row = {"id": record.id, "reference": record.reference, "detected_on": record.detected_on, "nature": record.nature,
            "rotation": rotation_ref(record.rotation_id), "vehicle": vehicle_ref(record.vehicle_id),
            "site": site_ref(record.site_id), "product": ref(record.product_id), "volume_m3": record.volume_m3 or None,
-           "status": record.status,
+           "description": record.description, "status": record.status,
            "rights": {"can_edit": is_hsseq() and record.status == "open", "can_close": "close" in transitions,
                       "can_approve": False}}
     if detail:
@@ -330,6 +333,9 @@ def contamination_values(data, partial=False):
             raise ApiError(400, "missing_fields", "Décrivez la contamination.", fields=["description"])
     if "detected_on" in data:
         values["detected_on"] = date_value(data, "detected_on") or today()
+        if values["detected_on"] > today():
+            raise ApiError(400, "invalid_parameter", "Une contamination se constate à une date passée ou du jour.",
+                           fields=["detected_on"])
     if "site_id" in data:
         site = get("eguitra.hsseq.site", data["site_id"], "Site") if data["site_id"] else None
         values["site_id"] = site.id if site else False
@@ -353,6 +359,7 @@ def complaint_row(complaint, detail=False):
     row = {"id": complaint.id, "reference": complaint.reference, "partner": ref(complaint.partner_id),
            "rotation": rotation_ref(complaint.rotation_id), "site": site_ref(complaint.site_id),
            "received_on": complaint.received_on, "nature": complaint.nature, "severity": complaint.severity,
+           "description": complaint.description,
            "response_due": complaint.response_due or None, "responded_on": complaint.responded_on or None,
            "response_days": complaint.response_days if complaint.responded_on else None,
            "on_time": complaint.on_time if complaint.responded_on else None, "overdue": complaint._overdue(today()),
@@ -605,6 +612,10 @@ class EguitraHsseqEnvironment(http.Controller):
         values.update(site_id=site.id, company_id=site.company_id.id, measured_by=request.env.uid)
         return dust_row(request.env["eguitra.hsseq.dust"].sudo().create(values))
 
+    @hsseq_route("/hsseq/dust-measurements/<int:measure_id>", profiles=ENV_READ)
+    def dust_measurement(self, measure_id, **_kw):
+        return dust_row(get_scoped("eguitra.hsseq.dust", measure_id, "Mesure"), detail=True)
+
     @hsseq_route("/hsseq/dust-measurements/<int:measure_id>", methods=("PATCH",), profiles=ENV_FIELD)
     def update_dust(self, measure_id, **_kw):
         measure = get_scoped("eguitra.hsseq.dust", measure_id, "Mesure")
@@ -853,7 +864,8 @@ class EguitraHsseqEnvironment(http.Controller):
             {"title": "Écarts de livraison", "meta": analysis_meta,
              "columns": [("Profil", "text"), ("Ensemble", "text"), ("Rotations", "int"), ("Chargé", "number"),
                          ("Livré", "number"), ("Écart", "number"), ("Écart (‰)", "number")],
-             "rows": [["Citerne (m³)", r["label"], r["rotations"], r["loaded_15"], r["delivered"], r["shortage"],
+             "rows": [["Citerne (m³ à 15 °C)", r["label"], r["rotations"], r["loaded_15"], r["delivered_15"],
+                       r["shortage"],
                        r["per_mille"]] for r in deliveries["tanker"]["items"]]
              + [["Benne (t)", r["label"], r["rotations"], r["loaded_t"], r["delivered_t"], r["variance_t"],
                  r["per_mille"]] for r in deliveries["tipper"]["items"]], "totals": None},

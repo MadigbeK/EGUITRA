@@ -39,6 +39,7 @@ from .common import (
     WASTE_UNITS,
     HsseqError,
     departed_states,
+    tanker_shortage_15,
     tipper_tonnages,
     today,
     vehicle_kind,
@@ -248,7 +249,7 @@ class EguitraHsseqWaste(models.Model):
             raise HsseqError("missing_fields", "Prestataire et numéro du bordereau sont obligatoires pour "
                                                "l'enlèvement.", fields=missing, status=400)
         if not self._manifest():
-            raise HsseqError("proof_required", "Joignez le bordereau d'enlèvement avant de l'enregistrer.",
+            raise HsseqError("document_missing", "Joignez le bordereau d'enlèvement avant de l'enregistrer.",
                              fields=["attachment_ids"])
         values = {"status": "collected", "pickup_date": day, "manifest_reference": manifest,
                   "collected_by": self.env.uid}
@@ -331,6 +332,12 @@ class EguitraHsseqContamination(models.Model):
     closed_at = fields.Datetime("Close le", readonly=True)
     closed_by = fields.Many2one("res.users", "Close par", readonly=True)
     reopen_reason = fields.Text("Motif de la dernière réouverture", readonly=True)
+
+    @api.constrains("detected_on")
+    def _check_detected_on(self):
+        for record in self:
+            if record.detected_on and record.detected_on > today(self.env):
+                raise ValidationError("Une contamination se constate à une date passée ou du jour.")
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -579,7 +586,7 @@ class EguitraHsseqEnvironment(models.AbstractModel):
     @staticmethod
     def _finish_tanker(row):
         return dict({k: round(v, 3) if isinstance(v, float) else v for k, v in row.items()},
-                    per_mille=round(row["shortage"] * 1000 / row["delivered"], 2) if row["delivered"] else None)
+                    per_mille=round(row["shortage"] * 1000 / row["delivered_15"], 2) if row["delivered_15"] else None)
 
     @staticmethod
     def _finish_tipper(row):
@@ -588,8 +595,8 @@ class EguitraHsseqEnvironment(models.AbstractModel):
 
     @api.model
     def _deliveries(self, companies, start, end, sites=None, kind=None, group_by="vehicle"):
-        """Écarts de livraison des rotations livrées : citernes, volume manquant ÷ volume livré (‰) ; bennes,
-        écart de tonnage ÷ tonnage chargé (‰)."""
+        """Écarts de livraison des rotations livrées : citernes, volume manquant ÷ volume livré, les deux à 15 °C
+        (‰ ; « delivered » reste le volume livré non corrigé) ; bennes, écart de tonnage ÷ tonnage chargé (‰)."""
         tanker, tipper = {}, {}
         total_tanker, total_tipper = self._delivery_rows()
         for rot in self._rotations(companies, start, end, sites, kind):
@@ -609,7 +616,7 @@ class EguitraHsseqEnvironment(models.AbstractModel):
                     row["loaded_15"] += rot.volume_loaded_15 or 0.0
                     row["delivered_15"] += rot.volume_delivered_15 or 0.0
                     row["delivered"] += rot.volume_delivered or 0.0
-                    row["shortage"] += rot.shortage or 0.0
+                    row["shortage"] += tanker_shortage_15(rot)
         return {
             "group_by": group_by,
             "tanker": {"items": [dict(self._finish_tanker(r), key=k[0], label=k[1]) for k, r in tanker.items()],
