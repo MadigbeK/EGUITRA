@@ -218,7 +218,33 @@ function icsDate(d: Date) {
 }
 
 function icsTexte(s: string) {
-  return s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/[,;]/g, (c) => `\\${c}`);
+  return s.replace(/\\/g, "\\\\").replace(/\r\n?|\n/g, "\\n").replace(/[,;]/g, (c) => `\\${c}`);
+}
+
+const OCTETS = new TextEncoder();
+
+/**
+ * Ligne d'un fichier .ics repliée à 75 octets (RFC 5545, § 3.1) : la suite passe à la ligne et commence par
+ * une espace, sans jamais couper un caractère accentué. Un titre ou un ordre du jour long ne rend plus le
+ * fichier illisible pour certains agendas.
+ */
+function plier(ligne: string): string {
+  const morceaux: string[] = [];
+  let courant = "";
+  let octets = 0;
+  for (const c of ligne) {
+    const n = OCTETS.encode(c).length;
+    // La première ligne a 75 octets ; les suivantes 74, après l'espace de continuation.
+    if (octets + n > (morceaux.length ? 74 : 75)) {
+      morceaux.push(courant);
+      courant = "";
+      octets = 0;
+    }
+    courant += c;
+    octets += n;
+  }
+  morceaux.push(courant);
+  return morceaux.join("\r\n ");
 }
 
 /** Télécharge un fichier .ics : le rendez-vous ou l'événement s'ajoute à l'agenda du téléphone. */
@@ -232,7 +258,7 @@ export function ajouterAuCalendrier({ titre, debut, fin, lieu, description, uid 
     "BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", `DESCRIPTION:${icsTexte(titre)}`, "END:VALARM",
     "END:VEVENT", "END:VCALENDAR",
   ].filter(Boolean);
-  const url = URL.createObjectURL(new Blob([lignes.join("\r\n")], { type: "text/calendar;charset=utf-8" }));
+  const url = URL.createObjectURL(new Blob([`${lignes.map(plier).join("\r\n")}\r\n`], { type: "text/calendar;charset=utf-8" }));
   const a = document.createElement("a");
   a.href = url;
   a.download = `${titre.replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 60) || "rendez-vous"}.ics`;
