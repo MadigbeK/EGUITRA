@@ -27,3 +27,4 @@ from . import test_consolidation
 from . import test_saisie_libre
 from . import test_takeover_conventions
 from . import test_tableau_de_bord_design
+from . import test_report_a_nouveau

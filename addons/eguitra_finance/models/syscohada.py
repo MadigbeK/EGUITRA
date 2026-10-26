@@ -6,6 +6,14 @@ qui peuvent être débiteurs ou créditeurs (40 à 47, 52, 53, 58) sont classés
 selon le sens de leur solde. La table de correspondance est à valider avec l'expert-comptable
 du client (offre, chapitre 6.5) ; les comptes non classés sont signalés par le contrôle
 « comptes hors états ».
+
+Résultat au bilan, sur le modèle du noyau (aucune écriture de clôture ni d'à-nouveaux à passer) :
+CJ « Résultat net de l'exercice » reprend les comptes 13 et le résultat (classes 6 à 8) de
+l'exercice en cours seulement ; le résultat des exercices précédents qui n'est pas encore affecté,
+plus le solde du compte d'affectation du résultat (type equity_unaffected, « 999999 » du plan de la
+Guinée), rejoint CH « Report à nouveau ». L'OD d'affectation décidée par l'assemblée (débit du
+compte d'affectation, crédit des réserves, du report à nouveau ou des dividendes) fait ainsi passer
+le résultat antérieur en réserves sans déséquilibrer le bilan.
 """
 
 from datetime import timedelta
@@ -203,12 +211,19 @@ class EguitraSyscohada(models.AbstractModel):
     def balance_sheet(self, companies, date_to, exclude_partner_ids=None):
         metrics = self.env["eguitra.finance.metrics"]
         balances = metrics.account_balances(companies, date_to, exclude_partner_ids=exclude_partner_ids)
-        # Le résultat non encore affecté (classes 6 à 8) rejoint la rubrique CJ.
-        result = -sum(b for a, b in balances.items() if a[:1] in "678")
+        # Le compte d'affectation du résultat n'entre dans aucune rubrique par son code : il rejoint le
+        # report à nouveau avec le résultat antérieur qu'il sert à affecter.
+        unaffected = sum(balances.pop(code, 0.0) for code in metrics.unaffected_codes(companies))
+        result = metrics.result_split(companies, date_to, exclude_partner_ids=exclude_partner_ids)
+        previous = result["previous"] - unaffected
         actif, used_a = _compute(balances, BILAN_ACTIF, 1)
         actif = _totals(actif, BILAN_ACTIF_TOTALS)
         passif, used_p = _compute(balances, BILAN_PASSIF, -1)
-        passif["CJ"] = passif.get("CJ", 0.0) + result
+        # CJ : comptes 13 et résultat de l'exercice en cours ; CH : comptes 12 et résultat des exercices
+        # précédents non encore affecté (classes 6 à 8 avant l'exercice, moins ce que l'OD d'affectation
+        # a déjà porté au débit du compte d'affectation).
+        passif["CJ"] = passif.get("CJ", 0.0) + result["current"]
+        passif["CH"] = passif.get("CH", 0.0) + previous
         passif = _totals(passif, BILAN_PASSIF_TOTALS)
         used = used_a | used_p
         unmapped = {a: b for a, b in balances.items() if a[:1] in "12345" and a not in used and abs(b) > 0.005}
@@ -220,6 +235,8 @@ class EguitraSyscohada(models.AbstractModel):
             "total_passif": passif["DZ"],
             "difference": round(actif["BZ"] - passif["DZ"], 2),
             "unmapped_accounts": unmapped,
+            "result_current_year": result["current"],
+            "result_previous_unallocated": previous,
         }
 
     # ─── Tableau des flux de trésorerie ───────────────────────────────────
