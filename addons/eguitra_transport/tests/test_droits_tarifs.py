@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from odoo.exceptions import AccessError, ValidationError
 from odoo.tests import tagged
 
@@ -54,6 +56,29 @@ class TestDroitsTarifs(TransportCase):
         with self.assertRaises(ValidationError):
             self.env["eguitra.transport.tariff"].create({"route_id": self.route.id, "partner_id": self.customer.id,
                                                          "product_id": tariff.product_id.id, "rate": 1_000_000})
+
+    def test_tarifs_dates_selon_le_chargement(self):
+        """I-T10 : un tarif renégocié commence à sa date ; une rotation chargée avant (même saisie au
+        téléphone et synchronisée après) garde l'ancien tarif."""
+        start = self.today + timedelta(days=10)
+        token = self.open_session("ibrahima")["access_token"]
+        status, body = self.call("PATCH", f"/transport/routes/{self.route.id}", {"tariffs": [
+            {"partner_id": self.customer.id, "product": "gasoil", "rate": 1_200_000},
+            {"partner_id": self.customer.id, "product": "gasoil", "rate": 1_300_000, "date_from": str(start)}]}, token=token)
+        self.assertEqual(status, 200, body)
+        self.assertEqual(len(self.route.tariff_ids), 2, "L'ancien tarif reste pour les chargements d'avant")
+        self.assertEqual(self._rotation(date_loading=start - timedelta(days=1)).rate, 1_200_000)
+        self.assertEqual(self._rotation(date_loading=start).rate, 1_300_000)
+        status, sync = self.call("POST", "/transport/sync", {"rotations": [{
+            "client_uuid": "tarif-date-01", "vehicle_id": self.truck.id, "partner_id": self.customer.id,
+            "route_id": self.route.id, "product": "gasoil", "volume_loaded": 40,
+            "date_loading": str(start - timedelta(days=2))}]}, token=token)
+        self.assertEqual(sync["results"][0]["status"], "created", sync)
+        rot = self.env["eguitra.transport.rotation"].browse(sync["results"][0]["id"])
+        self.assertEqual(rot.rate, 1_200_000, "Tarif en vigueur au chargement, non à la synchronisation")
+        status, routes = self.call("GET", "/transport/routes", token=token)
+        row = next(r for r in routes if r["id"] == self.route.id)
+        self.assertEqual(sorted(str(t["date_from"]) for t in row["tariffs"]), sorted(["None", str(start)]))
 
     def test_lignes_de_taxe_recalculees_par_le_systeme(self):
         self.env["eguitra.transport.tax"].create({"name": "Taxe de roulage", "nature": "road", "base": "delivered",

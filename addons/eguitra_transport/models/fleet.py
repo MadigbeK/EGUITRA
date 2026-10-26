@@ -1,5 +1,7 @@
 """Flotte : ensembles routiers (tracteur et citerne), chauffeurs, routes tarifées."""
 
+from datetime import date
+
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
@@ -111,15 +113,21 @@ class EguitraTransportRoute(models.Model):
         expected = 2 * self.distance_km
         return abs(self.distance_return_km - expected) > threshold * expected
 
-    def _tariff_for(self, partner, product):
-        """Tarif négocié du client pour le produit, sinon pour tous les produits ; vide à défaut."""
+    def _tariff_for(self, partner, product, day=None):
+        """Tarif négocié du client en vigueur à une date (le dernier commencé ; aujourd'hui par défaut), pour
+        le produit, sinon pour tous les produits ; vide à défaut (audit du 25 octobre, I-T10)."""
         self.ensure_one()
-        tariffs = self.tariff_ids.filtered(lambda t: t.partner_id == partner)
-        return tariffs.filtered(lambda t: t.product_id == product)[:1] or tariffs.filtered(lambda t: not t.product_id)[:1]
+        day = day or fields.Date.context_today(self)
+        tariffs = self.tariff_ids.filtered(lambda t: t.partner_id == partner and (not t.date_from or t.date_from <= day))
 
-    def _rate_for(self, partner, product):
-        """Tarif au m³ : tarif du client pour le produit, sinon du client, sinon tarif de la route."""
-        tariff = self._tariff_for(partner, product)
+        def latest(candidates):
+            return candidates.sorted(lambda t: t.date_from or date.min, reverse=True)[:1]
+
+        return latest(tariffs.filtered(lambda t: t.product_id == product)) or latest(tariffs.filtered(lambda t: not t.product_id))
+
+    def _rate_for(self, partner, product, day=None):
+        """Tarif au m³ à une date : tarif du client pour le produit, sinon du client, sinon tarif de la route."""
+        tariff = self._tariff_for(partner, product, day)
         return tariff.rate if tariff else self.default_rate
 
 
@@ -133,6 +141,8 @@ class EguitraTransportTariff(models.Model):
                                  help="Vide : tous les produits.")
     product = fields.Char("Code produit", compute="_compute_product_code")
     rate = fields.Monetary("Tarif par m³", currency_field="currency_id", required=True)
+    date_from = fields.Date("À partir du", help="Vide : depuis toujours. Un tarif renégocié commence à sa date ; le "
+                                                "précédent vaut pour les chargements d'avant.")
     currency_id = fields.Many2one(related="route_id.currency_id")
     tolerance_custom = fields.Boolean("Tolérance de manquant propre au tarif")
     shortage_tolerance = fields.Float("Tolérance de manquant (%)", digits=(5, 3))
@@ -141,19 +151,19 @@ class EguitraTransportTariff(models.Model):
         help="Prix contractuel du m³ manquant pour ce client ; vide : prix du produit.",
     )
 
-    @api.depends("product_id.code")
-    @api.constrains("route_id", "partner_id", "product_id")
+    @api.constrains("route_id", "partner_id", "product_id", "date_from")
     def _check_one_rate_per_client(self):
-        """Un seul tarif par client et par produit sur une route : un tarif renégocié remplace l'ancien,
-        sans quoi la rotation prendrait le premier des deux (audit du 25 octobre, C6)."""
+        """Un seul tarif par client, par produit et par date de début sur une route : un tarif renégocié
+        commence à sa date ou remplace celui de la même date (audit du 25 octobre, C6 et I-T10)."""
         for tariff in self:
             twins = self.search_count([("id", "!=", tariff.id), ("route_id", "=", tariff.route_id.id),
                                        ("partner_id", "=", tariff.partner_id.id),
-                                       ("product_id", "=", tariff.product_id.id)])
+                                       ("product_id", "=", tariff.product_id.id), ("date_from", "=", tariff.date_from)])
             if twins:
-                raise ValidationError(f"{tariff.route_id.name} : un tarif existe déjà pour {tariff.partner_id.name} "
-                                      "et ce produit ; modifiez-le au lieu d'en ajouter un second.")
+                raise ValidationError(f"{tariff.route_id.name} : un tarif existe déjà pour {tariff.partner_id.name}, "
+                                      "ce produit et cette date ; modifiez-le au lieu d'en ajouter un second.")
 
+    @api.depends("product_id.code")
     def _compute_product_code(self):
         for tariff in self:
             tariff.product = tariff.product_id.code or False

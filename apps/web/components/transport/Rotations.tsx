@@ -553,7 +553,11 @@ function GainEstime({ ref_, f }: { ref_: Referentials; f: Record<string, string>
   const route = ref_.routes.find((r) => String(r.id) === f.route_id);
   if (!route) return null;
   const volume = parseNumber(f.volume_delivered ?? "") ?? parseNumber(f.volume_loaded ?? "") ?? 0;
-  const tariffs = route.tariffs.filter((t) => String(t.partner_id) === f.partner_id);
+  // Tarif du client en vigueur à la date de chargement (le dernier commencé), comme le noyau.
+  const jour = f.date_loading ?? "";
+  const tariffs = route.tariffs
+    .filter((t) => String(t.partner_id) === f.partner_id && (!t.date_from || t.date_from <= jour))
+    .sort((a, b) => (b.date_from ?? "").localeCompare(a.date_from ?? ""));
   const rate = parseNumber(f.rate ?? "") ?? (tariffs.find((t) => t.product === f.product) ?? tariffs.find((t) => !t.product))?.rate ?? route.default_rate;
   const fuel = route.std_fuel_liters * (ref_.fuel_price ?? 0);
   const standard = fuel + route.std_driver_bonus + route.std_tolls + route.std_other_costs;

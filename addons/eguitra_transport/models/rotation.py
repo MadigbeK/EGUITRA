@@ -227,7 +227,7 @@ class EguitraTransportRotation(models.Model):
         self.ensure_one()
         if not self.route_id:
             return self.env["eguitra.transport.tariff"]
-        return self.route_id._tariff_for(self.partner_id, self.product_id)
+        return self.route_id._tariff_for(self.partner_id, self.product_id, self.date_loading)
 
     @api.depends("partner_id", "route_id", "product_id", "company_id")
     def _compute_shortage_tolerance(self):
@@ -388,7 +388,8 @@ class EguitraTransportRotation(models.Model):
                 route = self.env["eguitra.transport.route"].browse(vals["route_id"])
                 partner = self.env["res.partner"].browse(vals["partner_id"])
                 product = Product.browse(vals["product_id"]) if vals.get("product_id") else Product._default_product()
-                vals["rate"] = route._rate_for(partner, product)
+                # Tarif en vigueur à la date de chargement, même pour une saisie synchronisée plus tard.
+                vals["rate"] = route._rate_for(partner, product, fields.Date.to_date(vals.get("date_loading")))
             if vals.get("vehicle_id") and not vals.get("driver_id"):
                 vals["driver_id"] = self.env["eguitra.transport.vehicle"].browse(vals["vehicle_id"]).driver_id.id or False
         rotations = super().create(vals_list)

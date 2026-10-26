@@ -266,7 +266,7 @@ def _tariff_terms(data):
 
 def _tariff_row(t):
     return {"id": t.id, "partner": _ref(t.partner_id), "product": t.product or None, "product_id": t.product_id.id or None,
-            "rate": t.rate, "shortage_tolerance": t.shortage_tolerance if t.tolerance_custom else None,
+            "rate": t.rate, "date_from": t.date_from or None, "shortage_tolerance": t.shortage_tolerance if t.tolerance_custom else None,
             "shortage_price": t.shortage_price or None, "official_gap": _gap(t._official_gap()[1])}
 
 
@@ -410,7 +410,8 @@ class EguitraTransport(http.Controller):
                           "payload_tonnes": v.payload_tonnes or None} for v in vehicles],
             "drivers": [{"id": d.id, "name": d.name, "phone": d.phone} for d in env["eguitra.transport.driver"].search([])],
             "routes": [{"id": r.id, "name": r.name, "distance_km": r.distance_km, "default_rate": r.default_rate,
-                        "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate} for t in r.tariff_ids],
+                        "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate,
+                                     "date_from": t.date_from or None} for t in r.tariff_ids],
                         **{k: r[k] for k in ROUTE_STANDARDS}}
                        for r in routes],
             # Prix du litre en vigueur : coût standard estimé à la saisie (le noyau le recalcule).
@@ -698,20 +699,27 @@ class EguitraTransport(http.Controller):
             # Les tarifs sont renvoyés en entier. Le tarif du même client et du même produit est mis à jour
             # (il garde ses conditions de manquant, fixées par la finance), un nouveau est créé ; retirer un
             # tarif de la liste le supprime, ce que seule la finance peut faire.
-            kept = {(t.partner_id.id, t.product_id.id): t for t in (route.tariff_ids if route else [])}
+            # Clé d'un tarif : client, produit et date de début (un tarif renégocié commence à sa date).
+            kept = {(t.partner_id.id, t.product_id.id, t.date_from or False): t for t in (route.tariff_ids if route else [])}
             finance = _is_finance()
             commands, seen, couples = [], set(), set()
             for t in data["tariffs"] or []:
+                if not isinstance(t, dict):
+                    raise ApiError(400, "invalid_parameter", "Tarif attendu sous forme d'objet.")
                 product = _product(t).id if (t.get("product") or t.get("product_id")) else False
-                line = {"partner_id": int(t["partner_id"]), "product_id": product,
-                        "rate": as_float(t.get("rate", 0), "rate")}
-                if (line["partner_id"], product) in couples:
-                    raise ApiError(400, "invalid_parameter",
-                                   "Un seul tarif par client et par produit sur une route : le nouveau remplace l'ancien.")
-                couples.add((line["partner_id"], product))
+                start = parse_date(t, "date_from") or False
+                line = {"partner_id": _int(t.get("partner_id"), "Client"), "product_id": product,
+                        "rate": as_float(t.get("rate", 0), "rate"), "date_from": start}
+                if line["rate"] < 0:
+                    raise ApiError(400, "invalid_parameter", "Un tarif ne peut pas être négatif.")
+                key = (line["partner_id"], product, start)
+                if key in couples:
+                    raise ApiError(400, "invalid_parameter", "Un seul tarif par client, par produit et par date de "
+                                   "début sur une route : le nouveau remplace l'ancien.")
+                couples.add(key)
                 if finance:
                     line.update(_tariff_terms(t))
-                previous = kept.get((line["partner_id"], product))
+                previous = kept.get(key)
                 if previous and previous.id not in seen:
                     seen.add(previous.id)
                     commands.append((1, previous.id, line))
