@@ -6611,10 +6611,10 @@ const HS_SETTINGS_DEFAUT = {
   level_moderate_min: 4, level_significant_min: 8, level_high_min: 15, investigation_hours_high: 72, investigation_days_significant: 7,
   investigation_days_moderate: 15, client_notice_hours: 24, verification_min_criticality: 8, verification_days: 90, escalation_days: 30,
   night_start_hour: 19, night_end_hour: 6, max_driving_hours: 9, co2_factor: 2.68, complaint_response_days: 15,
-  costly_action_threshold: 50_000_000, check_window_hours: 12, breath_test_window_hours: 4, director_id: null, targets: {},
+  costly_action_threshold: 50_000_000, check_window_hours: 12, breath_test_window_hours: 4, risk_review_months: 12, director_id: null, targets: {},
 };
 const HS_SETTINGS_DATES = ["lock_start_date", "qualifications_required_from", "employee_file_required_from", "documents_required_from"];
-const HS_SETTINGS_NOMBRES = ["level_moderate_min", "level_significant_min", "level_high_min", "investigation_hours_high", "investigation_days_significant", "investigation_days_moderate", "client_notice_hours", "verification_min_criticality", "verification_days", "escalation_days", "costly_action_threshold", "check_window_hours", "breath_test_window_hours"];
+const HS_SETTINGS_NOMBRES = ["level_moderate_min", "level_significant_min", "level_high_min", "investigation_hours_high", "investigation_days_significant", "investigation_days_moderate", "client_notice_hours", "verification_min_criticality", "verification_days", "escalation_days", "costly_action_threshold", "check_window_hours", "breath_test_window_hours", "risk_review_months"];
 /** Réglages des plans de trajet (lot 2) : plage de nuit et conduite au plus par jour, en heures décimales. */
 const HS_SETTINGS_DECIMAUX = ["night_start_hour", "night_end_hour", "max_driving_hours"];
 /** Cibles proposées par le contrat (§4), remplacées indicateur par indicateur par `targets`. */
@@ -7595,7 +7595,8 @@ function hsIndicators(ctx, q, month, period) {
     ["telematics_violations", "Violations de conduite par 100 voyages", "per_100_trips", "down", "Télématique (import des violations), Transport", "Violations importées ÷ voyages du mois × 100", true,
       (m) => {
         // Sites lus : le filtre, sinon ceux du chef de parc ou de l'auditeur ; voyages des citernes et des bennes.
-        const bornes = site ? [site] : hsScope(ctx) === "all" ? null : hsSites(ctx);
+        // Sans compte (calcul de la revue de direction à l'enregistrement) : toute la flotte.
+        const bornes = site ? [site] : !ctx || hsScope(ctx) === "all" ? null : hsSites(ctx);
         const surSites = (siteId) => !bornes || bornes.includes(siteId);
         const voyages = [...DB.rotations.filter((r) => r.company_id === 1), ...HS.rotations].filter((r) => {
           const v = hsVehicle(r.vehicle_id);
@@ -9389,28 +9390,30 @@ route("DELETE", "/hsseq/attachments/:id", null, (ctx) => {
  */
 const HS_REFS = {
   route, reply, fileReply, xlsxBuffer, ApiError, DB, USERS, TODAY, COMPANIES, hasProfile, intArg, limitOf, offsetOf,
-  TR_READ, HS_READ, HS_APP, HS_EVENT_READ, HS_FIELD, HS_SETUP, HS_ALL, HS_SETTINGS_DEFAUT, HS_SETTINGS_DATES,
-  HS_SETTINGS_NOMBRES, HS_TARGETS, HS_USER_SITES, HS_EMPLOYEES, HS_PNG, HS_REASONS, HS_NOT_WAIVABLE, HS_TYPES,
-  HS_TYPE_LABELS, HS_STATUS_LABELS, HS_ACTION_LABELS, HS_LEVEL_LABELS, HS_DOMAINS, HS_DOC_LABELS, HS_COST_KINDS,
-  HS_CONTROL_LEVELS, HS_ORIGINS, HS_FACTORS, HS_METHODS, HS_PROOFS, hsNow, hsAddMinutes, hsSettings, hsThresholds,
+  TR_READ, HS_READ, HS_APP, HS_EVENT_READ, HS_AUDIT_READ, HS_FIELD, HS_SETUP, HS_ALL, HS_SETTINGS_DEFAUT,
+  HS_SETTINGS_DATES, HS_SETTINGS_NOMBRES, HS_SETTINGS_DECIMAUX, HS_TARGETS, HS_FAMILY, hsChamp, hsIndicatorStatus,
+  HS_USER_SITES, HS_EMPLOYEES, HS_STAFF, HS_PNG, HS_REASONS, HS_NOT_WAIVABLE, HS_TYPES, HS_TYPE_LABELS,
+  HS_STATUS_LABELS, HS_ACTION_LABELS, HS_LEVEL_LABELS, HS_DOMAINS, HS_DOC_LABELS, HS_COST_KINDS, HS_CONTROL_LEVELS,
+  HS_ORIGINS, HS_FACTORS, HS_METHODS, HS_PROOFS, hsNow, hsAddMinutes, hsSettings, hsThresholds,
   hsInvestigationMinutes, hsLevel, hsLevelMethod, hsUser, hsVehicle, hsVehicleByName, hsKind, hsVehicleSite,
   hsVehicleRef, hsDriver, hsDriverRef, hsRotation, hsRouteName, hsRotationRef, hsSite, hsSiteRef, hsRotationEnd,
-  hsRotationAt, hsDepartureRotations, hsLockActive, hsIs, hsFull, hsScope, hsSites, hsPersonalHidden, hsAuditorGuard,
-  hsSiteOk, hsEmployee, hsMyDriver, hsCanSeeEvent, hsCanSeeAction, hsCanSeeCheck, hsCanLift, hsForbidden, hsRule,
-  hsMissing, hsBad, hsNum, hsId, hsFilter, hsPage, hsLog, hsHistoryRow, hsHistory, hsAttach, hsPhoto,
-  hsAttachmentRow, hsAttachments, hsClaim, hsIds, hsExisting, hsNotify, hsNotificationRow, hsDirectors,
+  hsRotationAt, hsDepartureRotations, hsLockActive, hsIs, hsFull, hsScope, hsSites, hsPersonalHidden, hsMasquer,
+  hsAuditorGuard, hsSiteOk, hsEmployee, hsMyDriver, hsCanSeeEvent, hsCanSeeAction, hsCanSeeCheck, hsCanLift,
+  hsForbidden, hsRule, hsMissing, hsBad, hsNum, hsId, hsFilter, hsPage, hsLog, hsHistoryRow, hsHistory, hsAttach,
+  hsPhoto, hsAttachmentRow, hsAttachments, hsClaim, hsIds, hsExisting, hsNotify, hsNotificationRow, hsDirectors,
   hsHsseqManagers, hsTemplateRow, hsCreateCheck, hsNcPhotosMissing, hsNcRow, hsCheckLine, hsCheckDetail,
   hsTestStatus, hsTestAccess, hsTestRow, hsTestSite, hsCanSeeTest, hsLiveTests, hsReasonSetting, hsExpireWaivers,
   hsAutoAttach, hsRemoveDriver, hsReason, hsReasons, hsEvaluate, hsDepartures, hsCriticality, hsEventActions,
   hsActionOpen, hsEventOverdue, hsEventLine, hsEventTransitions, hsPersonRow, hsInvestigationRow, hsEventDetail,
-  hsNotifyLevel, hsClassify, hsActionOriginLabel, hsActionCriticality, hsIsCostly, hsNeedsApproval, hsDaysOverdue,
-  hsActionLine, hsReminders, hsActionTransitions, hsActionDetail, hsNewAction, hsWaiverRow, hsCanSeeWaiver,
-  hsDeadlines, hsEventKind, hsEventCounts, hsHours, hsKm, hsLiters, hsSynth, hsIndicators, seedHsseq, hsInternal,
-  hsDateTime, hsReportedAt, hsText, hsSiteRow, hsSiteValues, hsAssignVehicles, hsSettingsCompany, hsSettingsRow,
-  hsEventOf, HS_EVENT_SORTS, hsSort, hsList, hsEventList, hsPeople, hsEventValues, hsActionOf, HS_ACTION_SORTS,
-  hsActionList, hsActionValues, hsTemplateValues, hsItemValues, HS_CHECK_SORTS, hsCheckOf, hsTestOf,
-  hsRotationAllowed, hsReasonRow, hsWaiverOf, HS_WAIVER_SORTS, hsFourEyes, hsWaiverRequire, HS_ATTACH_MODELS,
-  hsClosed, hsCanAttach, hsAttachmentOf,
+  hsNotifyLevel, hsClassify, hsActionOriginLabel, hsActionCriticality, hsIsCostly, hsNeedsApproval,
+  hsApprovalPending, hsDaysOverdue, hsActionLine, hsReminders, hsActionTransitions, hsActionDetail, hsNewAction,
+  hsWaiverRow, hsCanSeeWaiver, hsDeadlines, hsEventKind, hsEventCounts, hsHours, hsKm, hsLiters, hsSynth,
+  hsIndicators, seedHsseq, hsInternal, hsDateTime, hsReportedAt, hsText, hsSiteRow, hsSiteValues, hsAssignVehicles,
+  hsEmployeeRows, hsClientRows, hsAuditorRow, hsAuditors, hsSettingsCompany, hsSettingsRow, hsEventMatrix,
+  hsLot2Blocks, hsLot3Blocks, hsEventOf, HS_EVENT_SORTS, hsSort, hsList, hsEventList, hsPeople, hsEventValues,
+  hsActionOf, HS_ACTION_SORTS, HS_ACTION_SOURCES, hsActionFrom, hsActionList, hsActionValues, hsTemplateValues,
+  hsItemValues, HS_CHECK_SORTS, hsCheckOf, hsTestOf, hsRotationAllowed, hsReasonRow, hsWaiverOf, HS_WAIVER_SORTS,
+  hsFourEyes, hsWaiverRequire, HS_ATTACH_MODELS, hsClosed, hsCanAttach, hsAttachmentOf,
 };
 
 /* ─── NIMOVA · Analyse (routes dans analyse.mjs) ─────────────────────────── */

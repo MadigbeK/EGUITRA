@@ -43,6 +43,24 @@ const prochainId = (liste) => liste.reduce((m, x) => Math.max(m, x.id), 0) + 1;
 const instant = (jour, heure) => `${jour}T${heure}:00Z`;
 /** « 15/10/2026 » d'une date « AAAA-MM-JJ ». */
 const jourFr = (jour) => `${jour.slice(8, 10)}/${jour.slice(5, 7)}/${jour.slice(0, 4)}`;
+/**
+ * Nombre écrit à la française (fr_number du noyau) : espace fine insécable des milliers, virgule décimale ;
+ * `sansZeros` : sans les zéros décimaux inutiles. Vide pour une valeur absente.
+ */
+function frNombre(valeur, decimales = 2, sansZeros = false) {
+  if (valeur === null || valeur === undefined || valeur === false) return "";
+  const n = Number(valeur);
+  const [entier, fraction] = Math.abs(n).toFixed(decimales).split(".");
+  let texte = `${n < 0 ? "-" : ""}${entier.replace(/\B(?=(\d{3})+(?!\d))/g, " ")}${fraction ? `,${fraction}` : ""}`;
+  if (sansZeros && decimales) texte = texte.replace(/0+$/, "").replace(/,$/, "");
+  return texte;
+}
+/** Valeur d'un champ du plan pour le journal (_journal_value) : « oui » ou « non », horodatage « AAAA-MM-JJ HH:MM:SS ». */
+function valeurJournal(cle, v) {
+  if (cle === "night_driving") return v ? "oui" : "non";
+  if (v === null || v === undefined || v === "") return null;
+  return cle === "planned_departure" || cle === "planned_arrival" ? String(v).replace("T", " ").replace("Z", "") : String(v);
+}
 /** Durée en heures écrite comme le noyau (hours_label) : « 9 h », « 13 h 45 ». */
 function heures(valeur) {
   const entier = Math.trunc(valeur);
@@ -170,7 +188,13 @@ function ligneTrajet(ctx, rot) {
   const editable = H.hsIs(ctx, "exploitation") && dansSesSites(ctx, site) && rot.state === "draft";
   const ligne = {
     rotation: H.hsRotationRef(rot), vehicle: H.hsVehicleRef(rot.vehicle_id), driver: refConducteur(ctx, rot.driver_id), site: H.hsSiteRef(site),
-    route: route ? { id: route.id, name: route.name, night_driving_forbidden: Boolean(regleRoute(route.id)?.night_driving_forbidden) } : null,
+    // Route complète : origine, destination, distance (aller simple) et durée standard d'une rotation.
+    route: route
+      ? {
+        id: route.id, name: route.name, origin: route.origin || null, destination: route.destination || null, distance_km: route.distance_km || null,
+        duration_days: route.duration_days || null, night_driving_forbidden: Boolean(regleRoute(route.id)?.night_driving_forbidden),
+      }
+      : null,
     rules: r, journey: null, transitions: [], rights: { can_edit: editable, can_close: false, can_approve: false },
   };
   const plan = planDe(rot.id);
@@ -207,7 +231,10 @@ function rotationDuParc(ctx, id) {
   return rot;
 }
 
-/** Valeurs d'un plan envoyé par PUT (journey_values du noyau) ; les arrêts remplacent les précédents. */
+/**
+ * Valeurs d'un plan envoyé par PUT (journey_values du noyau) ; les arrêts remplacent les précédents. Un arrêt
+ * qui commence avant le départ prévu ou finit après l'arrivée prévue est refusé (400, fields ["stops"]).
+ */
 function valeursPlan(b) {
   const manquants = ["planned_departure", "planned_arrival"].filter((k) => b[k] === undefined || b[k] === null || b[k] === "");
   if (manquants.length) throw H.hsMissing("Champs obligatoires manquants.", manquants);
@@ -217,13 +244,22 @@ function valeursPlan(b) {
   if (b.stops !== undefined && b.stops !== null && !Array.isArray(b.stops)) throw H.hsBad("Arrêt : kind stop, break ou rest.", ["stops"]);
   const arrets = [];
   for (const s of b.stops ?? []) {
-    if (!s || typeof s !== "object" || Array.isArray(s) || !NATURES_ARRET.includes(s.kind ?? "break")) throw H.hsBad("Arrêt : kind stop, break ou rest.", ["stops"]);
+    if (!s || typeof s !== "object" || Array.isArray(s) || !NATURES_ARRET.includes("kind" in s ? s.kind : "break")) throw H.hsBad("Arrêt : kind stop, break ou rest.", ["stops"]);
     const prevu = H.hsDateTime(s, "planned_at");
     const minutes = Math.trunc(Number(s.duration_minutes ?? 0));
     if (!prevu || !(minutes > 0)) throw H.hsBad("Arrêt : heure prévue et durée positive.", ["stops"]);
+    if (Date.parse(prevu) < Date.parse(depart) || Date.parse(prevu) + minutes * 60_000 > Date.parse(arrivee)) {
+      throw H.hsBad("Un arrêt se tient entre le départ et l'arrivée prévus.", ["stops"]);
+    }
     arrets.push({ kind: s.kind || "break", place: H.hsText(s, "place", 200), planned_at: prevu, duration_minutes: minutes });
   }
   return { itinerary: H.hsText(b, "itinerary", 4000), night_driving: Boolean(b.night_driving), planned_departure: depart, planned_arrival: arrivee, stops: arrets };
+}
+
+/** Plan comparable (_plan_key) : valeurs des champs et arrêts triés, sans leurs identifiants. */
+function clePlan(p) {
+  const arrets = p.stops.map((s) => JSON.stringify([s.kind || "break", s.place || "", s.planned_at, s.duration_minutes])).sort();
+  return JSON.stringify([p.itinerary || null, Boolean(p.night_driving), p.planned_departure, p.planned_arrival, arrets]);
 }
 
 /** Arrêts numérotés à la suite de ceux de tous les plans. */
@@ -243,7 +279,8 @@ function surcharge(rot) {
   const utile = chargeUtile(rot);
   return utile && n ? Math.max(0, Math.round((n - utile) * 1000) / 1000) : 0;
 }
-const decrireTicket = (w) => (w ? `${w.weigh_ticket ?? "-"} : ${w.weight_gross.toFixed(3)} t brut, ${w.weight_tare.toFixed(3)} t à vide` : "- : 0.000 t brut, 0.000 t à vide");
+/** Ticket de pesée pour le journal, nombres à la française : « TP-7 : 48,500 t brut, 13,000 t à vide ». */
+const decrireTicket = (w) => `${w?.weigh_ticket || "-"} : ${frNombre(w?.weight_gross ?? 0, 3)} t brut, ${frNombre(w?.weight_tare ?? 0, 3)} t à vide`;
 
 /* ─── Immobilisations (V09) ─────────────────────────────────────────────── */
 
@@ -391,7 +428,10 @@ function routes() {
 
   route("GET", "/hsseq/rotations/:id/journey", LECTURE_PLAN, (ctx) => ligneTrajet(ctx, rotationLue(ctx, ctx.params[0])));
 
-  /** Plan créé ou remplacé ; un plan validé qu'on modifie revient « à valider » (toute écriture, comme le noyau). */
+  /**
+   * Plan créé ou remplacé ; un envoi identique au plan enregistré (valeurs et arrêts) n'écrit rien, un plan
+   * validé qui change réellement revient « à valider ».
+   */
   route("PUT", "/hsseq/rotations/:id/journey", CHEF_DE_PARC, (ctx) => {
     const rot = rotationDuParc(ctx, ctx.params[0]);
     const v = valeursPlan(ctx.body);
@@ -403,8 +443,10 @@ function routes() {
       H.hsLog("journey", nouveau.id, ctx.user.id, "create", null, null, null, maintenant);
       return ligneTrajet(ctx, rot);
     }
+    if (clePlan(plan) === clePlan(v)) return ligneTrajet(ctx, rot);
     for (const cle of ["itinerary", "planned_departure", "planned_arrival", "night_driving"]) {
-      if (String(plan[cle] ?? "") !== String(v[cle] ?? "")) H.hsLog("journey", plan.id, ctx.user.id, "write", cle, plan[cle] ?? null, v[cle] ?? null, maintenant);
+      const [avant, apres] = [valeurJournal(cle, plan[cle]), valeurJournal(cle, v[cle])];
+      if (avant !== apres) H.hsLog("journey", plan.id, ctx.user.id, "write", cle, avant, apres, maintenant);
     }
     const valide = plan.status === "validated";
     Object.assign(plan, v, { stops: numeroter(v.stops), write_date: maintenant });
@@ -446,13 +488,14 @@ function routes() {
     const r = H.DB.routes.find((x) => x.id === ctx.params[0] && ctx.user.companies.includes(x.company_id));
     if (!r) throw new H.ApiError(404, "not_found", "Route introuvable.");
     const b = ctx.body;
-    if (b.night_driving_forbidden === undefined || b.night_driving_forbidden === null || b.night_driving_forbidden === "") throw H.hsMissing("Champs obligatoires manquants.", ["night_driving_forbidden"]);
+    // Booléen strict, comme le noyau : « false » en texte, 0 ou une absence sont refusés.
+    if (typeof b.night_driving_forbidden !== "boolean") throw H.hsBad("night_driving_forbidden : true ou false.", ["night_driving_forbidden"]);
     const avant = Boolean(regleRoute(r.id)?.night_driving_forbidden);
-    const apres = Boolean(b.night_driving_forbidden);
+    const apres = b.night_driving_forbidden;
     const regle = regleRoute(r.id) ?? { route_id: r.id };
     if (!tables().routeRules.includes(regle)) tables().routeRules.push(regle);
     Object.assign(regle, { night_driving_forbidden: apres, updated_at: H.hsNow(), updated_by: ctx.user.id });
-    H.hsLog("route", r.id, ctx.user.id, "write", "hsseq_night_forbidden", avant ? "True" : "False", apres ? "True" : "False");
+    H.hsLog("route", r.id, ctx.user.id, "write", "hsseq_night_forbidden", avant ? "oui" : "non", apres ? "oui" : "non");
     return { id: r.id, name: r.name, night_driving_forbidden: apres };
   });
 
@@ -561,12 +604,14 @@ export function immobilisationDeLEvenement(eventId) {
 
 /**
  * `immobilization_proposed` de la fiche d'un événement, et transition « immobilize » pour le Responsable
- * HSSEQ : criticité élevée, pas clôturé, un ensemble en cause, pas déjà immobilisé (comme le noyau, qui la
- * propose de nouveau après une levée tant que l'événement reste ouvert).
+ * HSSEQ : criticité élevée, pas clôturé, un ensemble en cause, pas déjà immobilisé, et que l'événement n'a
+ * jamais immobilisé (après une levée, elle n'est plus proposée ; le Responsable HSSEQ peut toujours
+ * immobiliser de nouveau par POST /hsseq/events/{id}/immobilize).
  */
 export function immobilisationProposee(e) {
   if (!H?.DB.hsseq?.immobilizations || !e) return false;
-  return H.hsLevel(H.hsCriticality(e)) === "high" && e.status !== "closed" && Boolean(e.vehicle_id) && !enCours(e.vehicle_id);
+  const dejaImmobilise = tables().immobilizations.some((i) => i.event_id === e.id && i.vehicle_id === e.vehicle_id);
+  return H.hsLevel(H.hsCriticality(e)) === "high" && e.status !== "closed" && Boolean(e.vehicle_id) && !enCours(e.vehicle_id) && !dejaImmobilise;
 }
 
 /**
@@ -591,6 +636,6 @@ export function motifSurcharge(rot) {
   if (!v || H.hsKind(v) !== "tipper") return null;
   const exces = surcharge(rot);
   if (!(exces > 0)) return null;
-  const fr = (n) => n.toFixed(2).replace(".", ",");
-  return { since: null, detail: `Poids net ${fr(net(peseeDe(rot.id)))} t pour une charge utile de ${fr(chargeUtile(rot))} t : délester de ${fr(exces)} t, puis nouvelle pesée.` };
+  // Nombres à la française (fr_number, deux décimales), comme le motif du noyau.
+  return { since: null, detail: `Poids net ${frNombre(net(peseeDe(rot.id)))} t pour une charge utile de ${frNombre(chargeUtile(rot))} t : délester de ${frNombre(exces)} t, puis nouvelle pesée.` };
 }

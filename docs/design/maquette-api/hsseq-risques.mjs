@@ -63,7 +63,8 @@ export function enregistrerRisques(H) {
 
   const critique = (r, cote) => r[`${cote}_severity`] * r[`${cote}_probability`];
   const niveau = (r, cote) => hsLevel(critique(r, cote));
-  const mois = (r) => hsSettings(r?.company_id ?? 1).risk_review_months ?? 12;
+  /** Délai de revue de la société (risk_review_months des paramètres) ; 12 mois s'il est nul, comme le noyau. */
+  const mois = (r) => hsSettings(r?.company_id ?? 1).risk_review_months || 12;
   const echue = (r) => r.status === "active" && Boolean(r.review_date) && r.review_date < TODAY;
   const proprietaire = (ctx, r) => r.owner_id === ctx.user.id;
   /** Lecture complète, propriétaire, ou risque d'un site du compte (sans site : lectures complètes et propriétaire seuls). */
@@ -86,9 +87,14 @@ export function enregistrerRisques(H) {
     return HS.risks.filter((r) => ids.includes(r.company_id) && lisible(ctx, r));
   }
   const oui = (v) => ["1", "true"].includes(String(v ?? ""));
-  /** Sélection filtrée (list_domain du noyau) ; sans filtre de statut, les risques archivés sont écartés. */
-  function selection(ctx, q, base = registre(ctx, q)) {
+  /**
+   * Sélection filtrée (list_domain du noyau) ; sans filtre de statut, les risques archivés sont écartés.
+   * `avecStatut` faux : tous les filtres sauf le statut (compteurs par statut de la liste).
+   */
+  function selection(ctx, q, base = registre(ctx, q), avecStatut = true) {
     const statuts = hsList(q.status);
+    // Case de la matrice : gravité et probabilité brutes ou résiduelles, de 1 à 5 (400 invalid_parameter sinon).
+    const cases = NOTES.filter((cle) => q[cle]).map((cle) => [cle, note(q, cle)]);
     const natures = hsList(q.nature);
     const profils = hsList(q.vehicle_kind);
     const niveaux = hsList(q.level);
@@ -98,9 +104,11 @@ export function enregistrerRisques(H) {
     const texte = String(q.search ?? "").trim().toLowerCase();
     return base.filter(
       (r) =>
-        (statuts ? statuts.includes(r.status) : r.status !== "archived") &&
+        (!avecStatut || (statuts ? statuts.includes(r.status) : r.status !== "archived")) &&
+        cases.every(([cle, n]) => r[cle] === n) &&
         (!natures || natures.includes(r.nature)) &&
-        (!profils || profils.includes(r.vehicle_kind)) &&
+        // Un risque « tous profils » (sans profil) vaut aussi pour le profil filtré.
+        (!profils || !r.vehicle_kind || profils.includes(r.vehicle_kind)) &&
         (!site || r.site_id === site) &&
         (!owner || r.owner_id === owner) &&
         (!oui(q.mine) || r.owner_id === ctx.user.id) &&
@@ -282,9 +290,10 @@ export function enregistrerRisques(H) {
     const base = registre(ctx, q);
     const choisis = hsSort(selection(ctx, q, base), q.sort, TRIS, "-residual_criticality");
     const parNiveau = (cote) => Object.fromEntries(NIVEAUX.map((n) => [n, choisis.filter((r) => niveau(r, cote) === n).length]));
-    // Comme le noyau : comptes par statut sur tout le registre lisible (société comprise), les autres sur la sélection filtrée.
+    // Comme le noyau : comptes par statut sur la sélection filtrée sans le statut (archivés compris), les autres sur la sélection.
+    const sansStatut = selection(ctx, q, base, false);
     const counts = {
-      by_status: Object.fromEntries(Object.keys(STATUTS).map((s) => [s, base.filter((r) => r.status === s).length])),
+      by_status: Object.fromEntries(Object.keys(STATUTS).map((s) => [s, sansStatut.filter((r) => r.status === s).length])),
       by_raw_level: parNiveau("raw"),
       by_residual_level: parNiveau("residual"),
       review_overdue: choisis.filter(echue).length,

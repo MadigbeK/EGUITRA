@@ -308,7 +308,7 @@ export function Historique({ lignes, valeur }: { lignes: LigneJournal[]; valeur?
     <details className="group">
       <summary className="cursor-pointer text-[13px] font-semibold text-ink marker:text-muted">Historique ({lignes.length})</summary>
       <ol className="mt-2 space-y-1.5 text-[12.5px] leading-snug text-ink-2">
-        {[...lignes].reverse().map((h) => (
+        {[...lignes].sort((a, b) => b.at.localeCompare(a.at) || b.id - a.id).map((h) => (
           <li key={h.id}>
             <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"} : {OPERATION[h.action] ?? h.action}
             {detail(h)}

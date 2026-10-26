@@ -3,16 +3,20 @@
  *
  * Habilitations : controllers/qualifications.py et models/qualification.py du noyau, sur les données de
  * RH (eguitra_rh/models/hsseq.py) : types d'habilitation, habilitations des salariés liés à un chauffeur,
- * aptitude médicale en statut seul (jamais de détail médical), alertes J-30 et J-7 envoyées.
+ * habilitations exigées selon le profil du véhicule (règles d'HSSEQ : citerne, benne ou les deux ; sans
+ * règle, l'obligation de RH pour les deux), EPI remis, aptitude médicale en statut seul (jamais de détail
+ * médical), alertes J-30 et J-7 envoyées.
  * Rapport mensuel : controllers/reports.py et models/report.py : catalogue des valeurs calculées, modèles
- * des donneurs d'ordre et leurs indicateurs, mois du rapport (valeurs calculées figées le 5 du mois
- * suivant, valeurs saisies, commentaires, validation, réouverture avec motif), classeur Excel et PDF.
+ * des donneurs d'ordre (périmètre de sites et de profil de véhicule, premier mois) et leurs indicateurs,
+ * mois du rapport (valeurs calculées figées le 5 du mois suivant, valeurs saisies, commentaires,
+ * validation, réouverture avec motif), classeur Excel et PDF. Les lectures ne créent jamais le mois.
  *
  * Routes et données fictives, aux noms de champs du noyau ; `H` porte les références de serveur.mjs
  * (HS_REFS). Appelée juste après le semis du lot 1 : les tables s'ajoutent à H.DB.hsseq
- * (qualificationTypes, rhEmployees, qualifications, expiryAlerts, reportTemplates, reportIndicators,
- * reports, reportValues). Deux aides sont exportées pour le cockpit et le verrou de la maquette :
- * situationHabilitations (indicateur qualifications_valid) et statutConducteur (motif V04).
+ * (qualificationTypes, qualificationRules, rhEmployees, qualifications, ppeIssues, expiryAlerts,
+ * reportTemplates, reportIndicators, reports, reportValues). Deux aides sont exportées pour le cockpit et
+ * le verrou de la maquette : situationHabilitations (indicateur qualifications_valid) et statutConducteur
+ * (motif V04).
  */
 
 /* ─── Profils des routes (noyau) ─────────────────────────────────────────── */
@@ -73,6 +77,17 @@ const ECHEANCES = {
 };
 /** Embauché en septembre : ni permis saisi, ni conduite défensive, ni visite d'aptitude. */
 const NOUVEAU = "Ismaël Sow";
+/**
+ * Règles d'HSSEQ de la démonstration (eguitra.hsseq.qualification.rule) : [type, citerne, benne, réglée le].
+ * Le transport de matières dangereuses pour les seules citernes, l'accès au site minier pour les seules
+ * bennes ; les autres types suivent l'obligation de RH, pour les deux profils.
+ */
+const REGLES_DEMO = [["matieres_dangereuses", true, false, "2026-09-02T10:15:00Z"], ["acces_site_minier", false, true, "2026-09-02T10:16:00Z"]];
+/** Équipements de protection de RH (PPE_ITEMS d'eguitra_rh) : code et libellé. */
+const PPE_ITEMS = {
+  casque: "Casque", chaussures: "Chaussures de sécurité", gants: "Gants", gilet: "Gilet haute visibilité", lunettes: "Lunettes de protection",
+  combinaison: "Combinaison", masque: "Masque respiratoire", bouchons: "Protection auditive", harnais: "Harnais", autre: "Autre équipement",
+};
 
 /* ─── Rapport mensuel : constantes du noyau ─────────────────────────────── */
 
@@ -173,6 +188,28 @@ const frDate = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
 const arrondi = (n, d = 4) => Math.round(n * 10 ** d) / 10 ** d;
 const somme = (liste, f = (x) => x) => liste.reduce((s, x) => s + (Number(f(x)) || 0), 0);
 const moisLabel = (m) => `${MOIS[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`;
+/** « de mars 2026 », « d'avril 2026 », « d'août 2026 », « d'octobre 2026 » : élision devant une voyelle (of_month). */
+const deMois = (m) => (/^[aeiouéâ]/.test(moisLabel(m)) ? `d'${moisLabel(m)}` : `de ${moisLabel(m)}`);
+/**
+ * Nombre écrit à la française (fr_number du noyau) : espace fine insécable des milliers, virgule décimale ;
+ * `sansZeros` : sans les zéros décimaux inutiles (« 47,8 », « 12 »). Vide pour une valeur absente.
+ */
+function frNombre(valeur, decimales = 2, sansZeros = false) {
+  if (valeur === null || valeur === undefined || valeur === false) return "";
+  const n = Number(valeur);
+  const [entier, fraction] = Math.abs(n).toFixed(decimales).split(".");
+  let texte = `${n < 0 ? "-" : ""}${entier.replace(/\B(?=(\d{3})+(?!\d))/g, " ")}${fraction ? `,${fraction}` : ""}`;
+  if (sansZeros && decimales) texte = texte.replace(/0+$/, "").replace(/,$/, "");
+  return texte;
+}
+/** Mois d'un corps (parse_month du noyau) : « AAAA-MM » rendu « AAAA-MM-01 » ; 400 sinon, sur le champ month comme le noyau. */
+function moisDuCorps(H, valeur) {
+  const parts = String(valeur).split("-").slice(0, 2).map((x) => (/^\s*\d+\s*$/.test(x) ? Number(x) : Number.NaN));
+  if (parts.length < 2 || !parts.every(Number.isInteger) || parts[0] < 1 || parts[0] > 9999 || parts[1] < 1 || parts[1] > 12) {
+    throw H.hsBad("Mois attendu au format AAAA-MM.", ["month"]);
+  }
+  return `${String(parts[0]).padStart(4, "0")}-${pad(parts[1])}-01`;
+}
 /** Date décalée de `n` mois, jour ramené à la fin du mois si besoin. */
 function ajouterMois(d, n) {
   let a = +d.slice(0, 4);
@@ -234,6 +271,43 @@ function sitesDesChauffeurs(H) {
   for (const v of [...H.DB.vehicles, ...H.DB.hsseq.tippers]) if (v.driver_id && !sites.has(v.driver_id)) sites.set(v.driver_id, H.hsVehicleSite(v));
   return sites;
 }
+/** Profil (citerne ou benne) de chaque chauffeur : celui de l'ensemble dont il est le chauffeur habituel (driver_kinds). */
+function profilsDesChauffeurs(H) {
+  const profils = new Map();
+  for (const v of [...H.DB.vehicles, ...H.DB.hsseq.tippers]) if (v.driver_id && !profils.has(v.driver_id)) profils.set(v.driver_id, H.hsKind(v));
+  return profils;
+}
+
+/**
+ * Exigences de chaque type actif (_obligations) : { tanker, tipper, rule } par code, la règle d'HSSEQ, à
+ * défaut « obligatoire pour les conducteurs » de RH pour les deux profils (rule : une règle d'HSSEQ existe).
+ */
+function obligations(H) {
+  const regles = new Map(H.DB.hsseq.qualificationRules.map((r) => [r.type_id, r]));
+  return new Map(typesActifs(H).map((t) => {
+    const r = regles.get(t.id);
+    return [t.code, { tanker: r ? r.tanker : t.mandatory_for_drivers, tipper: r ? r.tipper : t.mandatory_for_drivers, rule: Boolean(r) }];
+  }));
+}
+/** Codes des habilitations exigées pour un profil de véhicule (_required_codes ; nul : l'un ou l'autre). */
+function codesExiges(exigences, kind) {
+  return new Set([...exigences].filter(([, f]) => (kind === "tanker" || kind === "tipper" ? f[kind] : f.tanker || f.tipper)).map(([code]) => code));
+}
+/** Type d'habilitation et ce qu'en exige HSSEQ (type_obligation). */
+function typeExige(t, exigences) {
+  const f = exigences.get(t.code) ?? { tanker: false, tipper: false, rule: false };
+  return { code: t.code, name: t.name, tanker: f.tanker, tipper: f.tipper, rule: f.rule, rh_mandatory: t.mandatory_for_drivers };
+}
+
+/** EPI remis au salarié (_hsseq_ppe, RH) : la dernière remise de chaque équipement, par libellé. */
+function epiRemis(H, employeeId, day) {
+  const dernieres = new Map();
+  const remises = H.DB.hsseq.ppeIssues.filter((p) => p.employee_id === employeeId).sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  for (const p of remises) if (!dernieres.has(p.item)) dernieres.set(p.item, p);
+  return [...dernieres.values()]
+    .map((p) => ({ item: p.item, label: PPE_ITEMS[p.item] ?? p.item, quantity: p.quantity, issued_on: p.date, renewal_date: p.renewal_date ?? null, to_renew: Boolean(p.renewal_date && p.renewal_date <= day), acknowledged: p.acknowledged }))
+    .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+}
 
 /** Habilitation retenue par type (la plus récente : échéance la plus lointaine), comme _qualification_rows de RH. */
 function meilleures(H, employeeId) {
@@ -245,16 +319,19 @@ function meilleures(H, employeeId) {
 }
 
 /**
- * Ligne de la matrice d'un salarié (_hsseq_matrix_row) : case de chaque type montré, statut d'ensemble
- * sur les types obligatoires (tous, montrés ou non), aptitude en statut seul et blocage du motif V04.
+ * Ligne de la matrice d'un salarié (_hsseq_matrix_row) : case de chaque type montré, exigence selon le
+ * profil de son ensemble habituel (`kind` ; nul : l'un ou l'autre profil), statut d'ensemble sur les types
+ * exigés (tous, montrés ou non), aptitude en statut seul, blocage du motif V04 et EPI remis.
  */
-function ligneMatrice(H, e, montres, day) {
+function ligneMatrice(H, e, montres, day, kind = null, exigences = obligations(H)) {
   const retenues = meilleures(H, e.id);
+  const exiges = codesExiges(exigences, kind);
   const cases = typesActifs(H).map((t) => {
     const q = retenues.get(t.id);
     const expiry = q?.expiry_date ?? null;
+    const f = exigences.get(t.code) ?? { tanker: false, tipper: false };
     return {
-      code: t.code, name: t.name, mandatory: t.mandatory_for_drivers,
+      code: t.code, name: t.name, mandatory: exiges.has(t.code), required_for: { tanker: f.tanker, tipper: f.tipper },
       status: q ? QUALIFICATION_STATUSES[etatRh(expiry, day)] : "missing",
       obtained_on: q?.obtained_date ?? null, expires_on: expiry, days_left: expiry ? ecartJours(day, expiry) : null,
     };
@@ -267,7 +344,21 @@ function ligneMatrice(H, e, montres, day) {
     || obligatoires.some((c) => c.status === "expired")
     || (Boolean(requises) && day >= requises && obligatoires.some((c) => c.status === "missing")));
   const codes = new Set(montres.map((t) => t.code));
-  return { employee: { id: e.id, name: e.name }, status: ensemble, fitness: FITNESS_STATUSES[aptitude] ?? "review", blocking, qualifications: cases.filter((c) => codes.has(c.code)) };
+  return {
+    employee: { id: e.id, name: e.name }, status: ensemble, fitness: FITNESS_STATUSES[aptitude] ?? "review", vehicle_kind: kind, blocking,
+    qualifications: cases.filter((c) => codes.has(c.code)), ppe: epiRemis(H, e.id, day),
+  };
+}
+
+/**
+ * Conducteur hors d'état de partir (_hsseq_blocking, sans les dates de mise en service du verrou) : aptitude
+ * inapte ou échue, habilitation exigée pour le profil expirée ou absente.
+ */
+function horsDEtat(H, e, day, kind, exigences) {
+  if (["inapte", "echue"].includes(etatAptitude(e, day))) return true;
+  const retenues = meilleures(H, e.id);
+  const exiges = codesExiges(exigences, kind);
+  return typesActifs(H).some((t) => exiges.has(t.code) && (!retenues.get(t.id) || etatRh(retenues.get(t.id).expiry_date, day) === "expiree"));
 }
 
 /** Sites du compte borné (chef de parc, auditeur) ; vide : aucun (portée fermée par défaut). */
@@ -283,6 +374,8 @@ function sitesDuCompte(H, ctx) {
  */
 function lignesMatrice(H, ctx, societes, day, siteId, types) {
   const surSite = sitesDesChauffeurs(H);
+  const profils = profilsDesChauffeurs(H);
+  const exigences = obligations(H);
   const portee = ctx && !H.hasProfile(ctx, QUAL_FULL) ? sitesDuCompte(H, ctx) : null;
   return H.DB.hsseq.rhEmployees
     .filter((e) => societes.includes(e.company_id) && e.driver_id && enPoste(e, day))
@@ -291,27 +384,32 @@ function lignesMatrice(H, ctx, societes, day, siteId, types) {
       const site = surSite.get(e.driver_id) ?? null;
       if (siteId && site !== siteId) return [];
       if (portee && !(site && portee.includes(site))) return [];
-      return [{ ...ligneMatrice(H, e, types, day), driver: H.hsDriverRef(e.driver_id), site: site ? H.hsSiteRef(site) : null, company: { id: e.company_id, name: H.COMPANIES[e.company_id].name } }];
+      return [{ ...ligneMatrice(H, e, types, day, profils.get(e.driver_id) ?? null, exigences), driver: H.hsDriverRef(e.driver_id), site: site ? H.hsSiteRef(site) : null, company: { id: e.company_id, name: H.COMPANIES[e.company_id].name } }];
     });
 }
 
 /**
  * Habilitations à jour pour l'indicateur qualifications_valid du cockpit (Cockpit._qualifications) :
- * conducteurs en poste et ceux sans motif V04, sur les sites donnés (tous sans filtre).
+ * conducteurs en poste (ceux des ensembles des sites donnés ; tous sans filtre) et ceux qui ne sont pas
+ * hors d'état de partir pour le profil de leur ensemble habituel.
  */
 export function situationHabilitations(H, { day = H.TODAY, companies = [1, 2], siteIds = null } = {}) {
-  const lignes = lignesMatrice(H, null, companies, day, null, []).filter((l) => !siteIds?.length || (l.site && siteIds.includes(l.site.id)));
-  return { drivers: lignes.length, valid: lignes.filter((l) => !l.blocking).length };
+  const exigences = obligations(H);
+  const profils = profilsDesChauffeurs(H);
+  const surSites = siteIds?.length ? new Set([...H.DB.vehicles, ...H.DB.hsseq.tippers].filter((v) => v.driver_id && siteIds.includes(H.hsVehicleSite(v))).map((v) => v.driver_id)) : null;
+  const conducteurs = H.DB.hsseq.rhEmployees.filter((e) => companies.includes(e.company_id) && e.driver_id && enPoste(e, day) && (!surSites || surSites.has(e.driver_id)));
+  return { drivers: conducteurs.length, valid: conducteurs.filter((e) => !horsDEtat(H, e, day, profils.get(e.driver_id) ?? null, exigences)).length };
 }
 
 /**
- * Statut RH d'un chauffeur pour le motif V04 (_hsseq_driver_status de RH) : motifs (aptitude inapte ou
- * échue, habilitation obligatoire expirée ou absente) et avertissements ; nul sans salarié lié.
+ * Statut RH d'un chauffeur pour le motif V04 : motifs (aptitude inapte ou échue, habilitation exigée pour
+ * le profil `kind` de l'ensemble de la rotation, expirée ou absente) et avertissements ; sans `kind`, le
+ * profil de son ensemble habituel ; nul sans salarié lié.
  */
-export function statutConducteur(H, driverId, day = H.TODAY) {
+export function statutConducteur(H, driverId, day = H.TODAY, kind = undefined) {
   const e = H.DB.hsseq.rhEmployees.find((x) => x.driver_id === driverId && enPoste(x, day));
   if (!e) return null;
-  const ligne = ligneMatrice(H, e, typesActifs(H), day);
+  const ligne = ligneMatrice(H, e, typesActifs(H), day, kind === undefined ? profilsDesChauffeurs(H).get(driverId) ?? null : kind);
   const aptitude = etatAptitude(e, day);
   const reasons = [];
   const warnings = [];
@@ -326,12 +424,20 @@ export function statutConducteur(H, driverId, day = H.TODAY) {
   return { employee_id: e.id, blocking: ligne.blocking, reasons, warnings };
 }
 
-/** Salariés RH des chauffeurs, leurs habilitations et leur aptitude (données de la démonstration). */
+/** Salariés RH des chauffeurs, leurs habilitations, leur aptitude et leurs EPI ; règles d'HSSEQ (démonstration). */
 function semerHabilitations(H) {
   const HS = H.DB.hsseq;
   HS.qualificationTypes = TYPES.map((t) => ({ ...t }));
+  HS.qualificationRules = REGLES_DEMO.map(([code, tanker, tipper, le], k) => {
+    const regle = { id: k + 1, type_id: TYPES.find((t) => t.code === code).id, tanker, tipper };
+    H.hsLog("qualification_rule", regle.id, 16, "write", code, "obligation de RH", `citerne ${tanker ? "True" : "False"}, benne ${tipper ? "True" : "False"}`, le);
+    return regle;
+  });
+  // Numérotation des règles : un identifiant n'est jamais repris après un retrait (reset).
+  HS.qualificationRuleSeq = HS.qualificationRules.length;
   HS.rhEmployees = [];
   HS.qualifications = [];
+  HS.ppeIssues = [];
   const chauffeurs = [...H.DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers];
   const surSite = sitesDesChauffeurs(H);
   let numero = Math.max(500, ...H.HS_EMPLOYEES.map((e) => e.id));
@@ -366,6 +472,22 @@ function semerHabilitations(H) {
     if (site === 1) avecValidite("matieres_dangereuses", "2021-12-01", 1450, 60);
     if (site === 2) avecValidite("acces_site_minier", "2025-12-01", 270, 12);
     if (propres.secourisme || (!nouveau && r.chance(0.45))) avecValidite("secourisme", "2024-12-01", 540, 24);
+    // EPI remis par RH (eguitra.rh.ppe.issue) : la dotation de base, puis celle du profil de l'ensemble.
+    const embauche = HS.rhEmployees[HS.rhEmployees.length - 1].hire_date;
+    const remettre = (item, debut, etendue, mois, quantite = 1) => {
+      const tirage = ajouterJours(debut, r.entier(0, etendue));
+      const date = nouveau || tirage < embauche ? embauche : tirage;
+      HS.ppeIssues.push({ id: HS.ppeIssues.length + 1, employee_id: id, company_id: d.company_id, item, date, quantity: quantite, renewal_date: mois ? ajouterMois(date, mois) : null, acknowledged: nouveau || r.chance(0.9) });
+    };
+    remettre("casque", "2024-01-10", 500, 36);
+    remettre("chaussures", "2025-06-01", 400, 12);
+    remettre("gilet", "2025-06-01", 400, 12);
+    remettre("gants", "2026-06-01", 120, 3, r.entier(2, 4));
+    if (site === 1) remettre("combinaison", "2025-03-01", 420, 12);
+    if (site === 2) {
+      remettre("lunettes", "2025-09-01", 300, 12);
+      remettre("bouchons", "2026-04-01", 150, 6, 10);
+    }
   }
 }
 
@@ -383,6 +505,9 @@ function semerAlertes(H) {
   const HS = H.DB.hsseq;
   HS.expiryAlerts = [];
   const surSite = sitesDesChauffeurs(H);
+  // Motif V04 d'une habilitation : exigée pour le profil de l'ensemble habituel du conducteur.
+  const exigences = obligations(H);
+  const profils = profilsDesChauffeurs(H);
   const hsseq = H.hsHsseqManagers();
   const envoyees = new Set();
   const envoyer = (jour, a) => {
@@ -402,7 +527,8 @@ function semerAlertes(H) {
         const etape = seuil(ecartJours(jour, q.expiry_date), ALERT_DAYS, URGENT_DAYS);
         if (!etape) continue;
         const type = HS.qualificationTypes.find((t) => t.id === q.type_id);
-        envoyer(jour, { kind: "qualification", key: `employee:${e.id}:${type.code}`, subject: e.name, label: type.name, expiry_date: q.expiry_date, stage: etape, reason_code: e.driver_id && type.mandatory_for_drivers ? "V04" : null, site_id: site });
+        const exige = codesExiges(exigences, profils.get(e.driver_id) ?? null).has(type.code);
+        envoyer(jour, { kind: "qualification", key: `employee:${e.id}:${type.code}`, subject: e.name, label: type.name, expiry_date: q.expiry_date, stage: etape, reason_code: e.driver_id && exige ? "V04" : null, site_id: site });
       }
       if (["apte", "apte_reserve"].includes(e.medical_fitness) && e.medical_fitness_until) {
         const etape = seuil(ecartJours(jour, e.medical_fitness_until), ALERT_DAYS, URGENT_DAYS);
@@ -419,6 +545,17 @@ function semerAlertes(H) {
       }
     }
   }
+}
+
+/** Alerte envoyée (alert_row), avec ce qu'elle suit : salarié et type d'habilitation, ou ensemble et document. */
+function ligneAlerte(H, a) {
+  const parts = (a.key ?? "").split(":");
+  const sujet = parts.length === 3 && /^\d+$/.test(parts[1]) ? Number(parts[1]) : null;
+  return {
+    id: a.id, key: a.key, kind: a.kind, subject: a.subject, label: a.label, employee_id: parts[0] === "employee" ? sujet : null, vehicle_id: parts[0] === "vehicle" ? sujet : null,
+    item_code: parts.length === 3 ? parts[2] : null, expires_on: a.expiry_date, stage: a.stage, reason_code: a.reason_code ?? null, site: a.site_id ? H.hsSiteRef(a.site_id) : null,
+    sent_at: a.sent_at, recipients: a.recipient_ids.length,
+  };
 }
 
 /* ─── Paramètres de requête ─────────────────────────────────────────────── */
@@ -468,19 +605,38 @@ function statutIndicateur(value, target, direction, conforme = 1, surveillance =
   return target > 0 && value <= target / surveillance ? "watch" : "missed";
 }
 
-/** Composantes d'un mois (nombres, kilomètres, carburant, audits) pour une société. */
-function composantes(H, societe, m, cockpit) {
+/** Périmètre de toute la société : tous les sites, citernes et bennes. */
+const PORTEE_SOCIETE = { sites: null, kind: null, kinds: ["tanker", "tipper"] };
+/**
+ * Périmètre des valeurs calculées et figées d'un modèle (_scope_sites, vehicle_kind) : ses sites (nul :
+ * toute la société), son profil de véhicule (nul : les deux), et les profils retenus pour les nombres de
+ * Transport (ceux du profil du modèle que portent ses sites, d'après leur type de véhicule).
+ */
+function porteeDe(H, modele) {
+  const sites = modele.site_ids?.length ? [...modele.site_ids] : null;
+  const desSites = sites ? new Set(sites.map((id) => H.hsSite(id)?.default_vehicle_kind ?? "tanker")) : null;
+  const kinds = (modele.vehicle_kind ? [modele.vehicle_kind] : ["tanker", "tipper"]).filter((k) => !desSites || desSites.has(k));
+  return { sites, kind: modele.vehicle_kind ?? null, kinds };
+}
+
+/** Composantes d'un mois (nombres, kilomètres, carburant, audits) pour une société, bornées au périmètre du modèle. */
+function composantes(H, societe, m, cockpit, portee = PORTEE_SOCIETE) {
   const HS = H.DB.hsseq;
+  const surSites = (siteId) => !portee.sites || portee.sites.includes(siteId);
+  const duProfil = (vehicleId) => {
+    const v = H.hsVehicle(vehicleId);
+    return Boolean(v) && portee.kinds.includes(H.hsKind(v)) && surSites(H.hsVehicleSite(v));
+  };
   const valeurs = Object.fromEntries(Object.entries(CLES).filter(([, s]) => s.kind === "component").map(([cle]) => [cle, 0]));
-  const audits = (HS.audits ?? []).filter((a) => (a.company_id ?? 1) === societe && a.status !== "cancelled" && String(a.planned_date ?? "").slice(0, 7) === m);
+  const audits = (HS.audits ?? []).filter((a) => (a.company_id ?? 1) === societe && a.status !== "cancelled" && String(a.planned_date ?? "").slice(0, 7) === m && surSites(a.site_id));
   valeurs.audits_planned = audits.length;
   valeurs.audits_done = audits.filter((a) => ["done", "closed"].includes(a.status)).length;
   if (societe !== 1) return valeurs;
   if (m < "2026-01") {
-    const h = ["tanker", "tipper"].map((k) => HS.history.get(`${m}|${k}`) ?? { lt: 0, days: 0, work: 0, road: 0, nm: 0 });
+    const h = portee.kinds.map((k) => HS.history.get(`${m}|${k}`) ?? { lt: 0, days: 0, work: 0, road: 0, nm: 0 });
     Object.assign(valeurs, { road_accidents: somme(h, (x) => x.road), work_accidents: somme(h, (x) => x.lt), lost_days: somme(h, (x) => x.days), weak_signals: somme(h, (x) => x.nm), events_work_accident: somme(h, (x) => x.work), events_road_accident: somme(h, (x) => x.road), events_near_miss: somme(h, (x) => x.nm) });
   } else {
-    const ev = HS.events.filter((e) => String(e.occurred_at).slice(0, 7) === m);
+    const ev = HS.events.filter((e) => String(e.occurred_at).slice(0, 7) === m && portee.kinds.includes(H.hsEventKind(e)) && surSites(e.site_id));
     const parType = (t) => ev.filter((e) => e.type === t).length;
     for (const [code] of TYPES_EVENEMENT) valeurs[`events_${code}`] = parType(code);
     valeurs.road_accidents = parType("road_accident");
@@ -489,50 +645,57 @@ function composantes(H, societe, m, cockpit) {
     valeurs.weak_signals = parType("near_miss") + parType("hazard");
   }
   const partis = ["en_route", "done", "invoiced"];
-  const citernes = H.DB.rotations.filter((r) => r.company_id === 1 && partis.includes(r.state) && r.date_loading.slice(0, 7) === m).length;
-  const bennes = HS.rotations.filter((r) => partis.includes(r.state) && r.date_loading.slice(0, 7) === m).length || (m < "2026-09" ? Math.round(HS.tippers.length * dernierJour(+m.slice(0, 4), +m.slice(5, 7)) * 0.9) : 0);
+  const citernes = H.DB.rotations.filter((r) => r.company_id === 1 && partis.includes(r.state) && r.date_loading.slice(0, 7) === m && duProfil(r.vehicle_id)).length;
+  const avecBennes = portee.kinds.includes("tipper");
+  const bennes = HS.rotations.filter((r) => partis.includes(r.state) && r.date_loading.slice(0, 7) === m && duProfil(r.vehicle_id)).length
+    || (avecBennes && m < "2026-09" ? Math.round(HS.tippers.length * dernierJour(+m.slice(0, 4), +m.slice(5, 7)) * 0.9) : 0);
   valeurs.departures = citernes + bennes;
-  const controles = HS.checks.filter((c) => c.kind === "pre_departure" && String(c.reported_at).slice(0, 7) === m).length;
+  const controles = HS.checks.filter((c) => c.kind === "pre_departure" && String(c.reported_at).slice(0, 7) === m && portee.kinds.includes(c.vehicle_kind) && surSites(c.site_id)).length;
   valeurs.checks = controles || Math.round((valeurs.departures * (cockpit.check_completion ?? 96)) / 100);
-  valeurs.km = Math.round(H.hsKm(m, "tanker") + H.hsKm(m, "tipper"));
-  valeurs.fuel_liters = Math.round(H.hsLiters(m, "tanker") + H.hsLiters(m, "tipper"));
+  valeurs.km = Math.round(somme(portee.kinds, (k) => H.hsKm(m, k)));
+  valeurs.fuel_liters = Math.round(somme(portee.kinds, (k) => H.hsLiters(m, k)));
   return valeurs;
 }
 
-/** Situations de fin de mois, connues pour le mois en cours ou le mois tout juste clos (_state_values). */
-function situations(H, societe, m) {
+/**
+ * Situations de fin de mois, connues pour le mois en cours ou le mois tout juste clos (_state_values) ;
+ * bornées aux sites donnés (les exigences, sans site, restent celles de la société).
+ */
+function situations(H, societe, m, sites = null) {
   const HS = H.DB.hsseq;
   const courant = H.TODAY.slice(0, 7);
   const precedent = ajouterMois(`${courant}-01`, -1).slice(0, 7);
   if (m !== courant && m !== precedent) return { risk_reviews_overdue: null, risks_high_residual: null, findings_open: null, requirements_non_compliant: null };
   const fin = `${m}-${pad(dernierJour(+m.slice(0, 4), +m.slice(5, 7)))}` < H.TODAY ? `${m}-${pad(dernierJour(+m.slice(0, 4), +m.slice(5, 7)))}` : H.TODAY;
   const deLaSociete = (x) => (x.company_id ?? 1) === societe;
-  const risques = (HS.risks ?? []).filter((x) => deLaSociete(x) && x.status === "active");
+  const surSites = (x) => deLaSociete(x) && (!sites || sites.includes(x.site_id));
+  const risques = (HS.risks ?? []).filter((x) => surSites(x) && x.status === "active");
   const residuel = (x) => x.residual?.level ?? x.residual_level ?? H.hsLevel((x.residual?.severity ?? x.residual_severity ?? 0) * (x.residual?.probability ?? x.residual_probability ?? 0));
   return {
     risk_reviews_overdue: risques.filter((x) => x.review_date && x.review_date < fin).length,
     risks_high_residual: risques.filter((x) => residuel(x) === "high").length,
-    findings_open: (HS.findings ?? []).filter((x) => deLaSociete(x) && x.status === "open").length,
+    findings_open: (HS.findings ?? []).filter((x) => surSites(x) && x.status === "open").length,
     requirements_non_compliant: (HS.requirements ?? []).filter((x) => deLaSociete(x) && x.status === "non_compliant").length,
   };
 }
 
 /**
- * Valeurs du catalogue pour des mois d'une société (_computed_values) : indicateurs du cockpit de la
- * maquette (série de douze mois), situation des habilitations du jour pour le mois en cours, nombres du
- * mois, situations de fin de mois.
+ * Valeurs du catalogue pour des mois d'une société (_computed_values), bornées au périmètre d'un modèle :
+ * indicateurs du cockpit de la maquette (série de douze mois, filtrés par profil de véhicule et par site),
+ * situation des habilitations du jour pour le mois en cours, nombres du mois, situations de fin de mois.
  */
-function valeursCalculees(H, societe, mois) {
+function valeursCalculees(H, societe, mois, portee = PORTEE_SOCIETE) {
   const res = new Map(mois.map((m) => [m, {}]));
-  for (const i of H.hsIndicators(CTX_SYSTEME, { company_id: societe }, mois[mois.length - 1], "month")) {
+  const q = { company_id: societe, ...(portee.kind ? { vehicle_kind: portee.kind } : {}), ...(portee.sites?.length === 1 ? { site_id: portee.sites[0] } : {}) };
+  for (const i of H.hsIndicators(CTX_SYSTEME, q, mois[mois.length - 1], "month")) {
     for (const p of i.series) if (res.has(p.month)) res.get(p.month)[i.code] = p.value;
   }
   const courant = H.TODAY.slice(0, 7);
   if (res.has(courant)) {
-    const s = situationHabilitations(H, { companies: [societe] });
+    const s = situationHabilitations(H, { companies: [societe], siteIds: portee.sites });
     res.get(courant).qualifications_valid = s.drivers ? arrondi((s.valid * 100) / s.drivers, 1) : null;
   }
-  for (const m of mois) Object.assign(res.get(m), composantes(H, societe, m, res.get(m)), situations(H, societe, m));
+  for (const m of mois) Object.assign(res.get(m), composantes(H, societe, m, res.get(m), portee), situations(H, societe, m, portee.sites));
   return res;
 }
 
@@ -581,7 +744,7 @@ function rapportDuMois(H, modele, societe, m) {
       } else if (fiche?.frozen_on) {
         if (enregistree?.computed_known) [value, source] = [enregistree.computed_value, "computed"];
       } else {
-        if (!vivantes) vivantes = valeursCalculees(H, societe, mois);
+        if (!vivantes) vivantes = valeursCalculees(H, societe, mois, porteeDe(H, modele));
         const v = vivantes.get(x)?.[ind.key];
         if (v !== null && v !== undefined) [value, source] = [v, "computed"];
       }
@@ -692,8 +855,15 @@ function figer(H, fiche, valeurs, le, par = null) {
   H.hsLog("report", fiche.id, par, "freeze", null, null, null, `${le}T06:00:00Z`);
 }
 
-/** Écriture d'une saisie au journal, comme le noyau : (valeur, commentaire) avant et après. */
-const tuple = (v) => `(${v.manual_known ? v.manual_value : "None"}, ${v.comment ? `'${v.comment}'` : "None"})`;
+/**
+ * Saisie d'un indicateur pour le journal (entry_text) : « valeur 1,5 litres, commentaire « … » », « sans
+ * valeur » ; l'unité « nbre » n'est pas écrite.
+ */
+function texteSaisie(v, unite) {
+  const parts = [v.manual_known ? `valeur ${frNombre(v.manual_value, 4, true)}${unite && unite !== "nbre" ? ` ${unite}` : ""}` : "sans valeur"];
+  if (v.comment) parts.push(`commentaire « ${v.comment} »`);
+  return parts.join(", ");
+}
 
 /* ─── Modèles : lecture et écriture ─────────────────────────────────────── */
 
@@ -704,11 +874,16 @@ function ligneIndicateur(i) {
     sequence: i.sequence, active: i.active,
   };
 }
+/** Sites d'un modèle, dans l'ordre du noyau (société, puis nom). */
+const sitesDuModele = (H, t) => (t.site_ids ?? []).map((id) => H.hsSite(id)).filter(Boolean).sort((a, b) => a.company_id - b.company_id || a.name.localeCompare(b.name, "fr"));
+
 /** Ligne d'un modèle (template_row) ; `detail` : ses indicateurs, retirés compris, et son journal. */
 function ligneModele(H, ctx, t, detail = false) {
   const row = {
     id: t.id, name: t.name, code: t.code ?? null, company: societeRef(H, t.company_id), partner: partenaire(t.partner_id), client_label: t.client_label ?? null,
-    compliant_ratio: t.compliant_ratio, watch_ratio: t.watch_ratio, active: t.active, indicators_count: indicateursActifs(H, t.id).length,
+    compliant_ratio: t.compliant_ratio, watch_ratio: t.watch_ratio, active: t.active,
+    sites: sitesDuModele(H, t).map((s) => ({ id: s.id, name: s.name })), vehicle_kind: t.vehicle_kind ?? null, start_month: t.start_month.slice(0, 7),
+    indicators_count: indicateursActifs(H, t.id).length,
     rights: { can_edit: H.hasProfile(ctx, CONFIG), can_close: false, can_approve: false },
   };
   if (detail) {
@@ -737,6 +912,23 @@ function valeursModele(H, ctx, data) {
     v[cle] = n;
   }
   if ("active" in data) v.active = Boolean(data.active);
+  if ("site_ids" in data) {
+    // ids_list du noyau : liste (ou texte « 1,2 ») d'entiers ; un site inconnu est ignoré, un site d'une autre société introuvable.
+    const brut = data.site_ids || [];
+    const liste = typeof brut === "string" ? brut.split(",").filter((x) => x.trim()) : brut;
+    if (!Array.isArray(liste) || liste.some((x) => !(Number.isInteger(x) || (typeof x === "string" && /^\s*\d+\s*$/.test(x))))) {
+      throw H.hsBad("Liste d'identifiants invalide : site_ids.", ["site_ids"]);
+    }
+    const sites = [...new Set(liste.map(Number))].map((id) => H.hsSite(id)).filter(Boolean);
+    for (const s of sites) if (!ctx.user.companies.includes(s.company_id)) throw introuvable(H, "Site introuvable.");
+    v.site_ids = sites.map((s) => s.id);
+  }
+  if ("vehicle_kind" in data) {
+    if (data.vehicle_kind && !["tanker", "tipper"].includes(data.vehicle_kind)) throw H.hsBad("Profil de véhicule : tanker ou tipper.", ["vehicle_kind"]);
+    v.vehicle_kind = data.vehicle_kind || null;
+  }
+  // Premier mois du rapport ; vide : le mois en cours.
+  if ("start_month" in data) v.start_month = data.start_month ? moisDuCorps(H, data.start_month) : `${H.TODAY.slice(0, 7)}-01`;
   return v;
 }
 
@@ -786,7 +978,8 @@ const INDICATEUR_DEFAUT = { nature: "proactive", mode: "manual", key: null, unit
 /**
  * Indicateurs d'un modèle (save_indicators) : cités par id mis à jour, nouveaux créés, absents retirés
  * (archivés s'ils ont des valeurs, supprimés sinon). Tout est vérifié avant d'écrire, comme une
- * transaction du noyau : indicateur calculé avec sa valeur, numéro unique dans le modèle.
+ * transaction du noyau : un numéro en double dans la liste, ou déjà pris par un indicateur retiré qui garde
+ * ses valeurs, est refusé (409 conflict, rien n'est enregistré) ; un échange de numéros passe.
  */
 function enregistrerIndicateurs(H, modele, lignes) {
   const HS = H.DB.hsseq;
@@ -799,13 +992,17 @@ function enregistrerIndicateurs(H, modele, lignes) {
     if (id && !existants.has(id)) throw H.hsRule("business_rule", "Indicateur d'un autre modèle.", { fields: ["indicators"] });
     return { avant: id ? existants.get(id) : null, valeurs };
   });
-  const finaux = prevus.map((p) => ({ ...(p.avant ?? INDICATEUR_DEFAUT), ...p.valeurs }));
-  for (const f of finaux) if (f.mode === "computed" && !f.key) throw H.hsBad(`${f.code} : un indicateur calculé désigne sa valeur.`, ["key"]);
+  const codes = prevus.map((p) => p.valeurs.code);
+  const doubles = [...new Set(codes.filter((c, k) => codes.indexOf(c) !== k))].sort();
+  if (doubles.length) throw new H.ApiError(409, "conflict", `Numéro d'indicateur en double : ${doubles.join(", ")}.`, { fields: ["indicators"] });
   const cites = new Set(prevus.filter((p) => p.avant).map((p) => p.avant.id));
   const absents = [...existants.values()].filter((i) => !cites.has(i.id));
   const aDesValeurs = (i) => HS.reportValues.some((v) => v.indicator_id === i.id);
-  const codes = [...finaux.map((f) => f.code), ...absents.filter(aDesValeurs).map((i) => i.code)];
-  if (new Set(codes).size !== codes.length) throw new H.ApiError(409, "conflict", "Ce numéro d'indicateur existe déjà dans le modèle.", { fields: ["indicators"] });
+  const retires = new Set(absents.filter(aDesValeurs).map((i) => i.code));
+  const pris = codes.filter((c) => retires.has(c)).sort();
+  if (pris.length) throw new H.ApiError(409, "conflict", `Numéro déjà pris par un indicateur retiré qui garde ses valeurs : ${pris.join(", ")}.`, { fields: ["indicators"] });
+  const finaux = prevus.map((p) => ({ ...(p.avant ?? INDICATEUR_DEFAUT), ...p.valeurs }));
+  for (const f of finaux) if (f.mode === "computed" && !f.key) throw H.hsBad(`${f.code} : un indicateur calculé désigne sa valeur.`, ["key"]);
   for (const [k, p] of prevus.entries()) {
     if (p.avant) Object.assign(p.avant, p.valeurs);
     else HS.reportIndicators.push({ ...finaux[k], id: suivantId(HS.reportIndicators), template_id: modele.id });
@@ -823,20 +1020,38 @@ function verifierSeuils(H, modele) {
   }
 }
 
-/** Écrit les valeurs d'un modèle et journalise les champs suivis (_journal_fields). */
+/** Champs suivis du modèle (_journal_fields du noyau). */
+const CHAMPS_MODELE = ["name", "client_label", "partner_id", "company_id", "site_ids", "vehicle_kind", "start_month", "compliant_ratio", "watch_ratio", "active"];
+/**
+ * Valeur d'un champ du modèle pour le journal (_journal_value) : nom d'une fiche liée, noms des sites,
+ * « oui » ou « non », nombre à la française, date « AAAA-MM-JJ » ; vide pour une valeur absente.
+ */
+function valeurJournal(H, champ, modele) {
+  const x = modele[champ];
+  if (champ === "partner_id") return x ? TIERS[x] ?? `Tiers n° ${x}` : "";
+  if (champ === "company_id") return x ? H.COMPANIES[x].name : "";
+  if (champ === "site_ids") return sitesDuModele(H, modele).map((s) => s.name).join(", ");
+  if (champ === "active") return x ? "oui" : "non";
+  if (x === null || x === undefined || x === false || x === "") return "";
+  if (champ === "compliant_ratio" || champ === "watch_ratio") return frNombre(x, 3, true);
+  return String(x);
+}
+/** Écrit les valeurs d'un modèle et journalise les champs suivis qui changent, valeurs avant et après. */
 function ecrireModele(H, modele, valeurs, par) {
-  for (const champ of ["name", "client_label", "partner_id", "compliant_ratio", "watch_ratio", "active"]) {
-    if (!(champ in valeurs) || valeurs[champ] === modele[champ]) continue;
-    const lisible = (x) => (champ === "partner_id" ? (x ? TIERS[x] ?? String(x) : null) : x === null || x === undefined ? null : String(x));
-    H.hsLog("report_template", modele.id, par, "write", champ, lisible(modele[champ]), lisible(valeurs[champ]));
-  }
+  const suivis = CHAMPS_MODELE.filter((champ) => champ in valeurs);
+  const avant = Object.fromEntries(suivis.map((champ) => [champ, valeurJournal(H, champ, modele)]));
   Object.assign(modele, valeurs);
+  for (const champ of suivis) {
+    const apres = valeurJournal(H, champ, modele);
+    if (apres !== avant[champ]) H.hsLog("report_template", modele.id, par, "write", champ, avant[champ] || null, apres || null);
+  }
 }
 
 /* ─── Sorties ───────────────────────────────────────────────────────────── */
 
 const ETATS_FR = { met: "Conforme", watch: "Sous surveillance", missed: "Non conforme", no_data: "Pas de donnée" };
-const nombreFr = (v) => (v === null || v === undefined ? "" : String(arrondi(v, 2)).replace(".", ","));
+/** Nombre d'une sortie (fmt_value du noyau, sans unité) : à la française, deux décimales au plus. */
+const nombreFr = (v) => frNombre(v, 2, true);
 const nomFichier = (modele, m) => `rapport_hsse_${modele.code || modele.id}_${m.replace("-", "_")}`.replace(/\//g, "-").replace(/ /g, "_");
 
 /** Classeur au format d'un donneur d'ordre (workbook) : synthèse du comité, puis plan contre réalisé. */
@@ -931,10 +1146,15 @@ function lignesPdf(p) {
 /* ─── Semis du rapport mensuel ──────────────────────────────────────────── */
 
 const tous = (v) => Array(12).fill(v);
-/** Modèles des donneurs d'ordre : [n°, libellé, nature, mode, valeur calculée, unité, sens, cumul, cibles, seuil, en service]. */
+/**
+ * Modèles des donneurs d'ordre, bornés à un profil de véhicule (le pétrolier aux citernes, le minier aux
+ * bennes de la base de Boffa) ; indicateurs : [n°, libellé, nature, mode, valeur calculée, unité, sens,
+ * cumul, cibles, seuil, en service].
+ */
 const MODELES = [
   {
     id: 2, name: "Rapport HSSE mensuel, Distribution Pétrolière de Kankan", partner_id: 104, client_label: "Distribution Pétrolière de Kankan", company_id: 1, compliant_ratio: 0.95, watch_ratio: 0.85, cree: "2026-01-05T09:12:00Z",
+    site_ids: [], vehicle_kind: "tanker", start_month: "2026-01-01",
     indicateurs: [
       ["A1-1", "Contrôles avant départ des citernes réalisés", "proactive", "computed", "check_completion", "%", "up", "average", tous(100)],
       ["A1-2", "Alcootests réalisés au départ", "proactive", "computed", "breath_test_completion", "%", "up", "average", tous(100)],
@@ -956,6 +1176,7 @@ const MODELES = [
   },
   {
     id: 3, name: "Rapport HSE mensuel, Société Minière de Boffa", partner_id: 101, client_label: "Société Minière de Boffa", company_id: 1, compliant_ratio: 1, watch_ratio: 0.9, cree: "2026-01-06T15:40:00Z",
+    site_ids: [2], vehicle_kind: "tipper", start_month: "2026-01-01",
     indicateurs: [
       ["P1", "Conducteurs aux habilitations à jour", "proactive", "computed", "qualifications_valid", "%", "up", "last", tous(100)],
       ["P2", "Inductions sécurité du site minier réalisées", "proactive", "manual", null, "nbre", "up", "sum", tous(2)],
@@ -1017,24 +1238,24 @@ function semerRapports(H) {
       targets: targets ? [...targets] : Array(12).fill(null), alert_threshold: alerte ?? 0, has_threshold: alerte !== null, sequence: rang * 10, active,
     });
   };
-  // Modèle NIMOVA : un indicateur calculé par indicateur du cockpit, cibles des paramètres.
-  HS.reportTemplates.push({ id: 1, name: "Rapport mensuel HSSEQ NIMOVA", code: "NIMOVA", company_id: null, partner_id: null, client_label: "Direction générale", compliant_ratio: 0.95, watch_ratio: 0.85, active: true });
+  // Modèle NIMOVA : un indicateur calculé par indicateur du cockpit, cibles des paramètres, toute la société.
+  HS.reportTemplates.push({ id: 1, name: "Rapport mensuel HSSEQ NIMOVA", code: "NIMOVA", company_id: null, partner_id: null, client_label: "Direction générale", site_ids: [], vehicle_kind: null, start_month: "2026-01-01", compliant_ratio: 0.95, watch_ratio: 0.85, active: true });
   H.hsLog("report_template", 1, null, "create", null, null, null, "2026-01-02T05:00:00Z");
   INDICATORS.forEach(([code], k) => {
     const spec = CLES[code];
     indicateur(1, k + 1, [`${spec.family === "proactive" ? "P" : "R"}-${pad(k + 1)}`, spec.label, spec.family, "computed", code, spec.unit, spec.direction, spec.aggregation, null]);
   });
   for (const m of MODELES) {
-    HS.reportTemplates.push({ id: m.id, name: m.name, code: null, company_id: m.company_id, partner_id: m.partner_id, client_label: m.client_label, compliant_ratio: m.compliant_ratio, watch_ratio: m.watch_ratio, active: true });
+    HS.reportTemplates.push({ id: m.id, name: m.name, code: null, company_id: m.company_id, partner_id: m.partner_id, client_label: m.client_label, site_ids: [...m.site_ids], vehicle_kind: m.vehicle_kind, start_month: m.start_month, compliant_ratio: m.compliant_ratio, watch_ratio: m.watch_ratio, active: true });
     H.hsLog("report_template", m.id, 16, "create", null, null, null, m.cree);
     m.indicateurs.forEach((ligne, k) => indicateur(m.id, k + 1, ligne));
   }
 
-  // Valeurs calculées de janvier à septembre, figées le 5 du mois suivant.
+  // Valeurs calculées de janvier à septembre, sur le périmètre de chaque modèle, figées le 5 du mois suivant.
   const courant = H.TODAY.slice(0, 7);
   const precedent = ajouterMois(`${courant}-01`, -1).slice(0, 7);
   const mois = Array.from({ length: +precedent.slice(5, 7) }, (_, k) => `${precedent.slice(0, 4)}-${pad(k + 1)}`);
-  const calculees = valeursCalculees(H, 1, mois);
+  const calculees = new Map(HS.reportTemplates.map((t) => [t.id, valeursCalculees(H, 1, mois, porteeDe(H, t))]));
   const valider = (fiche, quand) => {
     fiche.state = "validated";
     fiche.validated_at = quand;
@@ -1048,16 +1269,16 @@ function semerRapports(H) {
       const v = forcees ? forcees[ind.code] : saisieDemo(ind.code, m, modeleId);
       if (v === null) continue;
       const ligne = ligneValeur(H, fiche, ind.id);
-      const avant = tuple(ligne);
+      const avant = texteSaisie(ligne, ind.unit);
       Object.assign(ligne, { manual_value: v, manual_known: true });
-      H.hsLog("report", fiche.id, 16, "write", ind.code, avant, tuple(ligne), quand);
+      H.hsLog("report", fiche.id, 16, "write", ind.code, avant, texteSaisie(ligne, ind.unit), quand);
     }
   };
   for (const modele of HS.reportTemplates) {
     for (const m of mois) {
       const gel = dateGel(m);
       const fiche = ficheDuMois(H, modele, 1, m, null, `${gel}T06:00:00Z`);
-      figer(H, fiche, calculees.get(m), gel);
+      figer(H, fiche, calculees.get(modele.id).get(m), gel);
       const suivant = gel.slice(0, 7);
       if (modele.id === 1) {
         if (m !== precedent) valider(fiche, `${suivant}-06T08:15:00Z`);
@@ -1079,10 +1300,11 @@ function semerRapports(H) {
         fiche.reopen_reason = "Heures de formation d'août corrigées après le rapprochement avec les feuilles d'émargement.";
         H.hsLog("report", fiche.id, 16, "write", "state", "validated", "draft", "2026-09-10T08:05:00Z");
         H.hsLog("report", fiche.id, 16, "reopen", null, null, null, "2026-09-10T08:05:00Z", fiche.reopen_reason);
-        const ligne = ligneValeur(H, fiche, indicateursDu(H, 2).find((i) => i.code === "A1-4").id);
-        const avant = tuple(ligne);
+        const formation = indicateursDu(H, 2).find((i) => i.code === "A1-4");
+        const ligne = ligneValeur(H, fiche, formation.id);
+        const avant = texteSaisie(ligne, formation.unit);
         ligne.manual_value = 44;
-        H.hsLog("report", fiche.id, 16, "write", "A1-4", avant, tuple(ligne), "2026-09-10T08:12:00Z");
+        H.hsLog("report", fiche.id, 16, "write", "A1-4", avant, texteSaisie(ligne, formation.unit), "2026-09-10T08:12:00Z");
         valider(fiche, "2026-09-10T08:20:00Z");
       }
     }
@@ -1091,9 +1313,9 @@ function semerRapports(H) {
   const octobre = ficheDuMois(H, HS.reportTemplates.find((t) => t.id === 2), 1, courant, 16, `${H.TODAY}T07:40:00Z`);
   const causeries = indicateursDu(H, 2).find((i) => i.code === "A1-3");
   const ligne = ligneValeur(H, octobre, causeries.id);
-  const avant = tuple(ligne);
+  const avant = texteSaisie(ligne, causeries.unit);
   Object.assign(ligne, { manual_value: 2, manual_known: true, comment: "Causeries du 6 et du 13 octobre ; deux autres prévues." });
-  H.hsLog("report", octobre.id, 16, "write", "A1-3", avant, tuple(ligne), `${H.TODAY}T07:42:00Z`);
+  H.hsLog("report", octobre.id, 16, "write", "A1-3", avant, texteSaisie(ligne, causeries.unit), `${H.TODAY}T07:42:00Z`);
   for (const [modeleId, m, code, texte] of COMMENTAIRES) {
     const fiche = moisDuRapport(H, modeleId, 1, m);
     const ind = indicateursDu(H, modeleId).find((i) => i.code === code);
@@ -1135,8 +1357,8 @@ export function enregistrerHabilitationsRapports(H) {
     if (q.status) {
       const voulus = String(q.status).split(",");
       if (voulus.some((s) => !(s in STATUS_RANK))) throw H.hsBad("Statut : valid, to_renew, expired ou missing.", ["status"]);
-      // Statut d'ensemble du conducteur, ou de la case du type filtré (comme le noyau).
-      liste = liste.filter((l) => voulus.includes(l.status) || (codes.length && l.qualifications.some((c) => voulus.includes(c.status))));
+      // Avec un filtre de type : le statut de la case des types filtrés ; sinon le statut d'ensemble.
+      liste = codes.length ? liste.filter((l) => l.qualifications.some((c) => voulus.includes(c.status))) : liste.filter((l) => voulus.includes(l.status));
     }
     if (["1", "true"].includes(String(q.blocking ?? ""))) liste = liste.filter((l) => l.blocking);
     if (q.search) {
@@ -1148,9 +1370,10 @@ export function enregistrerHabilitationsRapports(H) {
     if (!Number.isInteger(offset) || !Number.isInteger(limit)) throw H.hsBad("Pagination invalide.");
     const debut = Math.max(offset, 0);
     const taille = Math.min(Math.max(limit, 1), 500);
+    const exigences = obligations(H);
     return {
       items: liste.slice(debut, debut + taille), total_count: liste.length, offset: debut, limit: taille, counts,
-      types: types.map((t) => ({ code: t.code, name: t.name, mandatory: t.mandatory_for_drivers })), date: day,
+      types: types.map((t) => ({ ...typeExige(t, exigences), mandatory: t.mandatory_for_drivers })), date: day,
     };
   });
 
@@ -1158,13 +1381,58 @@ export function enregistrerHabilitationsRapports(H) {
     const q = ctx.query;
     const comps = societes(H, ctx, q);
     const natures = q.kind ? String(q.kind).split(",") : null;
+    // Période d'envoi, puis d'expiration (bornes comprises).
+    const [envoiDu, envoiAu, echeanceDu, echeanceAu] = ["date_from", "date_to", "expires_from", "expires_to"].map((cle) => dateParametre(H, q, cle));
     // Profil RH sans profil de lecture complète : les personnes seulement.
     const rhSeul = H.hsIs(ctx, "rh") && !H.hasProfile(ctx, ["admin", "direction", "hsseq"]);
     return H.DB.hsseq.expiryAlerts
       .filter((a) => comps.includes(a.company_id) && (!natures || natures.includes(a.kind)) && !(rhSeul && a.kind === "vehicle_document"))
+      .filter((a) => (!envoiDu || a.sent_at.slice(0, 10) >= envoiDu) && (!envoiAu || a.sent_at.slice(0, 10) <= envoiAu)
+        && (!echeanceDu || a.expiry_date >= echeanceDu) && (!echeanceAu || a.expiry_date <= echeanceAu))
       .sort((a, b) => b.sent_at.localeCompare(a.sent_at) || b.id - a.id)
       .slice(0, 500)
-      .map((a) => ({ id: a.id, kind: a.kind, subject: a.subject, label: a.label, expires_on: a.expiry_date, stage: a.stage, reason_code: a.reason_code ?? null, site: a.site_id ? H.hsSiteRef(a.site_id) : null, sent_at: a.sent_at, recipients: a.recipient_ids.length }));
+      .map((a) => ligneAlerte(H, a));
+  });
+
+  /* Habilitations exigées selon le profil du véhicule */
+
+  route("GET", "/hsseq/qualifications/rules", QUAL_READ, () => {
+    const exigences = obligations(H);
+    return typesActifs(H).map((t) => typeExige(t, exigences));
+  });
+
+  /** {rules: [{code, tanker, tipper}]} en booléens stricts ; {code, reset: true} rend l'obligation de RH. */
+  route("PATCH", "/hsseq/qualifications/rules", CONFIG, (ctx) => {
+    const HS = H.DB.hsseq;
+    const lignes = ctx.body.rules;
+    if (!Array.isArray(lignes)) throw H.hsBad("Règles attendues : rules, une liste.", ["rules"]);
+    const types = new Map(typesActifs(H).map((t) => [t.code, t]));
+    // Tout est vérifié avant d'écrire : un refus ne laisse rien derrière lui (transaction du noyau).
+    const prevues = lignes.map((l) => {
+      const type = l && typeof l === "object" && !Array.isArray(l) && typeof l.code === "string" ? types.get(l.code) : null;
+      if (!type) throw H.hsBad("Type d'habilitation inconnu.", ["rules"]);
+      if (l.reset === true) return { type, reset: true };
+      if (typeof l.tanker !== "boolean" || typeof l.tipper !== "boolean") throw H.hsBad("tanker et tipper : des booléens.", ["rules"]);
+      return { type, tanker: l.tanker, tipper: l.tipper };
+    });
+    const py = (b) => (b ? "True" : "False");
+    for (const p of prevues) {
+      const regle = HS.qualificationRules.find((r) => r.type_id === p.type.id) ?? null;
+      if (p.reset) {
+        if (regle) {
+          H.hsLog("qualification_rule", regle.id, ctx.user.id, "reset", null, null, null, H.hsNow(), p.type.code);
+          HS.qualificationRules.splice(HS.qualificationRules.indexOf(regle), 1);
+        }
+        continue;
+      }
+      const avant = regle ? `citerne ${py(regle.tanker)}, benne ${py(regle.tipper)}` : "obligation de RH";
+      const r = regle ?? { id: ++HS.qualificationRuleSeq, type_id: p.type.id };
+      Object.assign(r, { tanker: p.tanker, tipper: p.tipper });
+      if (!regle) HS.qualificationRules.push(r);
+      H.hsLog("qualification_rule", r.id, ctx.user.id, "write", p.type.code, avant, `citerne ${py(r.tanker)}, benne ${py(r.tipper)}`);
+    }
+    const exigences = obligations(H);
+    return typesActifs(H).map((t) => typeExige(t, exigences));
   });
 
   /* Rapport mensuel : catalogue et modèles */
@@ -1186,7 +1454,11 @@ export function enregistrerHabilitationsRapports(H) {
     const data = ctx.body;
     if (data.name === undefined || data.name === null || data.name === "") throw H.hsMissing("Champs obligatoires manquants.", ["name"]);
     const HS = H.DB.hsseq;
-    const modele = { id: suivantId(HS.reportTemplates), code: null, company_id: null, partner_id: null, client_label: null, compliant_ratio: 0.95, watch_ratio: 0.85, active: true, ...valeursModele(H, ctx, data) };
+    // Sans périmètre : toute la société ; premier mois par défaut : le mois en cours.
+    const modele = {
+      id: suivantId(HS.reportTemplates), code: null, company_id: null, partner_id: null, client_label: null, site_ids: [], vehicle_kind: null, start_month: `${H.TODAY.slice(0, 7)}-01`,
+      compliant_ratio: 0.95, watch_ratio: 0.85, active: true, ...valeursModele(H, ctx, data),
+    };
     verifierSeuils(H, modele);
     // Les indicateurs sont tous vérifiés avant d'être écrits : un refus ne laisse rien derrière lui.
     enregistrerIndicateurs(H, modele, data.indicators);
@@ -1213,12 +1485,15 @@ export function enregistrerHabilitationsRapports(H) {
     const modele = modeleDe(H, ctx, q.template_id);
     const societe = societeDu(H, ctx, modele, q);
     const annee = entierOuNul(H, q, "year") ?? +H.TODAY.slice(0, 4);
-    const dernier = annee < +H.TODAY.slice(0, 4) ? 12 : +H.TODAY.slice(5, 7);
-    const items = Array.from({ length: dernier }, (_, k) => {
-      const m = `${annee}-${pad(k + 1)}`;
+    // Ni année à venir, ni mois antérieurs au premier mois du modèle ; la lecture ne crée aucun mois.
+    const dernier = annee > +H.TODAY.slice(0, 4) ? 0 : annee < +H.TODAY.slice(0, 4) ? 12 : +H.TODAY.slice(5, 7);
+    const items = [];
+    for (let k = 1; k <= dernier; k += 1) {
+      const m = `${annee}-${pad(k)}`;
+      if (`${m}-01` < modele.start_month) continue;
       const fiche = moisDuRapport(H, modele.id, societe, m);
-      return { month: m, label: moisLabel(m), state: fiche?.state ?? "draft", frozen: Boolean(fiche?.frozen_on), freeze_date: dateGel(m) };
-    });
+      items.push({ month: m, label: moisLabel(m), state: fiche?.state ?? "draft", frozen: Boolean(fiche?.frozen_on), freeze_date: dateGel(m) });
+    }
     return { template: ligneModele(H, ctx, modele), company: societeRef(H, societe), year: annee, items };
   });
 
@@ -1251,12 +1526,14 @@ export function enregistrerHabilitationsRapports(H) {
       if ("comment" in item) maj.comment = H.hsText(item, "comment", 2000);
       return { ind, maj };
     });
+    // La saisie crée le mois du rapport s'il n'existe pas ; le journal la garde en texte, si elle change.
     const fiche = ficheDuMois(H, modele, societe, m, ctx.user.id);
     for (const { ind, maj } of saisies) {
       const ligne = ligneValeur(H, fiche, ind.id);
-      const avant = tuple(ligne);
+      const avant = texteSaisie(ligne, ind.unit);
       Object.assign(ligne, maj);
-      H.hsLog("report", fiche.id, ctx.user.id, "write", ind.code, avant, tuple(ligne));
+      const apres = texteSaisie(ligne, ind.unit);
+      if (apres !== avant) H.hsLog("report", fiche.id, ctx.user.id, "write", ind.code, avant, apres);
     }
     if ("comment" in data) {
       const texte = H.hsText(data, "comment", 4000);
@@ -1273,9 +1550,8 @@ export function enregistrerHabilitationsRapports(H) {
 
   route("GET", "/hsseq/reports/:id/:month/report.pdf", REPORT_READ, (ctx) => {
     const { modele, societe, m } = moisDemande(H, ctx, ctx.params[0], ctx.params[1], ctx.query);
+    // Rendu sur le modèle : la lecture du PDF ne crée ni le mois du rapport ni de ligne de journal.
     const p = charge(H, ctx, modele, societe, m);
-    // Comme le noyau, le rendu du PDF crée le mois du rapport s'il n'existe pas encore.
-    ficheDuMois(H, modele, societe, m, ctx.user.id);
     return H.fileReply(pdf(`Rapport mensuel HSSE : ${p.label}`, lignesPdf(p)), "application/pdf", `${nomFichier(modele, m)}.pdf`);
   });
 
@@ -1283,28 +1559,28 @@ export function enregistrerHabilitationsRapports(H) {
     const data = ctx.body;
     const { modele, societe, m } = moisDemande(H, ctx, ctx.params[0], ctx.params[1], { ...ctx.query, company_id: data.company_id });
     const transition = ctx.params[2];
+    if (!["validate", "reopen"].includes(transition)) throw introuvable(H, "Transition inconnue.");
+    // La validation crée le mois du rapport s'il n'existe pas ; la réouverture n'en crée jamais.
     const existante = moisDuRapport(H, modele.id, societe, m);
     if (transition === "validate") {
       if (existante?.state === "validated") throw H.hsRule("invalid_transition", "Ce mois du rapport est déjà validé.");
       const gel = dateGel(m);
       if (!existante?.frozen_on && H.TODAY < gel) {
-        throw H.hsRule("month_not_frozen", `Les valeurs de ${MOIS[+m.slice(5, 7) - 1]} ${m.slice(0, 4)} se figent le ${frDate(gel)} : validation à partir de cette date.`);
+        throw H.hsRule("month_not_frozen", `Les valeurs ${deMois(m)} se figent le ${frDate(gel)} : validation à partir de cette date.`);
       }
       const fiche = ficheDuMois(H, modele, societe, m, ctx.user.id);
-      if (!fiche.frozen_on) figer(H, fiche, valeursCalculees(H, societe, [m]).get(m), H.TODAY, ctx.user.id);
+      if (!fiche.frozen_on) figer(H, fiche, valeursCalculees(H, societe, [m], porteeDe(H, modele)).get(m), H.TODAY, ctx.user.id);
       const quand = H.hsNow();
       Object.assign(fiche, { state: "validated", validated_at: quand, validated_by: ctx.user.id });
       H.hsLog("report", fiche.id, ctx.user.id, "write", "state", "draft", "validated", quand);
       H.hsLog("report", fiche.id, ctx.user.id, "validate", null, null, null, quand);
-    } else if (transition === "reopen") {
+    } else {
       if (existante?.state !== "validated") throw H.hsRule("invalid_transition", "Seul un mois validé se rouvre.");
       const motif = String(data.reason ?? "").trim();
       if (!motif) throw H.hsRule("reason_required", "Le motif de la réouverture est obligatoire.", { fields: ["reason"] });
       Object.assign(existante, { state: "draft", validated_at: null, validated_by: null, reopen_reason: motif });
       H.hsLog("report", existante.id, ctx.user.id, "write", "state", "validated", "draft");
       H.hsLog("report", existante.id, ctx.user.id, "reopen", null, null, null, H.hsNow(), motif);
-    } else {
-      throw introuvable(H, "Transition inconnue.");
     }
     return charge(H, ctx, modele, societe, m);
   });

@@ -42,11 +42,6 @@ const SUIVIS = {
   finding: ["classification", "description", "requirement_id"],
   requirement: ["source", "standard", "partner_id", "source_reference", "title", "summary", "expected_evidence", "status", "next_review_date"],
 };
-/**
- * Donneurs d'ordre fictifs : les tiers clients de serveur.mjs (PARTNERS, absent de HS_REFS), mêmes
- * identifiants et mêmes noms.
- */
-const CLIENTS = { 101: "Société Minière de Boffa (démo)", 102: "Bauxite Atlantique Kamsar (démo)", 104: "Distribution Pétrolière de Kankan (démo)" };
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /** PDF d'une page, texte en ASCII (police standard) : pièces jointes de la maquette. */
@@ -88,7 +83,16 @@ export function enregistrerConformite(H) {
 
   const introuvable = (message) => new ApiError(404, "not_found", message);
   const suivant = (liste) => liste.reduce((m, x) => Math.max(m, x.id), 0) + 1;
-  const client = (id) => (id && CLIENTS[id] ? { id, name: CLIENTS[id] } : null);
+  /**
+   * Client ou donneur d'ordre {id, name} : l'un des clients servis par les référentiels (hsClientRows,
+   * client_rows du noyau : tiers clients et tiers déjà cités par un audit, une exigence ou un modèle de rapport).
+   */
+  const client = (id) => (id ? H.hsClientRows().find((c) => c.id === id) ?? null : null);
+  /** Journal d'une fiche, l'entrée la plus récente d'abord (ordre du journal du noyau). */
+  const historique = (model, id) => [...H.hsHistory(model, id)].reverse();
+  /** Recherche texte (q, ou search) : un des textes la contient, sans égard à la casse (ilike du noyau). */
+  const cherche = (q) => String(q.q || q.search || "").trim().toLowerCase();
+  const contient = (texte, valeurs) => !texte || valeurs.some((v) => String(v ?? "").toLowerCase().includes(texte));
   const estHsseq = (ctx) => H.hsIs(ctx, "hsseq");
   const lecteurExigences = (ctx) => H.hasProfile(ctx, LECTURE_EXIGENCES);
   /** Portée « fermée par défaut » (in_scope du noyau) : lecture complète, sinon les sites du compte ; un objet sans site n'est lu que des profils de lecture complète. */
@@ -130,12 +134,12 @@ export function enregistrerConformite(H) {
     return "closed";
   }
 
-  /** Valeur journalisée d'un champ : nom d'une référence, code d'une sélection, date. */
+  /** Valeur journalisée d'un champ : nom d'une référence (une exigence par sa référence), code d'une sélection, date. */
   function valeurJournal(champ, v) {
     if (v === null || v === undefined || v === "") return "";
     if (champ === "site_id") return H.hsSite(v)?.name ?? "";
     if (champ === "auditor_user_id") return H.hsUser(v)?.name ?? "";
-    if (champ === "partner_id") return CLIENTS[v] ?? "";
+    if (champ === "partner_id") return client(v)?.name ?? "";
     if (champ === "requirement_id") return exigenceParId(v)?.reference ?? "";
     return String(v);
   }
@@ -176,21 +180,24 @@ export function enregistrerConformite(H) {
       closed_at: a.closed_at ?? null, closed_by: H.hsUser(a.closed_by), cancel_reason: a.cancel_reason ?? null, reopen_reason: a.reopen_reason ?? null,
       findings_list: constatsDe(a).map((f) => ligneConstat(ctx, f)),
       majors_without_action: majeursSansAction(a).map((f) => f.id),
-      attachments: H.hsAttachments("audit", a.id), history: H.hsHistory("audit", a.id), transitions, rights,
+      attachments: H.hsAttachments("audit", a.id), history: historique("audit", a.id), transitions, rights,
     };
   }
-  function ligneConstat(ctx, f) {
+  /** Ligne d'un constat (finding_row) ; `detail` : sa fiche (GET et PATCH), avec son historique. */
+  function ligneConstat(ctx, f, detail = false) {
     const a = auditParId(f.audit_id);
     const r = f.requirement_id ? exigenceParId(f.requirement_id) : null;
     // origin_label au format du noyau (action_line) : référence du constat et début de sa description.
     const etiquette = `${f.reference} ${f.description.slice(0, 120)}`;
-    return {
-      id: f.id, reference: f.reference, audit: { id: a.id, reference: a.reference }, classification: f.classification, description: f.description,
+    const ligne = {
+      id: f.id, reference: f.reference, audit: { id: a.id, reference: a.reference, status: a.status }, classification: f.classification, description: f.description,
       requirement: r ? { id: r.id, reference: r.reference, title: r.title } : null, status: f.status, site: f.site_id ? H.hsSiteRef(f.site_id) : null,
       actions: actionsDe(f).map((x) => ({ ...H.hsActionLine(x), origin_label: etiquette })),
       attachments: H.hsAttachments("finding", f.id),
+      // Modifiable par hsseq tant que son audit est planifié ou réalisé (ni clos ni annulé).
       rights: { can_edit: estHsseq(ctx) && ["planned", "done"].includes(a.status), can_close: false, can_approve: false },
     };
+    return detail ? { ...ligne, history: historique("finding", f.id) } : ligne;
   }
   function ligneExigence(ctx, r, detail = false) {
     const hs = estHsseq(ctx);
@@ -204,7 +211,7 @@ export function enregistrerConformite(H) {
     return {
       ...ligne, review_comment: r.review_comment ?? null,
       findings: HS.findings.filter((f) => f.requirement_id === r.id && dansPortee(ctx, f.site_id)).map((f) => ({ id: f.id, reference: f.reference, classification: f.classification, status: f.status })),
-      history: H.hsHistory("requirement", r.id), transitions: hs ? ["review"] : [],
+      history: historique("requirement", r.id), transitions: hs ? ["review"] : [],
     };
   }
 
@@ -225,17 +232,22 @@ export function enregistrerConformite(H) {
     if (!r || r.active === false || !ctx.user.companies.includes(r.company_id)) throw introuvable("Exigence introuvable.");
     return r;
   }
-  /** Audits de la liste et de l'export (audit_list_domain) : portée, filtres, année (en cours par défaut) ou période. */
+  /**
+   * Audits de la liste et de l'export (audit_list_domain) : portée, filtres, recherche q (référence,
+   * intitulé, périmètre, auditeur externe, client), année (en cours par défaut) ou période.
+   */
   function listeAudits(ctx, q) {
     const comps = societes(ctx, q);
     const statuts = H.hsList(q.status);
     const normes = H.hsList(q.standard);
     const site = H.hsId(q, "site_id");
+    const texte = cherche(q);
     const annee = H.intArg(q, "year", null) || Number(TODAY.slice(0, 4));
     const debut = dateOuNul(q, "date_from") ?? `${annee}-01-01`;
     const fin = dateOuNul(q, "date_to") ?? `${annee}-12-31`;
     return HS.audits.filter((a) => comps.includes(a.company_id) && dansPortee(ctx, a.site_id) && (!statuts || statuts.includes(a.status))
-      && (!normes || normes.includes(a.standard)) && (!site || a.site_id === site) && a.planned_date >= debut && a.planned_date <= fin);
+      && (!normes || normes.includes(a.standard)) && (!site || a.site_id === site) && a.planned_date >= debut && a.planned_date <= fin
+      && (!texte || contient(texte, [a.reference, a.title, a.scope, a.auditor_name, client(a.partner_id)?.name])));
   }
   /** Exigences de la liste et de l'export (_requirement_domain), avec les mêmes paramètres. */
   function listeExigences(ctx, q) {
@@ -270,6 +282,8 @@ export function enregistrerConformite(H) {
     for (const [cle, max] of [["scope", 4000], ["conclusion", 4000], ["auditor_name", 200]]) if (cle in data) v[cle] = H.hsText(data, cle, max);
     for (const cle of ["planned_date", "actual_date"]) if (cle in data) v[cle] = dateOuNul(data, cle);
     if ("planned_date" in v && !v.planned_date) throw H.hsMissing("Date prévue manquante.", ["planned_date"]);
+    // Création comme modification : pas de date de réalisation à venir.
+    if (v.actual_date && v.actual_date > TODAY) throw H.hsRule("invalid_parameter", "Un audit se déclare réalisé à une date passée ou du jour.", { fields: ["actual_date"] });
     if ("site_id" in data) {
       const id = H.hsId(data, "site_id");
       if (id && !H.hsSite(id)) throw introuvable("Site introuvable.");
@@ -277,7 +291,7 @@ export function enregistrerConformite(H) {
     }
     if ("partner_id" in data) {
       const id = H.hsId(data, "partner_id");
-      v.partner_id = id && CLIENTS[id] ? id : null;
+      v.partner_id = client(id)?.id ?? null;
     }
     if ("auditor_id" in data) {
       const id = H.hsId(data, "auditor_id");
@@ -322,7 +336,7 @@ export function enregistrerConformite(H) {
     }
     if ("partner_id" in data) {
       const id = H.hsId(data, "partner_id");
-      v.partner_id = id && CLIENTS[id] ? id : null;
+      v.partner_id = client(id)?.id ?? null;
     }
     if ("next_review_date" in data) v.next_review_date = dateOuNul(data, "next_review_date");
     return v;
@@ -554,7 +568,7 @@ export function enregistrerConformite(H) {
     return H.hsPage(ctx, H.hsSort([...liste], ctx.query.sort, TRIS_AUDITS, "planned_date"), counts, ligneAudit);
   });
 
-  // Registre des audits et des constats ; la feuille des exigences pour leurs seuls lecteurs (mêmes paramètres que les listes).
+  // Registre des audits et des constats aux paramètres de la liste des audits ; la feuille des exigences pour leurs seuls lecteurs, à ses propres filtres.
   route("GET", "/hsseq/audits/export.xlsx", LECTURE_AUDITS, (ctx) => {
     const audits = listeAudits(ctx, ctx.query).sort((a, b) => a.planned_date.localeCompare(b.planned_date) || a.id - b.id);
     const nom = (a) => (a.auditor_kind === "internal" ? (H.hsUser(a.auditor_user_id)?.name ?? "") : (a.auditor_name ?? ""));
@@ -576,7 +590,11 @@ export function enregistrerConformite(H) {
       },
     ];
     if (lecteurExigences(ctx)) {
-      const exigences = listeExigences(ctx, ctx.query).sort((a, b) => a.source.localeCompare(b.source) || a.source_reference.localeCompare(b.source_reference) || a.id - b.id);
+      // Les filtres status, standard et source de la liste des audits ne valent pas pour les exigences : la
+      // feuille a les siens (requirement_status, requirement_source, requirement_standard), comme le noyau.
+      const filtres = Object.fromEntries(Object.entries(ctx.query).filter(([cle]) => !["status", "standard", "source"].includes(cle)));
+      for (const cle of ["status", "source", "standard"]) if (ctx.query[`requirement_${cle}`] !== undefined) filtres[cle] = ctx.query[`requirement_${cle}`];
+      const exigences = listeExigences(ctx, filtres).sort((a, b) => a.source.localeCompare(b.source) || a.source_reference.localeCompare(b.source_reference) || a.id - b.id);
       feuilles.push({
         name: "Registre des exigences",
         rows: [
@@ -656,8 +674,11 @@ export function enregistrerConformite(H) {
     const audit = H.hsId(q, "audit_id");
     const exigence = H.hsId(q, "requirement_id");
     const site = H.hsId(q, "site_id");
+    // Recherche q (ou search) : référence et description du constat, intitulés de son audit et de son exigence.
+    const texte = cherche(q);
     const liste = HS.findings.filter((f) => comps.includes(f.company_id) && dansPortee(ctx, f.site_id) && (!classes || classes.includes(f.classification))
-      && (!statuts || statuts.includes(f.status)) && (!audit || f.audit_id === audit) && (!exigence || f.requirement_id === exigence) && (!site || f.site_id === site));
+      && (!statuts || statuts.includes(f.status)) && (!audit || f.audit_id === audit) && (!exigence || f.requirement_id === exigence) && (!site || f.site_id === site)
+      && (!texte || contient(texte, [f.reference, f.description, auditParId(f.audit_id)?.title, f.requirement_id ? exigenceParId(f.requirement_id)?.title : null])));
     // Comptes sur toute la sélection filtrée, statut compris (comme le noyau).
     const counts = {
       by_status: Object.fromEntries(Object.keys(ETATS_CONSTAT).map((s) => [s, liste.filter((f) => f.status === s).length])),
@@ -666,13 +687,14 @@ export function enregistrerConformite(H) {
     return H.hsPage(ctx, H.hsSort([...liste], q.sort, TRIS_CONSTATS, "-id"), counts, (f) => ligneConstat(ctx, f));
   });
 
-  route("GET", "/hsseq/findings/:id", LECTURE_AUDITS, (ctx) => ligneConstat(ctx, constatDe(ctx, ctx.params[0])));
+  // Fiche d'un constat (GET et PATCH) : la ligne, avec l'état de son audit, et son historique.
+  route("GET", "/hsseq/findings/:id", LECTURE_AUDITS, (ctx) => ligneConstat(ctx, constatDe(ctx, ctx.params[0]), true));
 
   route("PATCH", "/hsseq/findings/:id", GESTION, (ctx) => {
     const f = constatDe(ctx, ctx.params[0]);
     if (!["planned", "done"].includes(auditParId(f.audit_id).status)) throw H.hsRule("invalid_transition", "Audit clos ou annulé : le constat ne se modifie plus.");
     ecrireSuivi(ctx, "finding", f, valeursConstat(ctx.body, true));
-    return ligneConstat(ctx, f);
+    return ligneConstat(ctx, f, true);
   });
 
   /* ─── Exigences ──────────────────────────────────────────────────────── */

@@ -60,7 +60,7 @@ export function NonConformites({ ref_, lire, ecrire }: { ref_: Referentials | un
           <span className="inline-flex flex-wrap items-center gap-1.5">
             <MotifCode code="V02" />
             <span>
-              {pluriel(bloquantesOuvertes, "non-conformité bloquante ouverte", "non-conformités bloquantes ouvertes")} : chaque véhicule concerné reste bloqué au départ, d&apos;une rotation à l&apos;autre, jusqu&apos;à la levée par le chef de parc, photo de la correction à l&apos;appui.
+              {pluriel(bloquantesOuvertes, "non-conformité bloquante ouverte", "non-conformités bloquantes ouvertes")} : chaque véhicule concerné reste bloqué au départ, d&apos;une rotation à l&apos;autre, jusqu&apos;à la levée par le chef de parc du site, le Responsable HSSEQ ou l&apos;administration, photo de la correction à l&apos;appui.
             </span>
           </span>
         </Notice>
