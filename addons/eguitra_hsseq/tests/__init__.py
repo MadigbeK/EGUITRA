@@ -9,3 +9,8 @@ from . import test_qualifications
 from . import test_lock_lot2
 from . import test_audits
 from . import test_reports
+from . import test_environment
+from . import test_documents
+from . import test_telematics
+from . import test_cockpit_lot3
+from . import test_reviews
