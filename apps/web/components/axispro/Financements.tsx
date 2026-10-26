@@ -179,7 +179,7 @@ function LigneFinancement({ f, global, agir, ecriture }: { f: Funding; global: b
           <label className="block">Sollicité<CelluleNombre label="Montant sollicité" className="mt-0.5 w-full" value={f.amount_requested} onSave={(v) => patch({ amount_requested: v })} /></label>
           <label className="block">Accordé<CelluleNombre label="Montant accordé" className="mt-0.5 w-full" value={f.amount_granted} onSave={(v) => patch({ amount_granted: v })} /></label>
           <label className="block">Taux (%)<CelluleNombre label="Taux" className="mt-0.5 w-full" value={f.rate ?? 0} onSave={(v) => patch({ rate: v })} /></label>
-          <label className="block">Durée (mois)<CelluleNombre label="Durée en mois" className="mt-0.5 w-full" value={f.duration_months ?? 0} onSave={(v) => patch({ duration_months: Math.round(v) })} /></label>
+          <label className="block">Durée (mois)<CelluleNombre label="Durée en mois" className="mt-0.5 w-full" value={f.duration_months ?? 0} onSave={(v) => (v === null ? undefined : patch({ duration_months: Math.round(v) }))} /></label>
           <label className="block">Prochaine étape<CelluleTexte label="Prochaine étape" className="mt-0.5 w-full" value={f.next_step ?? ""} onSave={(v) => patch({ next_step: v })} /></label>
           <label className="block">Relance le<Input aria-label="Date de relance" type="date" className="mt-0.5 min-h-8 w-full py-1 text-[13px]" defaultValue={f.next_date ?? ""} onBlur={(e) => e.target.value !== (f.next_date ?? "") && patch({ next_date: e.target.value || null })} /></label>
         </div>
