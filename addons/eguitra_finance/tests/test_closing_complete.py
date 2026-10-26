@@ -267,6 +267,9 @@ class TestClosingComplete(FinanceDataMixin, TransactionCase):
         self.assertEqual(reversal.date, end + timedelta(days=1), "Reprise au premier jour de l'exercice suivant")
         self.assertAlmostEqual(self._balance("194", end + timedelta(days=1)), 0, 0)
         self.assertAlmostEqual(-self._balance("797", end + timedelta(days=1)), 4_000_000, 0, msg="Reprise en 797")
+        previous_start = env["eguitra.finance.metrics"].fiscal_year_bounds(self.company, end)[0]
+        flow = env["eguitra.syscohada"].cash_flow(self.company, previous_start, end)
+        self.assertAlmostEqual(flow["difference"], 0, 0, msg="La provision (194) ne fausse pas le tableau des flux")
 
     def test_credit_de_tva_sans_compte_4449(self):
         """Sans compte de crédit à reporter (4449), la liquidation garde le crédit au 445 et reste équilibrée,

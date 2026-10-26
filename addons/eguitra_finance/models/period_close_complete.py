@@ -41,9 +41,11 @@ CLOSE_KINDS = [
     ("ecl", "Pertes de crédit attendues"),
 ]
 # Provision pour perte de change de fin d'exercice (comptes à valider avec l'expert-comptable) : dotation
-# aux provisions financières, provision pour pertes de change, reprise de provisions financières.
+# aux provisions financières, provision pour pertes de change, reprise de provisions financières. La
+# provision va au 194 seul (rubrique DC, hors passif circulant) : portée au 499 (DN, passif circulant), sa
+# hausse compterait deux fois au tableau des flux, dans la CAFG (dotation réintégrée) et dans FE.
 FX_PROVISION_EXPENSE = ("6971", "697")
-FX_PROVISION_ACCOUNT = ("194", "4997", "499")
+FX_PROVISION_ACCOUNT = ("194",)
 FX_PROVISION_INCOME = ("7971", "797")
 KIND_LABELS = dict(CLOSE_KINDS) | {"depreciation": "Dotations aux amortissements"}
 # Version du sceau. 2 : identité de la société hors de l'empreinte, colonne balance des lignes scellée.
