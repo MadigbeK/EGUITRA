@@ -215,9 +215,15 @@ native, sans solution d'attente dans Rotations web ; conducteurs équipés de t�
   « Ma journée » par profil, file d'envoi commune, contrôle avant départ, alcootest masqué et
   déclaration en un geste, sur le contrat HSSEQ et le noyau de la session OTHER (branche `hsseq`).
   53 tests au vert, parcours vérifiés dans l'aperçu web avec le bureau simulé.
-- Ensuite : écran du départ (verrou des rotations du jour), envoi en arrière-plan, compte Expo de
-  l'entreprise (EAS, mises à jour à distance), icônes de DESIGN. Hors offre initiale : avenant à
-  chiffrer avec HSSEQ.
+- 26 octobre, suite : départ et verrou du jour (jamais « autorisé » sans réponse récente du bureau,
+  passage en route par le chef de parc seul), demande de dérogation, levée des non-conformités avec
+  photo, envoi en arrière-plan, code personnel au réveil et verrouillage de la tablette après
+  2 minutes (revue de sécurité : session reprise toujours verrouillée), signature tracée du contrôle.
+  64 tests au vert ; parcours vérifiés au téléphone et à la tablette sur le bureau simulé.
+- Ensuite : branchement sur la recette dès l'entrée native de la passerelle (Local, après son audit)
+  et l'intégration du module HSSEQ ; compte Expo de l'entreprise (EAS) pour essayer sur de vrais
+  téléphones ; icônes de DESIGN ; réponses de la Direction générale (départ sans réseau, valeur de
+  la signature par code, V05). Hors offre initiale : avenant à chiffrer avec HSSEQ.
 
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :
