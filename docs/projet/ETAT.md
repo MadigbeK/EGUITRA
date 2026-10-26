@@ -200,6 +200,34 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+**25 et 26 octobre : clôture de l'exercice et constats du noyau sur les clôtures** (offre, chapitres 6.3
+et 7.1 : « l'exercice 2027 s'y ouvre directement », états annuels garantis). Branche `cloture-exercice`
+(agent), à fusionner ; **tests Odoo non lancés** (pas de noyau local) : `infra/test.sh eguitra_finance
+eguitra_approval eguitra_transport` puis `-u eguitra_finance` sur la recette. `eguitra_finance`
+19.0.1.9.0, sans migration de données.
+- Fait, états : CJ = comptes 13 + résultat de l'exercice en cours seul ; résultat antérieur non affecté
+  et compte d'affectation (999999, equity_unaffected) en CH ; balance, grand livre et SAF-T reportent le
+  résultat antérieur au 999999 (SAF-T limité à un exercice) ; passerelle IFRS sur l'exercice comptable.
+  Auparavant, dès 2027, CJ cumulait 2026 et 2027 et une OD d'affectation déséquilibrait le bilan (clôtures
+  suivantes bloquées).
+- Fait, assistant de clôture annuelle (Clôtures et contrôles, bloc « Clôture de l'exercice ») : état des
+  douze mois, résultat, OD d'affectation en brouillon (111, 112, 118x, 121, 129, 465 contre 999999, total
+  contrôlé, circuit des OD), verrouillage définitif irréversible (`hard_lock_date`, direction et
+  administration) tracé au registre. Guide de la finance et Word régénérés.
+- Fait, constats de l'audit du noyau (I-F1 à I-F5, I-F8, I-F9, M1, M6 pour les clôtures) : mois
+  clôturable une fois terminé ; 40 débiteurs et dépréciations 295, 490, 591 à 594, 599 au bilan ;
+  tableau des flux sans achats d'immobilisations non payés ni cessions non encaissées, écarts de
+  conversion neutralisés ; sceau version 2 (identité hors empreinte, colonne balance scellée, anciens
+  sceaux vérifiables) ; cohérence des références (trous sur tout le préfixe, extournes) ; écarts de
+  conversion au reste dû de fin de mois et provision pour perte de change de décembre (PDC, 6971/194,
+  reprise 7971) ; TVA sans 4449 équilibrée ; alertes à la fin du mois ; pluriels.
+- **À faire valider par l'expert-comptable** : résultat antérieur non affecté présenté en CH ; comptes
+  de l'affectation ; provision PDC (6971, 194, reprise au 1er janvier en 7971) ; rubriques BH, AP, BR,
+  BS, DN complétées ; neutralisations du tableau des flux.
+- Reste : libellés des natures « fx_provision » et « fx_provision_reversal » à ajouter à la table KINDS
+  de `apps/web/app/finance/clotures/page.tsx` (modifiée par une autre session) ; route
+  `/finance/moves/<id>/reverse` sans date de pièce pour un avoir fournisseur (I-F13).
+
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :
 - Module `eguitra_portail` 19.0.1.0.0 (dépend d'`eguitra_axispro` sans modifier ses fichiers), 8 tests au
