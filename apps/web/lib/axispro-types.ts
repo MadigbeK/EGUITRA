@@ -318,7 +318,7 @@ export interface JournalEntry {
   id: number;
   date: string;
   user: string;
-  kind: "status" | "document" | "gate" | "decision" | "revision" | "import" | "assignment";
+  kind: "status" | "document" | "gate" | "decision" | "revision" | "import" | "assignment" | "portal" | "state";
   kind_label: string;
   criterion: string | null;
   before: string | null;
