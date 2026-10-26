@@ -23,7 +23,11 @@ class TestCockpit(HsseqCase):
         rates = {i["code"]: i for i in cockpit["indicators"]}
         self.assertFalse(rates["frequency_rate"]["site_scoped"], "TF : heures de RH par société, sans filtre de site")
         self.assertIn(cockpit["hours_basis"], ("paid", "presence"))
-        self.assertEqual(cockpit["events"], {"to_classify": 0, "overdue_investigations": 0, "high_open": 0})
+        events = cockpit["events"]
+        self.assertEqual({k: events[k] for k in ("to_classify", "overdue_investigations", "high_open",
+                                                 "matrix_unclassified")}, dict.fromkeys(
+            ("to_classify", "overdue_investigations", "high_open", "matrix_unclassified"), 0))
+        self.assertEqual((len(events["matrix"]), sum(c["count"] for c in events["matrix"])), (25, 0))
         status, other = self.api("kadi.hsseq", "GET", "/hsseq/cockpit?period=12m&vehicle_kind=tipper")
         self.assertEqual(status, 200, other)
         self.assertIsNone(next(i for i in other["indicators"] if i["code"] == "tanker_shortage")["value"],

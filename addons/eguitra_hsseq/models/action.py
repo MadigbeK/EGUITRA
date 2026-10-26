@@ -105,6 +105,11 @@ class EguitraHsseqAction(models.Model):
         self.ensure_one()
         return self._is_costly() and not self.approved_at
 
+    def _approval_pending(self):
+        """Validation de la direction attendue : action coûteuse non validée, ni close ni annulée."""
+        self.ensure_one()
+        return self._approval_required() and self.status not in ("closed", "cancelled")
+
     def write(self, vals):
         """Un changement du coût estimé annule la validation de la direction ; une action coûteuse déjà
         démarrée revient « à faire » jusqu'à sa nouvelle validation."""

@@ -137,3 +137,10 @@ def users_in_group(env, xmlid, companies):
     sociétés."""
     users = env["res.users"].sudo().search([("share", "=", False), ("company_ids", "in", companies.ids)])
     return users.filtered(lambda u: u.has_group(xmlid))
+
+
+def matrix_cells(counts, level_of):
+    """Matrice de criticité 5 × 5 (gravité × probabilité, notes de 1 à 5) : chaque case avec sa criticité, son
+    niveau et son nombre (counts : {(gravité, probabilité): nombre}), probabilité 5 en tête."""
+    return [{"severity": s, "probability": p, "criticality": s * p, "level": level_of(s * p),
+             "count": counts.get((s, p), 0)} for p in range(5, 0, -1) for s in range(1, 6)]

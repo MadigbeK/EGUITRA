@@ -1,5 +1,6 @@
-"""Référentiels d'HSSEQ (sites, véhicules, conducteurs, responsables possibles d'une action, seuils de
-criticité), sites et paramètres, échéances à 30 jours, espace du conducteur, notifications et journal."""
+"""Référentiels d'HSSEQ (sites, véhicules, conducteurs, salariés, responsables possibles d'une action, seuils
+de criticité), rotations d'un véhicule à une date, sites et paramètres, échéances à 30 jours, espace du
+conducteur, notifications et journal."""
 
 from datetime import timedelta
 
@@ -34,12 +35,18 @@ from .common import (
     page_args,
     profiles,
     rotation_ref,
+    scope_level,
+    site_allowed,
     site_ref,
     text,
     user_ref,
     vehicle_ref,
 )
 
+# Profils qui gèrent les personnes en cause d'un événement : la liste des salariés leur est servie.
+EVENT_PEOPLE = ("hsseq", "exploitation")
+# Profils qui déclarent un événement (contrat §2).
+DECLARE = ("admin", "direction", "hsseq", "exploitation", "conducteur")
 FITNESS = {"apte": "fit", "apte_reserve": "review", "inapte": "unfit", "echue": "unfit", "inconnu": "review"}
 DOCUMENT_REASON = {"insurance": "V05", "inspection": "V05", "calibration": "V06", "tightness": "V06"}
 SETTINGS_FIELDS = {
@@ -130,6 +137,27 @@ def deadline_items(comps, horizon, kind=None, site=None, vehicle_kind=None):
     return sorted(items, key=lambda i: (i["expires_on"], i["subject"]["name"] or ""))
 
 
+def employee_rows(comps, vehicles):
+    """Salariés en poste des sociétés (identifiant, nom, société, site de l'ensemble du chauffeur s'il est
+    connu), pour désigner les personnes en cause d'un événement ; aucune autre donnée du dossier RH."""
+    day = today()
+    employees = request.env["eguitra.rh.employee"].sudo().search([
+        ("company_id", "in", comps.ids), ("hire_date", "<=", day), "|", ("exit_date", "=", False),
+        ("exit_date", ">=", day)], order="name")
+    on_site = driver_sites(vehicles)
+    Site = request.env["eguitra.hsseq.site"].sudo()
+    return [{"id": e.id, "name": e.name, "company": company_ref(e.company_id),
+             "site": site_ref(Site.browse(on_site[e.driver_id.id])) if e.driver_id.id in on_site else None}
+            for e in employees]
+
+
+def rotation_window_domain(day):
+    """Rotations en cours au jour donné : chargées ce jour-là, ou chargées avant et pas encore revenues
+    (retour au dépôt, sinon livraison, sinon rotation encore ouverte)."""
+    return [("date_loading", "<=", day), "|", "|", ("date_loading", "=", day), ("date_return", ">=", day),
+            "&", ("date_return", "=", False), "|", ("date_delivery", ">=", day), ("state", "in", ("draft", "en_route"))]
+
+
 class EguitraHsseqReferentials(http.Controller):
     # ─── Référentiels ─────────────────────────────────────────────────────
 
@@ -151,6 +179,7 @@ class EguitraHsseqReferentials(http.Controller):
             owners = owners.filtered(lambda u: set(u._eguitra_profiles()) - {"conducteur"})
         settings = env["eguitra.hsseq.settings"]._get(env.company)
         employee = env.user._hsseq_employee()
+        people = bool(user_profiles & set(EVENT_PEOPLE))
         return {
             "sites": [site_row(s) for s in sites],
             "vehicles": [dict(vehicle_ref(v), site_id=v.site_id.id or None, driver_id=v.driver_id.id or None,
@@ -158,6 +187,8 @@ class EguitraHsseqReferentials(http.Controller):
                          for v in vehicles],
             "drivers": [dict(driver_ref(d), site_id=on_site.get(d.id)) for d in drivers],
             "owners": [user_ref(u) for u in owners],
+            # Salariés (personnes en cause d'un événement) : profils qui gèrent les événements seulement.
+            "employees": employee_rows(comps, vehicles) if people else [],
             "criticality_thresholds": settings._thresholds(),
             "costly_action_threshold": settings.costly_action_threshold,
             "check_window_hours": settings.check_window_hours,
@@ -166,6 +197,28 @@ class EguitraHsseqReferentials(http.Controller):
             "me": {"profiles": sorted(user_profiles), "site_ids": my_sites().ids,
                    "employee_id": employee.id or None, "driver_id": driver.id or None},
         }
+
+    # ─── Rotations d'un véhicule ──────────────────────────────────────────
+
+    @hsseq_route("/hsseq/vehicles/<int:vehicle_id>/rotations", profiles=DECLARE)
+    def vehicle_rotations(self, vehicle_id, **kw):
+        """Rotations de l'ensemble à une date (aujourd'hui par défaut), pour rattacher la déclaration d'un
+        accident survenu en route : chargées ce jour-là ou en cours ce jour-là. Conducteur : ses propres
+        rotations ; chef de parc : les ensembles de ses sites."""
+        vehicle = get("eguitra.transport.vehicle", vehicle_id, "Ensemble")
+        if not site_allowed(vehicle.site_id):
+            raise ApiError(404, "not_found", "Ensemble introuvable.")
+        day = date_value(kw, "date") or today()
+        domain = [("vehicle_id", "=", vehicle.id), ("state", "!=", "cancelled")] + rotation_window_domain(day)
+        if scope_level() == "self":
+            driver = my_driver()
+            if not driver:
+                return []
+            domain.append(("driver_id", "=", driver.id))
+        rotations = request.env["eguitra.transport.rotation"].sudo().search(domain, order="date_loading desc, id desc")
+        return [dict(rotation_ref(r), vehicle=vehicle_ref(r.vehicle_id), driver=driver_ref(r.driver_id),
+                     departed_at=r.departed_at or None, date_delivery=r.date_delivery or None,
+                     date_return=r.date_return or None) for r in rotations]
 
     # ─── Sites ────────────────────────────────────────────────────────────
 

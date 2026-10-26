@@ -1,5 +1,11 @@
 """Cockpit HSSEQ (contrat §4) : indicateurs du mois (ou des douze mois) avec leur source et leur série de
-douze mois, départs bloqués du jour, actions en retard, échéances à 30 jours, événements à suivre."""
+douze mois, départs bloqués du jour, actions en retard, échéances à 30 jours, événements à suivre et leur
+matrice de criticité sur la période."""
+
+from collections import Counter
+from datetime import datetime, time
+
+from dateutil.relativedelta import relativedelta
 
 from odoo import fields, http
 from odoo.http import request
@@ -7,10 +13,27 @@ from odoo.http import request
 from odoo.addons.eguitra_api.controllers.framework import ApiError
 
 from ..models.cockpit import month_end, month_label, parse_month
+from ..models.common import matrix_cells
 from .actions import overdue_lines
 from .common import COCKPIT, companies, forbidden, get, hsseq_route, my_sites, scope_level, site_allowed
 from .lock import departures
 from .referentials import deadline_items
+
+
+def event_matrix(comps, month, period, sites, vehicle_kind):
+    """Événements survenus sur la période (le mois, ou les douze mois qui s'y terminent), comptés par case
+    gravité potentielle × probabilité ; les événements pas encore classés restent hors matrice."""
+    start = month if period == "month" else month - relativedelta(months=11)
+    domain = [("company_id", "in", comps.ids), ("occurred_at", ">=", datetime.combine(start, time.min)),
+              ("occurred_at", "<=", datetime.combine(month_end(month), time.max))]
+    if sites:
+        domain.append(("site_id", "in", sites.ids))
+    if vehicle_kind:
+        domain.append(("vehicle_id.vehicle_kind", "=", vehicle_kind))
+    events = request.env["eguitra.hsseq.event"].sudo().search(domain)
+    counts = Counter((e.potential_severity, e.probability) for e in events if e.potential_severity and e.probability)
+    settings = request.env["eguitra.hsseq.settings"]._get(comps[:1] or request.env.company)
+    return matrix_cells(counts, settings._level), len(events) - sum(counts.values())
 
 
 class EguitraHsseqCockpit(http.Controller):
@@ -42,6 +65,7 @@ class EguitraHsseqCockpit(http.Controller):
         event_domain = [("company_id", "in", comps.ids)] + ([("site_id", "in", sites.ids)] if sites else [])
         now = fields.Datetime.now()
         date_to = min(month_end(month), day)
+        matrix, unclassified = event_matrix(comps, month, period, sites, vehicle_kind)
         return {
             "period": {"type": period, "month": month.strftime("%Y-%m"), "date_from": month, "date_to": date_to,
                        "label": month_label(month), "frozen": result["frozen"], "frozen_on": result["frozen_on"]},
@@ -63,6 +87,9 @@ class EguitraHsseqCockpit(http.Controller):
                 "overdue_investigations": Event.search_count(event_domain + [
                     ("status", "in", ("classified", "investigation")), ("investigation_due", "<", now)]),
                 "high_open": Event.search_count(event_domain + [("level", "=", "high"), ("status", "!=", "closed")]),
+                # Matrice des événements de la période : severity est la gravité potentielle.
+                "matrix": matrix,
+                "matrix_unclassified": unclassified,
             },
             "iso_maturity": None,
             "computed_at": now,

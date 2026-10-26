@@ -112,6 +112,8 @@ def action_line(action):
         "verification_required": action._verification_required(), "verification_date": action.verification_date or None,
         "site": site_ref(action.site_id), "estimated_cost": action.estimated_cost or 0,
         "approval_required": action._approval_required(),
+        # Validation de la direction attendue : action coûteuse ni validée, ni close, ni annulée.
+        "approval_pending": action._approval_pending(),
     }
 
 
@@ -145,6 +147,20 @@ def get_action(action_id):
     return action
 
 
+def approval_pending_domain(comps):
+    """Actions coûteuses (au seuil des paramètres de leur société) en attente de la validation de la direction."""
+    Settings = request.env["eguitra.hsseq.settings"]
+    branches = []
+    for company in comps:
+        threshold = Settings._get(company).costly_action_threshold
+        if threshold:
+            branches.append(["&", ("company_id", "=", company.id), ("estimated_cost", ">=", threshold)])
+    if not branches:
+        return [("id", "=", 0)]
+    costly = ["|"] * (len(branches) - 1) + [term for branch in branches for term in branch]
+    return [("approved_at", "=", False), ("status", "not in", ("closed", "cancelled"))] + costly
+
+
 def list_domain(kw):
     domain = read_domain(kw)
     if kw.get("status"):
@@ -163,6 +179,8 @@ def list_domain(kw):
         domain.append(("due_date", "<=", date_value(kw, "due_before")))
     if kw.get("event_id"):
         domain.append(("event_id", "=", int_or_none(kw, "event_id")))
+    if str(kw.get("approval_pending", "")) in ("1", "true"):
+        domain += approval_pending_domain(companies(kw))
     if kw.get("search"):
         domain += ["|", ("reference", "ilike", kw["search"]), ("description", "ilike", kw["search"])]
     return domain
@@ -181,7 +199,8 @@ class EguitraHsseqActions(http.Controller):
                   "overdue": Action.search_count(domain + [("status", "in", ("todo", "in_progress")),
                                                            ("due_date", "<", today())]),
                   "verifications_due": Action.search_count(domain + [("status", "=", "to_verify"),
-                                                                     ("verification_date", "<=", today())])}
+                                                                     ("verification_date", "<=", today())]),
+                  "approval_pending": Action.search_count(domain + approval_pending_domain(companies(kw)))}
         return page([action_line(a) for a in rows], Action.search_count(domain), offset, limit, counts)
 
     @hsseq_route("/hsseq/actions/<int:action_id>", profiles=None)
