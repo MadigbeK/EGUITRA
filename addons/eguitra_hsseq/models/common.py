@@ -102,13 +102,15 @@ OBJECT_MODELS = {
     "emergency_plan": "eguitra.hsseq.emergency.plan",
     "drill": "eguitra.hsseq.drill",
     "crisis_contact": "eguitra.hsseq.crisis.contact",
+    "review": "eguitra.hsseq.review",
     "violation": "eguitra.hsseq.telematics.violation",
     "telematics_import": "eguitra.hsseq.telematics.import",
 }
 # Les alertes flash et retours d'expérience n'ont pas de pièce jointe : une photo échapperait au contrôle
 # d'anonymisation (§9.4).
 ATTACHMENT_OBJECTS = ("event", "action", "check", "nonconformity", "waiver", "risk", "audit", "finding", "requirement",
-                      "spill", "waste", "contamination", "complaint", "procedure_version", "emergency_plan", "drill")
+                      "spill", "waste", "contamination", "complaint", "procedure_version", "emergency_plan", "drill",
+                      "review")
 
 # ─── Lot 2 ────────────────────────────────────────────────────────────────
 
@@ -181,6 +183,11 @@ SCENARIOS = [("spill", "Déversement"), ("fire", "Incendie"), ("road_accident", 
              ("intrusion", "Intrusion"), ("medical", "Urgence médicale"), ("explosion", "Explosion"),
              ("other", "Autre scénario")]
 DRILL_STATUSES = [("planned", "Planifié"), ("done", "Réalisé"), ("cancelled", "Annulé")]
+
+# Revue de direction.
+REVIEW_STATES = [("prepared", "Préparée"), ("held", "Tenue"), ("closed", "Close")]
+DECISION_TOPICS = [("improvement", "Amélioration"), ("system_change", "Changement du système de management"),
+                   ("resources", "Ressources"), ("objectives", "Objectifs et cibles"), ("other", "Autre décision")]
 
 # Télématique (OBC, GPS, IVMS) : import générique en attendant l'interface du fournisseur.
 VIOLATION_TYPES = [("speeding", "Excès de vitesse"), ("harsh_braking", "Freinage brusque"),

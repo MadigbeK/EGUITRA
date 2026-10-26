@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Compte rendu de la revue de direction HSSEQ. Les valeurs sont préparées et mises en forme par
+         controllers/reviews.py (pdf_context) depuis les éléments d'entrée générés par le noyau ; le gabarit
+         ne fait que les disposer, en A4 portrait. -->
+
+    <template id="report_review_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="report"/>
+            <div class="page hs">
+                <style>
+                    .hs { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 9pt; color: #1d2320; }
+                    .hs h1 { font-size: 16pt; margin: 0 0 1mm 0; }
+                    .hs h2 { font-size: 11pt; margin: 5mm 0 2mm 0; border-bottom: 1px solid #c9d3cf; padding-bottom: 1mm; }
+                    .hs h3 { font-size: 9.5pt; margin: 3mm 0 1mm 0; }
+                    .hs .muted { color: #5b6662; }
+                    .hs table { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
+                    .hs th { background: #11221d; color: #fff; text-align: left; padding: 1mm 1.4mm; font-weight: 600; font-size: 8pt; }
+                    .hs td { border-bottom: 1px solid #e3e8e6; padding: 0.9mm 1.4mm; vertical-align: top; }
+                    .hs .kv td:first-child { width: 45%; color: #5b6662; }
+                    .hs .num { text-align: right; white-space: nowrap; }
+                    .hs .met { background: #d7f0dc; }
+                    .hs .watch { background: #fff1c7; }
+                    .hs .missed { background: #f8d3d0; }
+                    .hs .no_data { background: #eeeeee; }
+                    .hs .block { white-space: pre-wrap; }
+                    .hs .sign td { height: 22mm; width: 50%; border: 1px solid #c9d3cf; vertical-align: top; }
+                </style>
+                <h1>Revue de direction HSSEQ</h1>
+                <p class="muted">
+                    <t t-esc="r['reference']"/>, <t t-esc="r['title']"/>. <t t-esc="r['company']"/>.
+                    Période revue : <t t-esc="r['period']"/>. <t t-esc="r['state']"/> ; établi le <t t-esc="r['printed_at']"/>.
+                </p>
+
+                <h2>1. Tenue de la revue</h2>
+                <table class="kv">
+                    <tr><td>Prévue le</td><td t-esc="r['planned_date']"/></tr>
+                    <tr><td>Tenue le</td><td t-esc="r['held_on']"/></tr>
+                    <tr><td>Participants</td><td t-esc="r['participants']"/></tr>
+                    <tr t-if="r['external_participants']"><td>Autres participants</td>
+                        <td class="block" t-esc="r['external_participants']"/></tr>
+                    <tr><td>Éléments d'entrée générés le</td><td t-esc="r['generated_at']"/></tr>
+                </table>
+                <t t-if="r['agenda']">
+                    <h3>Ordre du jour</h3>
+                    <p class="block" t-esc="r['agenda']"/>
+                </t>
+
+                <t t-if="r['previous']">
+                    <h2>2. Suite de la revue précédente</h2>
+                    <p class="muted">Revue <t t-esc="r['previous']['reference']"/>, tenue le <t t-esc="r['previous']['held_on']"/>.</p>
+                    <table t-if="r['previous']['decisions']">
+                        <tr><th>Décision</th><th>Action</th><th>État</th></tr>
+                        <tr t-foreach="r['previous']['decisions']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <h2>3. Indicateurs de la période</h2>
+                <table>
+                    <tr><th>Indicateur</th><th class="num">Valeur</th><th class="num">Cible</th><th>État</th><th>Source</th></tr>
+                    <tr t-foreach="r['indicators']" t-as="row">
+                        <td t-esc="row[0]"/><td class="num" t-esc="row[1]"/><td class="num" t-esc="row[2]"/>
+                        <td t-att-class="row[4]" t-esc="row[3]"/><td class="muted" t-esc="row[5]"/>
+                    </tr>
+                </table>
+
+                <h2>4. Événements</h2>
+                <table class="kv">
+                    <tr t-foreach="r['events_summary']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                    <tr t-foreach="r['events_by_type']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                </table>
+                <t t-if="r['notable']">
+                    <h3>Événements marquants (criticité significative ou élevée)</h3>
+                    <table>
+                        <tr><th>Référence</th><th>Événement</th><th>Niveau</th><th class="num">Criticité</th><th>Date</th></tr>
+                        <tr t-foreach="r['notable']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/>
+                            <td class="num" t-esc="row[3]"/><td t-esc="row[4]"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <h2>5. État des actions</h2>
+                <table class="kv">
+                    <tr t-foreach="r['actions_summary']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                </table>
+                <t t-if="r['overdue']">
+                    <h3>Actions en retard</h3>
+                    <table>
+                        <tr><th>Référence</th><th>Action</th><th>Responsable</th><th>Échéance</th><th class="num">Jours de retard</th></tr>
+                        <tr t-foreach="r['overdue']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/><td t-esc="row[3]"/>
+                            <td class="num" t-esc="row[4]"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <h2>6. Audits, constats et exigences</h2>
+                <p t-esc="r['audits_summary']"/>
+                <table t-if="r['audits']">
+                    <tr><th>Référence</th><th>Audit</th><th>Programme</th><th>État</th><th>Majeurs / mineurs / observations</th></tr>
+                    <tr t-foreach="r['audits']" t-as="row">
+                        <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/><td t-esc="row[3]"/><td t-esc="row[4]"/>
+                    </tr>
+                </table>
+                <table class="kv">
+                    <tr t-foreach="r['findings_by_class']" t-as="row"><td>Constats ouverts : <t t-esc="row[0]"/></td>
+                        <td class="num" t-esc="row[1]"/></tr>
+                </table>
+                <table t-if="r['findings']">
+                    <tr><th>Constat</th><th>Classement</th><th>Description</th></tr>
+                    <tr t-foreach="r['findings']" t-as="row"><td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/></tr>
+                </table>
+                <t t-if="r['requirements']">
+                    <h3>Exigences non conformes ou partiellement conformes</h3>
+                    <table>
+                        <tr><th>Référence</th><th>Exigence</th><th>Source</th><th>Statut</th></tr>
+                        <tr t-foreach="r['requirements']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/><td t-esc="row[3]"/>
+                        </tr>
+                    </table>
+                </t>
+                <t t-if="r['maturity']">
+                    <h3>Maturité par norme</h3>
+                    <table>
+                        <tr><th>Norme</th><th class="num">Exigences</th><th class="num">Évaluées</th><th class="num">Score</th></tr>
+                        <tr t-foreach="r['maturity']" t-as="row">
+                            <td t-esc="row[0]"/><td class="num" t-esc="row[1]"/><td class="num" t-esc="row[2]"/>
+                            <td class="num" t-esc="row[3]"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <h2>7. Risques</h2>
+                <table class="kv">
+                    <tr t-foreach="r['risks_summary']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                </table>
+                <table t-if="r['risks']">
+                    <tr><th>Référence</th><th>Événement redouté</th><th class="num">Criticité résiduelle</th><th>Niveau</th><th>Propriétaire</th></tr>
+                    <tr t-foreach="r['risks']" t-as="row">
+                        <td t-esc="row[0]"/><td t-esc="row[1]"/><td class="num" t-esc="row[2]"/><td t-esc="row[3]"/>
+                        <td t-esc="row[4]"/>
+                    </tr>
+                </table>
+
+                <h2>8. Environnement et qualité</h2>
+                <table class="kv">
+                    <tr t-foreach="r['environment']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                </table>
+
+                <h2>9. Urgences, documents et télématique</h2>
+                <table class="kv">
+                    <tr t-foreach="r['emergency']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                    <tr t-foreach="r['documents']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                    <tr t-foreach="r['telematics']" t-as="row"><td t-esc="row[0]"/><td class="num" t-esc="row[1]"/></tr>
+                </table>
+                <t t-if="r['stale_plans']">
+                    <h3>Plans d'intervention sans exercice réalisé depuis douze mois</h3>
+                    <table>
+                        <tr><th>Référence</th><th>Plan</th><th>Site</th><th>Scénario</th></tr>
+                        <tr t-foreach="r['stale_plans']" t-as="row">
+                            <td t-esc="row[0]"/><td t-esc="row[1]"/><td t-esc="row[2]"/><td t-esc="row[3]"/>
+                        </tr>
+                    </table>
+                </t>
+
+                <h2>10. Compte rendu des échanges</h2>
+                <p class="block" t-esc="r['minutes'] or '-'"/>
+
+                <h2>11. Décisions et actions</h2>
+                <table t-if="r['decisions']">
+                    <tr><th>Nature</th><th>Décision</th><th>Responsable</th><th>Échéance</th><th>Action</th><th>État</th></tr>
+                    <tr t-foreach="r['decisions']" t-as="row">
+                        <td t-esc="row[0]"/><td class="block" t-esc="row[1]"/><td t-esc="row[2]"/><td t-esc="row[3]"/>
+                        <td t-esc="row[4]"/><td t-esc="row[5]"/>
+                    </tr>
+                </table>
+                <p t-else="" class="muted">Aucune décision enregistrée.</p>
+
+                <h2>12. Conclusions de la direction</h2>
+                <p class="block" t-esc="r['conclusion'] or '-'"/>
+
+                <table class="sign">
+                    <tr><td>Le Directeur général</td><td>Le Responsable HSSEQ</td></tr>
+                </table>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_review">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_hsseq.report_review_document"/>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_review" model="ir.actions.report">
+        <field name="name">Compte rendu de revue de direction</field>
+        <field name="model">eguitra.hsseq.review</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_hsseq.report_review</field>
+        <field name="report_file">eguitra_hsseq.report_review</field>
+    </record>
+</odoo>

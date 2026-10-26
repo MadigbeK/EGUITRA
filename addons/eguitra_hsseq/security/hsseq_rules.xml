@@ -209,6 +209,16 @@
         <field name="model_id" ref="model_eguitra_hsseq_crisis_contact"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_review_company" model="ir.rule">
+        <field name="name">Revues de direction : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_review"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_review_decision_company" model="ir.rule">
+        <field name="name">Décisions des revues de direction : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_review_decision"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_hsseq_telematics_violation_company" model="ir.rule">
         <field name="name">Violations télématiques : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_hsseq_telematics_violation"/>

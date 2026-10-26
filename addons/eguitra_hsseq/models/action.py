@@ -55,6 +55,8 @@ class EguitraHsseqAction(models.Model):
                                    index=True, ondelete="restrict")
     drill_id = fields.Many2one("eguitra.hsseq.drill", "Exercice d'urgence d'origine", check_company=True, index=True,
                                ondelete="restrict")
+    review_id = fields.Many2one("eguitra.hsseq.review", "Revue de direction d'origine", check_company=True,
+                                index=True, ondelete="restrict")
     description = fields.Text("Action", required=True)
     control_level = fields.Selection(CONTROL_LEVELS, "Niveau de maîtrise")
     owner_id = fields.Many2one("res.users", "Responsable", required=True, index=True)
@@ -88,7 +90,7 @@ class EguitraHsseqAction(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         origin_fields = {"event": "event_id", "check": "check_id", "risk": "risk_id", "audit": "finding_id",
-                         "complaint": "complaint_id", "drill": "drill_id"}
+                         "complaint": "complaint_id", "drill": "drill_id", "review": "review_id"}
         for vals in vals_list:
             field = origin_fields.get(vals.get("origin"))
             if field and vals.get("origin_id") and not vals.get(field):

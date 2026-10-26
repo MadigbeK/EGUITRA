@@ -38,12 +38,14 @@ from .common import (
 )
 
 SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "created_at": "create_date"}
-# Origine d'une action -> (fiche de l'API, champ de l'action) ; une revue de direction n'a pas de fiche.
-# Origine « audit » : l'action répond à un constat de l'audit (origin_id : le constat).
+# Origine d'une action -> (fiche de l'API, champ de l'action). Origine « audit » : l'action répond à un constat
+# de l'audit (origin_id : le constat).
 ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id"),
                   "audit": ("finding", "finding_id"), "complaint": ("complaint", "complaint_id"),
-                  "drill": ("drill", "drill_id")}
-CLOSED_SOURCES = {"event": ("closed",), "risk": ("archived",), "complaint": ("closed",), "drill": ("cancelled",)}
+                  "drill": ("drill", "drill_id"), "review": ("review", "review_id")}
+# Fiche d'origine close (statut, ou état d'une revue) : plus d'action tant qu'elle n'est pas rouverte.
+CLOSED_SOURCES = {"event": ("closed",), "risk": ("archived",), "complaint": ("closed",), "drill": ("cancelled",),
+                  "review": ("closed",)}
 TRANSITIONS = ("start", "close", "verify", "approve", "cancel", "reopen")
 
 
@@ -114,10 +116,12 @@ def action_line(action):
         origin_label = f"{action.complaint_id.reference} {action.complaint_id.partner_id.name or ''}".strip()
     elif action.drill_id:
         origin_label = f"{action.drill_id.reference} {action.drill_id.plan_id.title}"
+    elif action.review_id:
+        origin_label = f"{action.review_id.reference} {action.review_id.title}"
     return {
         "id": action.id, "reference": action.reference, "description": action.description, "origin": action.origin,
         "origin_id": action.origin_id or action.event_id.id or action.check_id.id or action.risk_id.id
-        or action.finding_id.id or action.complaint_id.id or action.drill_id.id or None,
+        or action.finding_id.id or action.complaint_id.id or action.drill_id.id or action.review_id.id or None,
         "origin_label": origin_label,
         "event": {"id": action.event_id.id, "reference": action.event_id.reference} if action.event_id else None,
         "control_level": action.control_level or None, "owner": user_ref(action.owner_id), "due_date": action.due_date,
@@ -265,7 +269,8 @@ class EguitraHsseqActions(http.Controller):
                 raise ApiError(400, "missing_fields", "Fiche d'origine manquante.", fields=["origin_id"])
             key, field = ORIGIN_SOURCES[origin]
             source = get(OBJECT_MODELS[key], origin_id, "Fiche d'origine")
-            if origin in CLOSED_SOURCES and source.status in CLOSED_SOURCES[origin]:
+            state = source.state if "state" in source._fields else source.status
+            if origin in CLOSED_SOURCES and state in CLOSED_SOURCES[origin]:
                 raise ApiError(422, "invalid_transition", "Fiche d'origine close ou archivée : rouvrez-la avant d'y "
                                                           "ajouter une action.")
             if origin == "audit" and source.audit_id.status not in ("planned", "done"):
@@ -337,7 +342,7 @@ class EguitraHsseqActions(http.Controller):
             "rows": [[a.reference, origins.get(a.origin), (a.event_id.reference or a.check_id.reference
                                                            or a.risk_id.reference or a.finding_id.reference
                                                            or a.complaint_id.reference or a.drill_id.reference
-                                                           or ""),
+                                                           or a.review_id.reference or ""),
                       a.description, levels.get(a.control_level, ""), a.owner_id.name, a.due_date,
                       statuses.get(a.status), a._days_overdue(day), a.verification_date or None,
                       ("Oui" if a.effective else "Non") if a.verified_at else "", a.estimated_cost, a.site_id.name or ""]

@@ -13,7 +13,7 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError
 from odoo.addons.eguitra_api.files import checked_name, detect_type
 
 from ..models.common import ATTACHMENT_OBJECTS, OBJECT_MODELS
-from . import actions, audits, checks, documents, environment, events, risks, waivers
+from . import actions, audits, checks, documents, environment, events, reviews, risks, waivers
 from .common import (
     client_uuid,
     existing_by_uuid,
@@ -33,9 +33,9 @@ FORMATS = {"image/jpeg", "image/png", "application/pdf"}
 # Dépôt sans fiche (avant le formulaire) : comptes des profils de l'application.
 UPLOADERS = {"admin", "direction", "hsseq", "exploitation", "conducteur"}
 MODELS = {key: OBJECT_MODELS[key] for key in ATTACHMENT_OBJECTS}
-# Rôle d'une pièce déposée sur une fiche : preuve, document (bordereau, procédure, plan) ou photo.
+# Rôle d'une pièce déposée sur une fiche : preuve, document (bordereau, procédure, plan, compte rendu) ou photo.
 EVIDENCE_OBJECTS = ("action", "audit", "finding", "requirement", "risk", "drill")
-DOCUMENT_OBJECTS = ("waste", "procedure_version", "emergency_plan", "complaint")
+DOCUMENT_OBJECTS = ("waste", "procedure_version", "emergency_plan", "review", "complaint")
 
 
 def closed(object_key, record):
@@ -53,6 +53,7 @@ def closed(object_key, record):
             "complaint": record.status == "closed" if object_key == "complaint" else False,
             "procedure_version": record.status != "draft" if object_key == "procedure_version" else False,
             "drill": record.status == "cancelled" if object_key == "drill" else False,
+            "review": record.state == "closed" if object_key == "review" else False,
             }.get(object_key, False)
 
 
@@ -69,7 +70,8 @@ def can_read(object_key, record):
                "complaint": lambda r: reads(environment.QUALITY_READ) and audits.in_scope(r.site_id),
                "procedure_version": documents.can_read_version,
                "emergency_plan": lambda r: reads(documents.PLAN_READ) and audits.in_scope(r.site_id),
-               "drill": lambda r: reads(documents.PLAN_READ) and audits.in_scope(r.site_id)}
+               "drill": lambda r: reads(documents.PLAN_READ) and audits.in_scope(r.site_id),
+               "review": lambda _r: reads(reviews.REVIEW_READ)}
     return object_key in readers and readers[object_key](record)
 
 
@@ -99,6 +101,8 @@ def can_attach(object_key, record):
         return record.owner_id == user
     if object_key in ("spill", "waste"):
         return environment.is_yard_writer(record.site_id)
+    if object_key == "review":
+        return "direction" in profiles()
     return False
 
 

@@ -106,4 +106,11 @@
         <field name="padding">3</field>
         <field name="company_id" eval="False"/>
     </record>
+    <record id="seq_review" model="ir.sequence">
+        <field name="name">Revues de direction HSSEQ</field>
+        <field name="code">eguitra.hsseq.review</field>
+        <field name="prefix">RDD/%(year)s/</field>
+        <field name="padding">2</field>
+        <field name="company_id" eval="False"/>
+    </record>
 </odoo>
