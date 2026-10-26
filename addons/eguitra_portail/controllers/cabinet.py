@@ -508,6 +508,8 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/evenements/<int:event_id>", methods=("PATCH",), profiles=WRITE)
     def modifier_evenement(self, event_id, **_kw):
+        """Publié, l'événement prévient ses inscrits d'un changement d'horaire, de lieu ou de lien, et
+        les porteurs ajoutés au public ; une capacité augmentée donne ses places à la liste d'attente."""
         event = _browse("portail.event", event_id, "Événement")
         event.write(self._event_values(read_json()))
         return vues.event_row(event, cabinet=True)
@@ -530,11 +532,14 @@ class EguitraPortailCabinet(http.Controller):
 
     @api_route("/axispro/portail/evenements/<int:event_id>/inscriptions", profiles=READ)
     def inscriptions(self, event_id, **_kw):
+        """Inscriptions ; la liste d'attente porte son rang (1 : la prochaine place libre)."""
         event = _browse("portail.event", event_id, "Événement")
+        rank = {r.id: i for i, r in enumerate(event._waiting(), start=1)}
         return [{"id": r.id, "user": r.user_id.name, "login": r.user_id.login, "phone": r.user_id.partner_id.phone or None,
                  "dossier": {"id": r.dossier_id.id, "reference": r.dossier_id.reference} if r.dossier_id else None,
                  "state": r.state, "state_label": dict(REGISTRATION_STATES)[r.state], "note": r.note or None,
-                 "date": r.create_date} for r in event.registration_ids]
+                 "date": r.create_date, "waitlist_since": r.waitlist_since or None, "waitlist_rank": rank.get(r.id)}
+                for r in event.registration_ids]
 
     @api_route("/axispro/portail/inscriptions/<int:registration_id>", methods=("PATCH",), profiles=WRITE)
     def pointer(self, registration_id, **_kw):
@@ -544,6 +549,8 @@ class EguitraPortailCabinet(http.Controller):
             raise ApiError(400, "invalid_parameter", "État inconnu.")
         if state == "cancelled":
             registration.cancel()
+        elif state == "registered" and registration.state == "waitlist":
+            registration.give_seat()
         else:
             registration.state = state
         return {"id": registration.id, "state": registration.state,

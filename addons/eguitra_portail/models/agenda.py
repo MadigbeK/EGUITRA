@@ -3,8 +3,14 @@ rendez-vous entre un porteur et son consultant (demande, confirmation, compte re
 
 from datetime import timedelta
 
+import psycopg2
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
+
+# Heure des notifications et des rappels : celle de Conakry, quel que soit le réglage du compte qui
+# déclenche l'envoi (la tâche planifiée n'a pas de fuseau).
+TZ = "Africa/Conakry"
 
 EVENT_KINDS = [
     ("atelier", "Atelier"),
@@ -23,6 +29,11 @@ REGISTRATION_STATES = [
     ("absent", "Absent"),
 ]
 SEATED = ("registered", "attended", "absent")
+# Inscriptions encore en cours (place ou attente) : prévenues d'un changement de l'événement.
+PENDING = ("registered", "waitlist")
+# Ce qu'un inscrit doit savoir : l'horaire, le lieu et le lien de connexion.
+CHANGE_FIELDS = ("start", "end", "location", "online_url")
+AUDIENCE_FIELDS = ("audience", "dossier_ids", "gate_codes", "sector_keywords")
 MEETING_MODES = [
     ("office", "Au cabinet"),
     ("video", "Visioconférence"),
@@ -41,6 +52,17 @@ MEETING_STATES = [
 def _check_url(url):
     if url and not url.startswith("https://"):
         raise UserError("L'adresse en ligne doit commencer par https://.")
+
+
+def local_time(record, value):
+    """Date et heure du noyau (UTC) à l'heure du compte, Conakry à défaut."""
+    tz = record.env.context.get("tz") or TZ
+    return fields.Datetime.context_timestamp(record.with_context(tz=tz), value)
+
+
+def _minute(value):
+    """Comparaison à la minute : l'écran renvoie les dates sans les secondes."""
+    return value.replace(second=0, microsecond=0) if value else value
 
 
 class PortailEvent(models.Model):
@@ -86,38 +108,128 @@ class PortailEvent(models.Model):
         return self.state == "published" and self.start > now and (
             not self.registration_deadline or self.registration_deadline >= now)
 
+    def _lock_seats(self):
+        """Verrou de ligne sur l'événement (SELECT … FOR UPDATE) : les inscriptions, désinscriptions et
+        promotions d'un même événement passent l'une après l'autre, et la jauge n'est jamais dépassée
+        par deux inscriptions simultanées. La ligne est aussi réécrite (sans rien changer) : le noyau lit
+        la base telle qu'au début de la transaction (lecture répétable), et la seconde inscription, qui
+        aurait compté les places sans voir la première, échoue au lieu de passer ; le porteur réessaie."""
+        if not self.ids:
+            return
+        ids = tuple(self.ids)
+        try:
+            self.env.cr.execute("SELECT id FROM portail_event WHERE id IN %s FOR UPDATE", (ids,))
+            self.env.cr.execute("UPDATE portail_event SET write_date = write_date WHERE id IN %s", (ids,))
+        except psycopg2.errors.SerializationFailure as e:
+            raise UserError("Plusieurs inscriptions arrivent en même temps sur cet événement : "
+                            "réessayez dans un instant.") from e
+
+    def _waiting(self):
+        """Liste d'attente dans l'ordre d'attente : la date « en attente depuis », puis l'inscription."""
+        self.ensure_one()
+        return self.registration_ids.filtered(lambda r: r.state == "waitlist").sorted(
+            lambda r: (r.waitlist_since or r.create_date, r.id))
+
+    def _promote_waitlist(self):
+        """Donne les places libres à la liste d'attente, dans l'ordre d'attente, et prévient chaque
+        porteur promu. Sans limite de places, toute la liste passe. Jamais sur un événement annulé,
+        en brouillon ou déjà commencé. Appelée quand une place se libère ou que la capacité augmente."""
+        now = fields.Datetime.now()
+        for event in self:
+            if event.state != "published" or event.start <= now:
+                continue
+            event._lock_seats()
+            waiting = event._waiting()
+            if event.capacity:
+                waiting = waiting[:event.seats_left()]
+            if not waiting:
+                continue
+            waiting.write({"state": "registered", "waitlist_since": False})
+            event.env["portail.notification"].sudo().notify(
+                waiting.user_id, "event", f"Place confirmée : {event.name}",
+                "Une place s'est libérée : votre inscription est confirmée.", "/portail/evenements")
+
     def register(self, user, dossier=None, note=None):
-        """Inscription du porteur ; liste d'attente quand l'événement est complet."""
+        """Inscription du porteur. L'événement complet, il rejoint la fin de la liste d'attente : un
+        nouvel inscrit ne passe jamais devant ceux qui attendent (les places libres leur reviennent
+        d'abord). Un porteur qui se réinscrit après s'être désinscrit reprend en fin de liste."""
         self.ensure_one()
         if not self.registration_open():
             raise UserError("Les inscriptions à cet événement sont closes.")
+        self._lock_seats()
         Registration = self.env["portail.event.registration"].sudo()
         registration = Registration.search([("event_id", "=", self.id), ("user_id", "=", user.id)], limit=1)
-        state = "waitlist" if self.capacity and self.seats_left() == 0 else "registered"
         if registration and registration.state in SEATED + ("waitlist",):
             return registration
-        values = {"state": state, "note": (note or "")[:1000] or False, "dossier_id": dossier.id if dossier else False}
+        self._promote_waitlist()
+        full = bool(self.capacity) and self.seats_left() == 0
+        values = {"state": "waitlist" if full else "registered", "note": (note or "")[:1000] or False,
+                  "dossier_id": dossier.id if dossier else False,
+                  "waitlist_since": fields.Datetime.now() if full else False}
         if registration:
             registration.write(values)
         else:
             registration = Registration.create(dict(values, event_id=self.id, user_id=user.id))
         return registration
 
+    def _summary(self):
+        """« Atelier le 12/11/2026 à 09 h 00 » : la ligne de l'annonce de l'événement."""
+        self.ensure_one()
+        return f"{dict(EVENT_KINDS)[self.kind]} le {local_time(self, self.start):%d/%m/%Y à %H h %M}"
+
     def action_publish(self):
         self.write({"state": "published"})
         for event in self:
             event.env["portail.notification"].sudo().notify(
-                event._audience_users(), "event", event.name,
-                f"{dict(EVENT_KINDS)[event.kind]} le {fields.Datetime.context_timestamp(event, event.start):%d/%m/%Y à %H h %M}",
-                "/portail/evenements",
-            )
+                event._audience_users(), "event", event.name, event._summary(), "/portail/evenements")
 
     def action_cancel(self):
         self.write({"state": "cancelled"})
         for event in self:
-            users = event.registration_ids.filtered(lambda r: r.state in ("registered", "waitlist")).user_id
+            users = event.registration_ids.filtered(lambda r: r.state in PENDING).user_id
             event.env["portail.notification"].sudo().notify(
                 users, "event", f"Annulé : {event.name}", "Le cabinet a annulé cet événement.", "/portail/evenements")
+
+    def write(self, vals):
+        """Événement publié : un changement d'horaire, de lieu ou de lien prévient les inscrits (et la
+        liste d'attente) ; un public élargi reçoit l'annonce de l'événement ; une capacité augmentée
+        donne ses places à la liste d'attente. L'écran renvoie tous les champs : seul ce qui change
+        vraiment compte."""
+        watched = bool(set(vals) & set(CHANGE_FIELDS))
+        audience = bool(set(vals) & set(AUDIENCE_FIELDS))
+        before = {}
+        if watched or audience:
+            for event in self.filtered(lambda e: e.state == "published"):
+                before[event.id] = dict({f: event[f] for f in CHANGE_FIELDS},
+                                        users=event._audience_users() if audience else None)
+        result = super().write(vals)
+        if "capacity" in vals:
+            self._promote_waitlist()
+        for event in self.filtered(lambda e: e.id in before and e.state == "published"):
+            event._announce_changes(before[event.id])
+        return result
+
+    def _announce_changes(self, before):
+        self.ensure_one()
+        Notification = self.env["portail.notification"].sudo()
+        changes = []
+        if _minute(before["start"]) != _minute(self.start) or _minute(before["end"]) != _minute(self.end):
+            debut, fin = local_time(self, self.start), local_time(self, self.end)
+            if debut.date() == fin.date():
+                changes.append(f"Nouvel horaire : le {debut:%d/%m/%Y}, de {debut:%H h %M} à {fin:%H h %M}.")
+            else:
+                changes.append(f"Nouvel horaire : du {debut:%d/%m/%Y à %H h %M} au {fin:%d/%m/%Y à %H h %M}.")
+        if (before["location"] or False) != (self.location or False):
+            changes.append(f"Nouveau lieu : {self.location}." if self.location else "Le lieu a été retiré.")
+        if (before["online_url"] or False) != (self.online_url or False):
+            changes.append("Le lien de connexion a changé : retrouvez-le sur votre portail." if self.online_url
+                           else "L'événement n'a plus de lien de connexion.")
+        pending = self.registration_ids.filtered(lambda r: r.state in PENDING).user_id
+        if changes:
+            Notification.notify(pending, "event", f"Changement : {self.name}", " ".join(changes), "/portail/evenements")
+        if before["users"] is not None:
+            newcomers = self._audience_users() - before["users"] - self.registration_ids.user_id
+            Notification.notify(newcomers, "event", self.name, self._summary(), "/portail/evenements")
 
 
 class PortailEventRegistration(models.Model):
@@ -131,22 +243,25 @@ class PortailEventRegistration(models.Model):
     dossier_id = fields.Many2one("axispro.dossier", "Dossier", ondelete="set null")
     state = fields.Selection(REGISTRATION_STATES, default="registered", required=True)
     note = fields.Text("Question ou attente du porteur")
+    waitlist_since = fields.Datetime("En attente depuis", help="Rang dans la liste d'attente : le plus ancien passe "
+                                                               "le premier.")
 
     _unique = models.Constraint("unique(event_id, user_id)", "Une inscription par porteur et par événement.")
 
     def cancel(self):
-        """Désinscription ; la première personne en liste d'attente prend la place libérée."""
+        """Désinscription ; une place libérée revient à la liste d'attente, dans l'ordre d'attente."""
+        freed = self.env["portail.event"]
         for registration in self:
-            freed = registration.state == "registered"
-            registration.state = "cancelled"
             event = registration.event_id
-            if freed and event.capacity:
-                waiting = event.registration_ids.filtered(lambda r: r.state == "waitlist").sorted("id")[:1]
-                if waiting:
-                    waiting.state = "registered"
-                    self.env["portail.notification"].sudo().notify(
-                        waiting.user_id, "event", f"Place confirmée : {event.name}",
-                        "Une place s'est libérée : votre inscription est confirmée.", "/portail/evenements")
+            event._lock_seats()
+            if registration.state in SEATED:
+                freed |= event
+            registration.write({"state": "cancelled", "waitlist_since": False})
+        freed._promote_waitlist()
+
+    def give_seat(self):
+        """Place donnée par le cabinet à une personne en attente, au-delà de la limite au besoin."""
+        self.write({"state": "registered", "waitlist_since": False})
 
 
 class PortailMeeting(models.Model):
