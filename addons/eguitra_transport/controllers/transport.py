@@ -59,6 +59,14 @@ ROTATION_SORTS = {
 }
 
 
+def _int(value, label):
+    """Identifiant ou nombre entier envoyé par l'écran ; mal formé : 400 (et non une erreur 500)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError) as e:
+        raise ApiError(400, "invalid_parameter", f"{label} : identifiant invalide.") from e
+
+
 def _ref(record):
     return {"id": record.id, "name": record.display_name} if record else None
 
