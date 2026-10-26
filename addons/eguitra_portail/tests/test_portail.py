@@ -1,5 +1,7 @@
+import importlib.util
 import io
 import json
+import os
 from datetime import timedelta
 
 from odoo import fields
@@ -7,6 +9,7 @@ from odoo.tests import tagged
 
 from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_axispro.tests.test_axispro import GRID
+from odoo.addons.eguitra_portail.ressources_initiales import ARTICLES
 
 PDF = b"%PDF-1.4\n% statuts\n%%EOF\n"
 FUTURE = (fields.Datetime.now() + timedelta(days=20)).replace(microsecond=0)
@@ -299,6 +302,27 @@ class TestPortail(ApiCase):
         self.assertIn("Ville : Kindia", demande.body)
         self.assertIn("Site internet : https://briques.gn", demande.body)
         self.assertTrue(self.notifications(self.consultant).filtered(lambda n: n.kind == "message"))
+
+    def test_faq_qui_voit_mes_documents(self):
+        faq = next(a for a in ARTICLES if a["name"] == "Qui voit mes documents ?")
+        self.assertNotIn("ne sont visibles que par vous et par les consultants", faq["body"])
+        self.assertIn("de l'équipe de MB AxisPro Consulting et de sa direction", faq["body"])
+        ancien = ("Vos documents ne sont visibles que par vous et par les consultants de MB AxisPro Consulting chargés "
+                  "de votre dossier. Les autres porteurs n'y ont jamais accès.")
+        Article = self.env["portail.article"]
+        installe = Article.create({"name": "Qui voit mes documents ?", "company_id": self.cabinet.id, "body": ancien,
+                                   "summary": "Vous et l'équipe du cabinet qui suit votre dossier, personne d'autre."})
+        reecrit = Article.create({"name": "Confidentialité", "company_id": self.cabinet.id,
+                                  "body": "Notre engagement : la confidentialité de vos pièces."})
+        chemin = os.path.join(os.path.dirname(os.path.dirname(__file__)), "migrations", "19.0.1.2.0", "post-migrate.py")
+        spec = importlib.util.spec_from_file_location("eguitra_portail_migration_19_0_1_2_0", chemin)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+        migration.migrate(self.env.cr, "19.0.1.1.0")
+        self.env.invalidate_all()
+        self.assertEqual(installe.body, faq["body"].split("\n\n")[0], "Texte d'origine corrigé")
+        self.assertEqual(installe.summary, faq["summary"])
+        self.assertEqual(reecrit.body, "Notre engagement : la confidentialité de vos pièces.", "Un texte réécrit ne change pas")
 
     def test_quota_quotidien_sans_contournement(self):
         self.env["axispro.message"].sudo().create([
