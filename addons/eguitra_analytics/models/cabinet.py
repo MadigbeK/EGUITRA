@@ -2030,7 +2030,9 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                            for x in sorted(realization_rows, key=lambda x: -(x["hours"] or 0))],
             "by_service": [{"key": SERVICE_KEYS[name], "label": name, "hours": _r(hours if name == PROJECT_ACTIVITY else 0.0)}
                            for name in CABINET_ACTIVITIES],
-            "hours_per_week": _r(hours / len(weeks)) if weeks else None,
+            # Par semaine et par consultant : le total de l'équipe divisé par les consultants qui ont saisi du
+            # temps sur la période (et non le total de l'équipe).
+            "hours_per_week": _r(hours / len(weeks) / len(period_sheets.user_id)) if weeks and period_sheets else None,
         }
         realization_block = {
             "overall_pct": _r(_share(billed, value)) if value else None, "standard_rate": round(rate) if rate else None,

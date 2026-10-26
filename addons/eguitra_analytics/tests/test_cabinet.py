@@ -547,6 +547,9 @@ class TestAnalyseCabinet(ApiCase):
                                msg="Créances TTC rapportées aux ventes TTC, et non au chiffre d'affaires hors taxes")
         self.assertEqual((len(body["forecast"]["fees"]), body["forecast"]["backlog_hours"]), (3, 13.0))
         self.assertEqual(body["time"]["consultants"], ["Awa Camara", "Moussa Diallo"])
+        weeks = len(body["time"]["weeks"])
+        self.assertAlmostEqual(body["time"]["hours_per_week"], round(35 / weeks / 2, 1), delta=0.05,
+                               msg="35 h sur la période, deux consultants : moyenne par consultant")
         self.assertIn("cabinet.temps_non_facture", [i["id"] for i in body["insights"]])
 
     def test_risques(self):
