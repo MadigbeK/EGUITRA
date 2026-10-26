@@ -14,6 +14,7 @@ from odoo import fields
 from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_analytics.engine import portfolio as pf
+from odoo.addons.eguitra_analytics.models.cabinet import _section_link
 from odoo.addons.eguitra_api.tests.common import ApiCase
 
 HEADER = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide",
@@ -111,6 +112,12 @@ class TestPortefeuilleMethodes(TransactionCase):
                          "À compléter et ajourné écartés ; deux décisions plus favorables que la méthode")
         # po = 1/3 ; pe = (1/3 × 1/3) [GO] + (1/3 × 1/3) [HOLD] = 2/9 ; kappa = (1/3 - 2/9) / (7/9) = 1/7.
         self.assertAlmostEqual(stats["kappa"], 1 / 7)
+
+    def test_liens_vers_les_sections(self):
+        self.assertEqual(_section_link("portefeuille", "temps", gate="G2"), "/analyse/portefeuille?gate=G2#temps")
+        self.assertEqual(_section_link("diagnostic", criterion="C 1/2"), "/analyse/diagnostic?criterion=C%201%2F2",
+                         "Code encodé : l'écran le relit tel quel")
+        self.assertEqual(_section_link("portefeuille", gate=None), "/analyse/portefeuille")
 
     def test_calendrier(self):
         self.assertEqual(pf.month_keys(fields.Date.to_date("2025-11-15"), fields.Date.to_date("2026-02-01")),
@@ -384,7 +391,14 @@ class TestAnalyseCabinet(ApiCase):
         self.assertEqual((sectors["Agro-industrie"]["count"], sectors["Agro-industrie"]["need"]), (2, 3.8 * MD))
         self.assertLessEqual({"apd_3m", "apd_6m", "bankability_3m", "bankability_6m", "velocity"}, set(body["forecast"]))
         self.assertEqual([t["gate"] for t in body["forecast"]["targets"]], ["G3", "G4"])
-        self.assertIn("cabinet.goulot.G2", [i["id"] for i in body["insights"]])
+        links = {i["id"]: i["link"] for i in body["insights"]}
+        # Le lien mène au gate (mis en évidence par l'écran) et au bloc qui explique le constat.
+        self.assertEqual(links.get("cabinet.goulot.G2"), "/analyse/portefeuille?gate=G2#temps")
+        for key, link in links.items():
+            if key.startswith("cabinet.prevision."):
+                self.assertEqual(link, f"/analyse/portefeuille?gate={key.rsplit('.', 1)[1]}#prevision")
+            if key.startswith("cabinet.conversion."):
+                self.assertEqual(link, f"/analyse/portefeuille?gate={key.rsplit('.', 1)[1]}#entonnoir")
 
     def test_diagnostic(self):
         c1 = self.policy.compartment_ids.filtered(lambda k: k.code == "C1")
@@ -414,7 +428,12 @@ class TestAnalyseCabinet(ApiCase):
         self.assertEqual(evidence["missing"], 11, "A 1, B 2, C 3, D 2, E 3 pièces attendues manquantes")
         self.assertEqual(len(body["domain_heatmap"]["cells"]), 15, "5 dossiers × 3 domaines")
         self.assertIn(self.c.id, body["progression"]["stagnating"], "Aucun progrès depuis la revue de T-100")
-        self.assertIn("cabinet.faiblesse.C006", [i["id"] for i in body["insights"]])
+        links = {i["id"]: i["link"] for i in body["insights"]}
+        # Faiblesse systémique : la ligne du critère parmi les critères manquants ; knock-out actif sur
+        # deux dossiers (C et E, 21 % du besoin) : le critère parmi les éliminatoires.
+        self.assertEqual(links.get("cabinet.faiblesse.C006"), "/analyse/diagnostic?criterion=C006")
+        self.assertEqual(links.get("cabinet.knockout.C002"), "/analyse/diagnostic?criterion=C002")
+        self.assertIn("C006", {g["code"] for g in body["top_gaps"]}, "Le critère visé figure à l'écran")
 
     def test_comites(self):
         token = self.open_session("analyste.cabinet", app="analyse")["access_token"]

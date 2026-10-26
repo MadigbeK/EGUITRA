@@ -4,7 +4,7 @@ import { type CSSProperties } from "react";
 import { Badge, Card, DataTable, ErrorBox, cx, type Tone } from "@/components/ui";
 import { ECHELLE, ETATS } from "@/lib/couleurs";
 import { Bulles, Lorenz, PetitsMultiples } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, joursOu, moisCourt, pctOu, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, BandeauCible, CIBLE, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, combler, fmtPct, fmtShort, joursOu, moisCourt, pctOu, useAncre, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { ClientSegment, GroupeClients } from "@/lib/analyse-types";
 import { fmtGNF, fmtInt } from "@/lib/format";
@@ -42,6 +42,11 @@ function Corps() {
   const ecl = clients.reduce((s, x) => s + x.ecl, 0);
   const margeMediane = clients.length ? ([...clients].map((s) => s.margin).sort((a, b) => a - b)[Math.floor(clients.length / 2)] ?? 0) : 0;
   const seuilPaiement = d?.segments?.good_payer_score ?? 70;
+  // Client visé par un constat (?client=) : sa ligne, sa bulle et son comportement de paiement.
+  const client = useCible("client");
+  const clientVise = client ? (clients.find((x) => String(x.id) === client) ?? null) : null;
+  const { tour } = useAncre();
+  useDefiler(clientVise ? `client-${clientVise.id}` : null, !!d, tour, "center");
   const reponse = d && c && (
     <>
       {c.clients === 0 ? (
@@ -62,6 +67,17 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/clients.xlsx${query}`} question="Quels clients font la valeur, et lesquels font le risque ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      {d && client && (
+        <BandeauCible absent={!clientVise}>
+          {clientVise ? (
+            <>
+              Client <strong className="font-semibold">{clientVise.name}</strong> mis en évidence : sa ligne dans « Tous les clients », sa bulle et son comportement de paiement.
+            </>
+          ) : (
+            <>Le client visé n&apos;a ni chiffre d&apos;affaires ni encours sur la période affichée.</>
+          )}
+        </BandeauCible>
+      )}
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && c && (
@@ -98,6 +114,7 @@ function Corps() {
                     sizeLabel="Chiffre d'affaires"
                     couleurs={Object.fromEntries(Object.values(SEGMENT).map((s) => [s.label, s.couleur]))}
                     hauteur={380}
+                    surligne={clientVise ? String(clientVise.id) : null}
                   />
                   <ul className="mt-3 grid gap-2 text-[12px] text-muted sm:grid-cols-2">
                     {(quadrants.length ? quadrants : (Object.keys(SEGMENT) as ClientSegment[]).map((k) => ({ key: k, label: SEGMENT[k].label, count: clients.filter((s) => s.segment === k).length, revenue: 0, open: 0 }))).map((q) => (
@@ -135,7 +152,7 @@ function Corps() {
                       const pente = b.trend?.slope_days_per_month ?? null;
                       const label = b.trend?.label ?? "–";
                       return (
-                        <li key={b.id} className="an-carte n-entree grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3" style={{ "--i": i } as CSSProperties}>
+                        <li key={b.id} className={cx("an-carte n-entree grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg", b.id === clientVise?.id && cx(CIBLE, "bg-accent-doux/60 px-2 py-1.5"))} style={{ "--i": i } as CSSProperties}>
                           <div className="min-w-0">
                             <div className="flex items-baseline justify-between gap-2 text-[12.5px]">
                               <span className="truncate font-medium text-ink">{b.name}</span>
@@ -168,14 +185,14 @@ function Corps() {
                 <Vide compact titre="Aucune facture réglée sur 24 mois" />
               )}
             </Card>
-            <Card title="Tous les clients" className="xl:col-span-7" padded={false}>
+            <Card title="Tous les clients" className={cx("xl:col-span-7", LIGNES_CIBLES)} padded={false}>
               <DataTable
                 dense
                 rows={clients}
                 rowKey={(r) => r.id}
                 empty="Aucun client sur la période."
                 columns={[
-                  { key: "name", label: "Client", render: (r) => <span className="font-medium text-ink">{r.name}</span> },
+                  { key: "name", label: "Client", render: (r) => <Ciblable id={`client-${r.id}`} actif={r.id === clientVise?.id}><span className="font-medium text-ink">{r.name}</span></Ciblable> },
                   { key: "segment", label: "Segment", sortValue: (r) => segmentDe(r.segment).label, render: (r) => <Badge tone={segmentDe(r.segment).tone}>{r.segment_label || segmentDe(r.segment).label}</Badge> },
                   { key: "revenue", label: "CA", align: "right", render: (r) => fmtShort(r.revenue) },
                   { key: "margin", label: "Marge", align: "right", render: (r) => <span className={r.margin < 0 ? "text-danger" : undefined}>{fmtShort(r.margin)}</span> },

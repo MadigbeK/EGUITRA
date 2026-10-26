@@ -22,6 +22,7 @@ Conventions :
 from collections import defaultdict
 from datetime import timedelta
 from functools import cached_property
+from urllib.parse import quote
 
 from dateutil.relativedelta import relativedelta
 
@@ -157,6 +158,13 @@ def _quality(notes):
 
 def _dossier_link(dossier):
     return f"/axispro/dossiers/{dossier.id}"
+
+
+def _section_link(section, anchor=None, **params):
+    """Lien vers une section de l'Analyse : la cible en paramètres (?gate=G2), mise en évidence par l'écran,
+    et le bloc qui explique le constat en ancre (#temps), jusqu'où l'écran fait défiler."""
+    query = "&".join(f"{key}={quote(str(value), safe='')}" for key, value in params.items() if value not in (None, ""))
+    return f"/analyse/{section}" + (f"?{query}" if query else "") + (f"#{anchor}" if anchor else "")
 
 
 def _brief(dossier):
@@ -809,7 +817,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                                                    "values": [x["age_days"] for x in bottleneck["dossiers"]], "unit": "days"}},
                 action=f"Tenir une revue d'avancement ciblée des dossiers en {bottleneck['gate']} : lever les écarts "
                        "bloquants avec les porteurs, ou prononcer un HOLD pour libérer la capacité des consultants.",
-                link=f"/analyse/portefeuille?gate={bottleneck['gate']}",
+                link=_section_link("portefeuille", "temps", gate=bottleneck["gate"]),
             ))
         stuck = []
         p75 = {row["gate"]: (row["p75_days"] if row["n"] >= 3 else None) for row in time_in_gate}
@@ -918,7 +926,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                            "clos à ce gate) ; les dossiers encore en cours sont écartés.",
                     action="Renforcer la préqualification en amont de ce gate pour n'engager que des projets à même de "
                            "le franchir.",
-                    link=f"/analyse/portefeuille?gate={row['gate']}",
+                    link=_section_link("portefeuille", "entonnoir", gate=row["gate"]),
                 ))
         for target in forecast["targets"]:
             soon = [c for c in target["candidates"] if c["eta_days"] <= 92 and not c["knockout"]]
@@ -936,7 +944,7 @@ class EguitraAnalyticsCabinet(models.AbstractModel):
                     method=f"Arrivées mensuelles au gate (journal des passages) prolongées par {target['method'] or 'lissage'} ; "
                            "dossiers en approche : médianes des gates restant à franchir moins l'âge dans le gate courant.",
                     action="Préparer les comités et la charge des consultants pour ces arrivées.",
-                    link=f"/analyse/portefeuille?gate={target['gate']}",
+                    link=_section_link("portefeuille", "prevision", gate=target["gate"]),
                 ))
         return out
 

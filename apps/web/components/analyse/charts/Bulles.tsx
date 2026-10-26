@@ -31,9 +31,10 @@ const M = { haut: 18, droite: 18, bas: 44, gauche: 54 };
 /**
  * Nuage à bulles avec quadrants nommés : deux mesures en axes, une troisième en aire, un groupe en
  * couleur. Les quadrants donnent la lecture d'un coup d'œil (« Stratégiques », « À surveiller »).
- * Chaque bulle se survole et se parcourt au clavier (Tab) ; la légende masque un groupe.
+ * Chaque bulle se survole et se parcourt au clavier (Tab) ; la légende masque un groupe. La bulle
+ * visée par un lien (`surligne`) est cerclée de l'accent et porte toujours son nom.
  */
-export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs, rayonMax, libellesMax = 30 }: {
+export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, hauteur = 340, label, formatX, formatY, formatSize, sizeLabel = "Montant", couleurs, rayonMax, libellesMax = 30, surligne }: {
   points: PointBulle[];
   xLabel: string;
   yLabel: string;
@@ -51,6 +52,8 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
   rayonMax?: number;
   /** Au-delà de ce nombre de points, seuls les points survolés portent leur nom. */
   libellesMax?: number;
+  /** Identifiant du point visé par un lien. */
+  surligne?: string | null;
 }) {
   const [focus, setFocus] = useState<string | null>(null);
   const [masques, setMasques] = useState<string[]>([]);
@@ -142,7 +145,10 @@ export function Bulles({ points, xLabel, yLabel, xDomain, yDomain, quadrants, ha
                     </circle>
                   );
                 })}
-                {visibles.filter((p) => focus === p.id || (points.length <= libellesMax && r(p.size) > 16)).map((p) => (
+                {visibles.filter((p) => p.id === surligne).map((p) => (
+                  <circle key={`v${p.id}`} cx={x(p.x)} cy={y(p.y)} r={r(p.size) + 5} fill="none" stroke="var(--accent-vif)" strokeWidth={2.5} strokeDasharray="4 3" className="pointer-events-none an-fondu" />
+                ))}
+                {visibles.filter((p) => focus === p.id || p.id === surligne || (points.length <= libellesMax && r(p.size) > 16)).map((p) => (
                   <text key={`l${p.id}`} x={x(p.x)} y={y(p.y) - r(p.size) - 5} textAnchor="middle" fontSize={10.5} fontWeight={600} fill="var(--ink)" className="pointer-events-none an-fondu" style={{ "--i": 4 } as CSSProperties}>
                     {p.label.length > 18 ? `${p.label.slice(0, 17)}…` : p.label}
                   </text>

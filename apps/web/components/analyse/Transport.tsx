@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Badge, Card, DataTable, ErrorBox, Segmented, cx } from "@/components/ui";
 import { Bulles, CarteChaleur, Pareto } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, BandeauCible, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useAncreVisee, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeTransport, ShortageRow } from "@/lib/analyse-types";
 import { fmtDec, fmtInt } from "@/lib/format";
@@ -47,6 +47,14 @@ function Corps() {
   const camionsFaibles = trucks.filter((t) => (t.utilization_pct ?? 100) < 50);
   const ind = d?.indicators ?? null;
   const anomalies = d?.fuel_anomalies ?? [];
+  // Cible d'un constat : une route (tarifs, carte de chaleur), un ensemble routier, ou le bloc des
+  // consommations anormales (#consommation).
+  const route = useCible("route");
+  const ensemble = useCible("ensemble");
+  const routeVisee = route ? (pricing.find((p) => String(p.id) === route) ?? null) : null;
+  const ensembleVise = ensemble ? (trucks.find((t) => String(t.id) === ensemble) ?? null) : null;
+  const { eclat, tour } = useAncreVisee(!!d, !route && !ensemble);
+  useDefiler(routeVisee ? `route-${routeVisee.id}` : ensembleVise ? `ensemble-${ensembleVise.id}` : null, !!d, tour, "center");
   const reponse = d && (
     <>
       {!d.available || pricing.length === 0 ? (
@@ -75,6 +83,28 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/transport.xlsx${query}`} question="Quelles routes et quels camions gagnent de l'argent ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      {d && route && (
+        <BandeauCible absent={!routeVisee}>
+          {routeVisee ? (
+            <>
+              Route <strong className="font-semibold">{routeVisee.name}</strong> mise en évidence : ses tarifs et sa ligne de la carte de chaleur.
+            </>
+          ) : (
+            <>La route visée n&apos;a aucune rotation validée sur la période affichée.</>
+          )}
+        </BandeauCible>
+      )}
+      {d && ensemble && (
+        <BandeauCible absent={!ensembleVise}>
+          {ensembleVise ? (
+            <>
+              Ensemble <strong className="font-semibold">{ensembleVise.name}</strong> mis en évidence dans la liste des ensembles routiers.
+            </>
+          ) : (
+            <>L&apos;ensemble visé n&apos;a aucune rotation validée sur la période affichée.</>
+          )}
+        </BandeauCible>
+      )}
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && !d.available && (
@@ -108,6 +138,7 @@ function Corps() {
                 domaine={[-10, 40]}
                 largeurLibelles={170}
                 hauteurLigne={34}
+                surligneLigne={routeVisee ? String(routeVisee.id) : null}
               />
             ) : (
               <Vide titre="Aucune route avec rotations sur 12 mois" />
@@ -115,14 +146,14 @@ function Corps() {
           </Card>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Tarifs : point mort et marge cible par route" className="xl:col-span-7" padded={false}>
+            <Card title="Tarifs : point mort et marge cible par route" className={cx("xl:col-span-7", LIGNES_CIBLES)} padded={false}>
               <DataTable
                 dense
                 rows={[...pricing].sort((a, b) => (a.gap_pct ?? 0) - (b.gap_pct ?? 0))}
                 rowKey={(r) => r.id}
                 empty="Aucune route sur la période."
                 columns={[
-                  { key: "name", label: "Route", render: (r) => <span className="whitespace-nowrap font-medium text-ink">{r.name}<span className="block text-[11.5px] font-normal text-muted">{pluriel(r.rotations, "rotation")} · {fmtInt(r.volume)} m³</span></span> },
+                  { key: "name", label: "Route", render: (r) => <Ciblable id={`route-${r.id}`} actif={r.id === routeVisee?.id}><span className="whitespace-nowrap font-medium text-ink">{r.name}<span className="block text-[11.5px] font-normal text-muted">{pluriel(r.rotations, "rotation")} · {fmtInt(r.volume)} m³</span></span></Ciblable> },
                   { key: "avg_rate", label: "Tarif moyen", align: "right", render: (r) => (r.avg_rate === null ? "–" : `${fmtInt(r.avg_rate)} /m³`) },
                   { key: "breakeven_rate", label: "Point mort", align: "right", render: (r) => (r.breakeven_rate === null ? "–" : `${fmtInt(r.breakeven_rate)} /m³`) },
                   { key: "target_rate", label: `Marge cible`, align: "right", render: (r) => (r.target_rate === null ? "–" : `${fmtInt(r.target_rate)} /m³`) },
@@ -155,7 +186,7 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Les ensembles routiers" className="xl:col-span-7" padded={false} actions={<span className="text-[12.5px] text-muted">Résultat après structure imputée au km</span>}>
+            <Card title="Les ensembles routiers" className={cx("xl:col-span-7", LIGNES_CIBLES)} padded={false} actions={<span className="text-[12.5px] text-muted">Résultat après structure imputée au km</span>}>
               <DataTable
                 dense
                 rows={trucks}
@@ -163,7 +194,7 @@ function Corps() {
                 empty="Aucun ensemble en rotation sur la période."
                 columns={[
                   { key: "rank", label: "Rang", align: "right", render: (t) => <span className="font-semibold tabular text-muted">{t.rank}</span> },
-                  { key: "name", label: "Ensemble", render: (t) => <span className="whitespace-nowrap font-medium text-ink">{t.name}</span> },
+                  { key: "name", label: "Ensemble", render: (t) => <Ciblable id={`ensemble-${t.id}`} actif={t.id === ensembleVise?.id}><span className="whitespace-nowrap font-medium text-ink">{t.name}</span></Ciblable> },
                   { key: "rotations", label: "Rotations", align: "right", render: (t) => fmtInt(t.rotations) },
                   { key: "km", label: "km", align: "right", render: (t) => fmtInt(t.km) },
                   {
@@ -184,7 +215,7 @@ function Corps() {
                 ]}
               />
             </Card>
-            <Card title="Consommations anormales" className="xl:col-span-5" actions={<span className="text-[12.5px] text-muted">Score robuste &gt; 3,5</span>}>
+            <Card title={<span id="consommation">Consommations anormales</span>} className={cx("xl:col-span-5 transition-shadow duration-500", eclat === "consommation" && CIBLE_BLOC)} actions={<span className="text-[12.5px] text-muted">Score robuste &gt; 3,5</span>}>
               {anomalies.length === 0 ? (
                 <Vide compact titre="Aucune consommation anormale" hint={ind?.fuel_per_100km === null ? "Les litres de carburant ne sont pas saisis sur les rotations : le contrôle ne peut pas s'appliquer." : "Toutes les rotations restent dans la norme de leur route et de leur ensemble."} />
               ) : (

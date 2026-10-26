@@ -67,6 +67,10 @@ RUBRICS = {"60": "Achats et fournitures", "61": "Transports", "62": "Services ex
 OPEX_PREFIXES = ("60", "61", "62", "63", "64", "65", "66")
 SEGMENTS = {"strategiques": "Stratégiques", "a_securiser": "À sécuriser", "a_developper": "À développer",
             "a_surveiller": "À surveiller"}
+# Liens des constats vers un onglet : l'écran lit ?onglet= et l'ouvre (Analyse > Rentabilité, Finance >
+# Activités et budget).
+COST_STRUCTURE_LINK = "/analyse/rentabilite?onglet=structure"
+BUDGET_LINK = "/finance/pilotage?onglet=budget"
 GOOD_PAYER = 60
 HEALTH_WEIGHTS = {"liquidite": 25, "rentabilite": 25, "solvabilite": 20, "recouvrement": 15, "exploitation": 15}
 CHECK_WEIGHTS = {"analytic": 15, "bank_reconciled": 15, "attachments": 10, "late_entries": 10, "old_drafts": 10,
@@ -1342,14 +1346,14 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 evidence={"type": "scatter", "data": {"points": cost["points"], "line": cost["line"]}},
                 action="Réduire les charges fixes ou relever les prix ; chaque GNF de charges fixes en moins abaisse le "
                        f"point mort de {_num(1 / (1 - cost['variable_rate'] / 100), 2)} GNF.",
-                link="/analyse/rentabilite")]
+                link=COST_STRUCTURE_LINK)]
         if margin >= 30:
             return [insight(
                 "rentabilite.point_mort_eloigne", "rentabilite", "positive", "Le point mort est loin",
                 narrative + f" La marge de sécurité atteint {pct(margin)}.", metric=metric,
                 confidence=min(0.9, cost["r2"]), method=method,
                 evidence={"type": "scatter", "data": {"points": cost["points"], "line": cost["line"]}},
-                link="/analyse/rentabilite")]
+                link=COST_STRUCTURE_LINK)]
         return []
 
     def _budget_insights(self, budget):
@@ -1370,7 +1374,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                                         "(loi normale).",
                 evidence={"type": "series", "data": {"monthly_actuals": row["monthly_actuals"]}},
                 action="Arrêter avec le responsable de la ligne une mesure de correction ou réviser l'enveloppe.",
-                link="/finance/pilotage"))
+                link=BUDGET_LINK))
         return items
 
     def _chantier_insights(self, chantiers):

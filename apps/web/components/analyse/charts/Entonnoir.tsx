@@ -17,9 +17,9 @@ export interface EtapeEntonnoir {
 /**
  * Entonnoir à conversion : une marche par étape, large comme son effectif, centrée ; entre deux
  * marches, le taux de passage. La plus étroite dit où l'on perd. Survol et clavier lisent chaque
- * étape (effectif, montant, conversion).
+ * étape (effectif, montant, conversion). `surligne` : clé de l'étape visée par un lien, cerclée.
  */
-export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES }: { stages: EtapeEntonnoir[]; hauteur?: number; label: string; format?: (v: number) => string; couleurs?: readonly string[] }) {
+export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES, surligne }: { stages: EtapeEntonnoir[]; hauteur?: number; label: string; format?: (v: number) => string; couleurs?: readonly string[]; surligne?: string | null }) {
   const [focus, setFocus] = useState<number | null>(null);
   const show = format ?? ((v: number) => `${fmtShort(v)} GNF`);
   const h = hauteur ?? Math.max(220, stages.length * 54 + 20);
@@ -51,10 +51,12 @@ export function Entonnoir({ stages, hauteur, label, format, couleurs = SERIES }:
                 const y0 = 6 + i * pas;
                 const couleur = couleurs[i % couleurs.length] ?? COULEUR.accent;
                 const estompe = focus !== null && focus !== i;
+                const vise = surligne !== undefined && surligne !== null && s.key === surligne;
                 return (
                   <g key={s.key} onPointerEnter={() => setFocus(i)} className="an-estompe" style={{ opacity: estompe ? 0.45 : 1 }}>
+                    {vise && <rect x={4} y={y0 - 4} width={W - 8} height={marcheH + 8} rx={10} fill={COULEUR.accent} fillOpacity={0.1} stroke={COULEUR.accent} strokeWidth={2} strokeDasharray="5 4" />}
                     <path d={`M${centre - w0 / 2},${y0} L${centre + w0 / 2},${y0} L${centre + w1 / 2},${y0 + marcheH} L${centre - w1 / 2},${y0 + marcheH} Z`} fill={couleur} className="an-eclore" style={{ "--i": i * 3 } as CSSProperties} />
-                    <text x={gauche - 12} y={y0 + marcheH / 2} dy="0.35em" textAnchor="end" fontSize={12.5} fontWeight={focus === i ? 700 : 500} fill={focus === i ? "var(--ink)" : "var(--ink-2)"}>
+                    <text x={gauche - 12} y={y0 + marcheH / 2} dy="0.35em" textAnchor="end" fontSize={12.5} fontWeight={focus === i || vise ? 700 : 500} fill={vise ? "var(--accent)" : focus === i ? "var(--ink)" : "var(--ink-2)"}>
                       {tronquer(s.label, gauche - 14, 12.5)}
                     </text>
                     <text x={centre} y={y0 + marcheH / 2} dy="0.35em" textAnchor="middle" fontSize={w0 > 60 ? 14 : 11} fontWeight={700} fill="#ffffff" className="tabular">

@@ -16,7 +16,8 @@ const LIGNE_H = 30;
 /**
  * Carte de chaleur : lignes × colonnes, la couleur porte la valeur (divergente autour d'un pivot,
  * ou séquentielle), le chiffre s'écrit dans la case quand elle est assez large. Survol et flèches
- * du clavier parcourent les cases ; la table de repli donne tout.
+ * du clavier parcourent les cases ; la table de repli donne tout. La ligne ou la colonne visée par
+ * un lien (`surligneLigne`, `surligneColonne`) est cerclée de l'accent.
  */
 export function CarteChaleur({
   rows,
@@ -30,6 +31,8 @@ export function CarteChaleur({
   domaine,
   largeurLibelles = 118,
   hauteurLigne = LIGNE_H,
+  surligneLigne,
+  surligneColonne,
 }: {
   rows: Array<{ key: string; label: string }>;
   cols: string[];
@@ -44,6 +47,10 @@ export function CarteChaleur({
   domaine?: [number, number];
   largeurLibelles?: number;
   hauteurLigne?: number;
+  /** Clé de la ligne visée par un lien. */
+  surligneLigne?: string | null;
+  /** Colonne visée par un lien. */
+  surligneColonne?: string | null;
 }) {
   const [focus, setFocus] = useState<[number, number] | null>(null);
   const index = useMemo(() => new Map(cells.map((c) => [`${c.row}|${c.col}`, c])), [cells]);
@@ -94,11 +101,13 @@ export function CarteChaleur({
         const cw = (W - gauche) / Math.max(1, cols.length);
         const choisi = focus ? index.get(`${rows[focus[0]]?.key}|${cols[focus[1]]}`) : undefined;
         const ecrire = cw >= 44;
+        const ligneVisee = surligneLigne ? rows.findIndex((r) => r.key === surligneLigne) : -1;
+        const colonneVisee = surligneColonne ? cols.indexOf(surligneColonne) : -1;
         return (
           <>
             <svg width={W} height={hauteur} className="absolute inset-0 overflow-visible" aria-hidden focusable="false">
               {cols.map((c, j) => (
-                <text key={c} x={gauche + j * cw + cw / 2} y={16} textAnchor="middle" fontSize={11} fill={focus && focus[1] === j ? "var(--ink)" : "var(--muted)"} fontWeight={focus && focus[1] === j ? 600 : 400}>
+                <text key={c} x={gauche + j * cw + cw / 2} y={16} textAnchor="middle" fontSize={11} fill={j === colonneVisee ? "var(--accent)" : focus && focus[1] === j ? "var(--ink)" : "var(--muted)"} fontWeight={j === colonneVisee ? 700 : focus && focus[1] === j ? 600 : 400}>
                   {tronquer(colLabel(c), cw - 4, 11)}
                 </text>
               ))}
@@ -106,7 +115,7 @@ export function CarteChaleur({
                 const y0 = 26 + i * hauteurLigne;
                 return (
                   <g key={r.key}>
-                    <text x={gauche - 10} y={y0 + hauteurLigne / 2} dy="0.35em" textAnchor="end" fontSize={12} fill={focus && focus[0] === i ? "var(--ink)" : "var(--ink-2)"} fontWeight={focus && focus[0] === i ? 600 : 500}>
+                    <text x={gauche - 10} y={y0 + hauteurLigne / 2} dy="0.35em" textAnchor="end" fontSize={12} fill={i === ligneVisee ? "var(--accent)" : focus && focus[0] === i ? "var(--ink)" : "var(--ink-2)"} fontWeight={i === ligneVisee ? 700 : focus && focus[0] === i ? 600 : 500}>
                       {tronquer(r.label, gauche - 12, 12)}
                     </text>
                     {cols.map((c, j) => {
@@ -129,6 +138,8 @@ export function CarteChaleur({
                   </g>
                 );
               })}
+              {ligneVisee >= 0 && <rect x={gauche - 0.5} y={26 + ligneVisee * hauteurLigne - 0.5} width={cols.length * cw + 1} height={hauteurLigne + 1} rx={7} fill="none" stroke="var(--accent-vif)" strokeWidth={2.25} className="pointer-events-none" />}
+              {colonneVisee >= 0 && <rect x={gauche + colonneVisee * cw - 0.5} y={25.5} width={cw + 1} height={rows.length * hauteurLigne + 1} rx={7} fill="none" stroke="var(--accent-vif)" strokeWidth={2.25} className="pointer-events-none" />}
             </svg>
             {focus && choisi && (
               <Bulle x={gauche + focus[1] * cw + cw / 2} y={26 + focus[0] * hauteurLigne} largeur={W} titre={`${rows[focus[0]]?.label ?? ""} · ${colLabel(cols[focus[1]] ?? "")}`} lignes={[{ valeur: choisi.value === null ? "–" : format(choisi.value), couleur: couleur(choisi.value).fond }]} texte={choisi.detail} />

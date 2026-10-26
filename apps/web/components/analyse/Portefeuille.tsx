@@ -3,7 +3,7 @@
 import { type CSSProperties } from "react";
 import { Badge, Card, DataTable, ErrorBox, RankBars, cx } from "@/components/ui";
 import { Entonnoir, Puces } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, BandeauCible, CIBLE, CIBLE_BLOC, Chiffre, Ciblable, Constats, EnTeteSection, FournisseurTheme, GardeSociete, LIGNES_CIBLES, LienFiche, Vide, fmtDate, fmtPct, fmtShort, joursOu, pctOu, pluriel, useAncreVisee, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CabinetPortefeuille } from "@/lib/analyse-types";
 import { fmtInt } from "@/lib/format";
@@ -26,6 +26,12 @@ function Corps() {
   const actifs = d?.funnel?.length ? d.funnel.reduce((s, f) => s + f.count, 0) : (d?.pipeline_value?.dossiers?.length ?? 0);
   const goulot = d?.bottleneck ?? null;
   const mesures = (d?.time_in_gate ?? []).filter((t) => t.median_days !== null && t.n > 0);
+  // Gate visé par un constat (?gate=G2), mis en évidence partout où il paraît ; l'ancre dit le bloc
+  // qui explique le constat (#entonnoir, #temps, #prevision), à défaut l'entonnoir.
+  const gate = useCible("gate");
+  const gateVise = gate ? ((d?.funnel ?? []).find((f) => f.gate === gate) ?? null) : null;
+  const { ancre, eclat, tour } = useAncreVisee(!!d);
+  useDefiler(gateVise && !ancre ? "entonnoir" : null, !!d, tour, "start");
   const reponse = d && (
     <>
       {actifs === 0 ? (
@@ -43,25 +49,37 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/cabinet/portefeuille.xlsx${query}`} question="Où en sont les projets, et où bloquent-ils ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      {d && gate && (
+        <BandeauCible absent={!gateVise}>
+          {gateVise ? (
+            <>
+              Gate <strong className="font-semibold">{gateVise.gate} · {gateVise.label}</strong> mis en évidence : entonnoir, temps passé, prévision et dossiers qui s&apos;y trouvent.
+            </>
+          ) : (
+            <>Le gate visé ({gate}) ne figure pas dans la grille en vigueur.</>
+          )}
+        </BandeauCible>
+      )}
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
         <div className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Les dossiers, gate après gate" className="xl:col-span-5">
+            <Card title={<span id="entonnoir">Les dossiers, gate après gate</span>} className={cx("xl:col-span-5 transition-shadow duration-500", eclat === "entonnoir" && CIBLE_BLOC)}>
               {d.funnel?.length ? (
                 <>
-                  <Entonnoir label="Entonnoir des dossiers par gate" stages={d.funnel.map((f) => ({ key: f.gate, label: `${f.gate} · ${f.label}`, count: f.count, value: f.need, conversion_pct: f.conversion_pct }))} hauteur={Math.max(300, d.funnel.length * 46)} />
+                  <Entonnoir label="Entonnoir des dossiers par gate" stages={d.funnel.map((f) => ({ key: f.gate, label: `${f.gate} · ${f.label}`, count: f.count, value: f.need, conversion_pct: f.conversion_pct }))} hauteur={Math.max(300, d.funnel.length * 46)} surligne={gateVise?.gate} />
                   <p className="mt-2 text-[12.5px] leading-snug text-muted">Effectif présent ou passé par chaque gate ; la pastille donne le taux de passage depuis le gate précédent, le montant à droite le besoin de financement.</p>
                 </>
               ) : (
                 <Vide titre="Aucun dossier" />
               )}
             </Card>
-            <Card title="Temps passé dans chaque gate" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Médiane des passages observés · trait : cible 45 jours</span>}>
+            <Card title={<span id="temps">Temps passé dans chaque gate</span>} className={cx("xl:col-span-7 transition-shadow duration-500", eclat === "temps" && CIBLE_BLOC)} actions={<span className="text-[12.5px] text-muted">Médiane des passages observés · trait : cible 45 jours</span>}>
               {mesures.length ? (
                 <Puces
                   label="Durée médiane par gate contre la cible de 45 jours"
+                  surligne={gateVise?.gate}
                   format={(v) => `${fmtInt(v)} j`}
                   items={mesures.map((t) => ({ key: t.gate, label: `${t.gate} · ${t.label} (${t.n})`, value: t.median_days ?? 0, target: 45, inverse: true, ranges: [45, 70, Math.max(120, (t.p75_days ?? 0) * 1.1, (t.median_days ?? 0) * 1.2)], detail: `p75 : ${joursOu(t.p75_days)} · ${t.n} passage${t.n > 1 ? "s" : ""} observé${t.n > 1 ? "s" : ""}${t.in_gate ? ` · ${t.in_gate} dossier${t.in_gate > 1 ? "s" : ""} présent${t.in_gate > 1 ? "s" : ""}, âge médian ${joursOu(t.median_age_days)}` : ""}${t.forced ? ` · ${t.forced} passage${t.forced > 1 ? "s" : ""} forcé${t.forced > 1 ? "s" : ""}` : ""}` }))}
                 />
@@ -73,7 +91,7 @@ function Corps() {
                   {d.time_in_gate
                     .filter((t) => t.in_gate > 0)
                     .map((t) => (
-                      <li key={t.gate} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-panel-2/60 px-3 py-2">
+                      <li key={t.gate} className={cx("flex items-center justify-between gap-3 rounded-xl border border-line bg-panel-2/60 px-3 py-2", t.gate === gateVise?.gate && cx(CIBLE, "bg-accent-doux/60"))}>
                         <span className="min-w-0 truncate font-medium text-ink-2">
                           {t.gate} · {t.label}
                         </span>
@@ -86,7 +104,7 @@ function Corps() {
                 </ul>
               )}
               {goulot && (
-                <div className="mt-4 rounded-xl border border-danger/15 bg-danger-doux/50 px-4 py-3 text-[13px] leading-snug text-ink">
+                <div className={cx("mt-4 rounded-xl border border-danger/15 bg-danger-doux/50 px-4 py-3 text-[13px] leading-snug text-ink", goulot.gate === gateVise?.gate && CIBLE)}>
                   <span className="font-semibold">Goulot : {goulot.gate} {goulot.label}.</span> {goulot.comment}
                   {goulot.dossiers.length > 0 && (
                     <span className="mt-1 block text-[12.5px] text-ink-2">
@@ -110,14 +128,14 @@ function Corps() {
             <Card title="Par localisation" className="xl:col-span-3">
               {d.by_location?.length ? <RankBars items={[...d.by_location].sort((a, b) => b.need - a.need).map((s) => ({ key: s.key, label: s.label, value: s.need, detail: `${pluriel(s.count, "dossier")}` }))} format={(v) => fmtShort(v)} couleur="var(--g-lagon)" /> : <Vide compact titre="Aucune localisation" />}
             </Card>
-            <Card title="Pipeline pondéré par la probabilité de bancabilité" className="xl:col-span-5" padded={false} actions={<span className="max-w-[40ch] truncate text-[12.5px] text-muted" title={d.pipeline_value.method}>{d.pipeline_value.method}</span>}>
+            <Card title="Pipeline pondéré par la probabilité de bancabilité" className={cx("xl:col-span-5", LIGNES_CIBLES)} padded={false} actions={<span className="max-w-[40ch] truncate text-[12.5px] text-muted" title={d.pipeline_value.method}>{d.pipeline_value.method}</span>}>
               <DataTable
                 dense
                 rows={d.pipeline_value.dossiers ?? []}
                 rowKey={(r) => r.id}
                 empty="Aucun dossier dans le pipeline."
                 columns={[
-                  { key: "name", label: "Dossier", render: (r) => <LienFiche href={r.link}>{r.name}<span className="block text-[11.5px] font-normal text-muted">{r.reference} · {r.gate}</span></LienFiche> },
+                  { key: "name", label: "Dossier", render: (r) => <Ciblable id={`pipeline-${r.id}`} actif={r.gate === gateVise?.gate}><LienFiche href={r.link}>{r.name}<span className="block text-[11.5px] font-normal text-muted">{r.reference} · {r.gate}</span></LienFiche></Ciblable> },
                   { key: "need", label: "Besoin", align: "right", render: (r) => fmtShort(r.need) },
                   {
                     key: "probability",
@@ -138,7 +156,7 @@ function Corps() {
             </Card>
           </div>
 
-          <Card title="Ce que la vitesse observée promet" actions={<span className="text-[12.5px] text-muted">Dossiers par mois franchissant chaque gate, 12 mois</span>}>
+          <Card title={<span id="prevision">Ce que la vitesse observée promet</span>} className={cx("transition-shadow duration-500", eclat === "prevision" && CIBLE_BLOC)} actions={<span className="text-[12.5px] text-muted">Dossiers par mois franchissant chaque gate, 12 mois</span>}>
             <div className="grid gap-5 xl:grid-cols-12">
               <div className="grid grid-cols-2 gap-2.5 xl:col-span-5">
                 <Chiffre label="APD Ready dans 3 mois" value={String(d.forecast.apd_3m)} hint="dossiers attendus" grand />
@@ -152,8 +170,8 @@ function Corps() {
                     {d.forecast.velocity.map((v, i) => {
                       const max = Math.max(...d.forecast.velocity.map((x) => x.dossiers_per_month), 0.1);
                       return (
-                        <li key={v.gate} className="grid grid-cols-[3rem_minmax(0,1fr)_6rem] items-center gap-3 text-[13px]">
-                          <span className="font-semibold text-ink-2" title={v.label}>{v.gate}</span>
+                        <li key={v.gate} className={cx("grid grid-cols-[3rem_minmax(0,1fr)_6rem] items-center gap-3 rounded-lg text-[13px]", v.gate === gateVise?.gate && cx(CIBLE, "bg-accent-doux/60 px-2 py-1"))}>
+                          <span className={cx("font-semibold", v.gate === gateVise?.gate ? "text-accent" : "text-ink-2")} title={v.label}>{v.gate}</span>
                           <span className="h-2.5 overflow-hidden rounded-full bg-panel-3">
                             <span className="n-pousser-x block h-full rounded-full bg-accent-vif" style={{ width: `${(v.dossiers_per_month / max) * 100}%`, "--i": i } as CSSProperties} />
                           </span>
@@ -172,7 +190,7 @@ function Corps() {
                 {d.forecast.targets
                   .filter((t) => t.candidates.length > 0)
                   .map((t) => (
-                    <div key={t.gate} className="rounded-xl border border-line bg-panel-2/60 px-4 py-3">
+                    <div key={t.gate} className={cx("rounded-xl border border-line bg-panel-2/60 px-4 py-3", t.gate === gateVise?.gate && cx(CIBLE, "bg-accent-doux/60"))}>
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="text-[13px] font-semibold text-ink">
                           Vers {t.gate} · {t.label}

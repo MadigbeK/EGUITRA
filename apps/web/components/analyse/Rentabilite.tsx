@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { scaleLinear } from "d3-scale";
 import { AreaChart, Badge, Card, DataTable, ErrorBox, SERIES, Tabs, cx } from "@/components/ui";
 import { Cascade, Puces, TableRepli } from "@/components/analyse/charts";
 import { COULEUR, Cadre } from "@/components/analyse/charts/commun";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, nombre, pctOu, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, BandeauCible, CIBLE, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtPct, fmtShort, gnfOu, joursOu, moisCourt, nombre, pctOu, useAncre, useCible, useContexte, useDefiler, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { CostStructure, GroupeRentabilite } from "@/lib/analyse-types";
 import { fmtAxe, fmtGNF, fmtInt } from "@/lib/format";
 
 type Onglet = "pont" | "structure" | "budget" | "metiers";
+const ONGLETS: readonly string[] = ["pont", "structure", "budget", "metiers"];
 
 /** Libellés courts des marches du pont pour l'axe du graphique (le libellé complet reste dans la bulle et le tableau). */
 const COURT_PONT: Record<string, string> = {
@@ -40,11 +41,20 @@ const ETAT_CHANTIER: Record<string, string> = { draft: "Brouillon", progress: "E
 function Corps() {
   const [periode, setPeriode, query] = usePeriode();
   const { data: d, error, mutate } = useApi<GroupeRentabilite>(`/analyse/groupe/rentabilite${query}`);
-  const [onglet, setOnglet] = useState<Onglet>(() => {
-    if (typeof window === "undefined") return "pont";
-    const demande = new URLSearchParams(window.location.search).get("onglet");
-    return demande === "structure" || demande === "budget" || demande === "metiers" ? demande : "pont";
-  });
+  // Onglet ou activité visés par un constat (?onglet=structure, ?activite=12, sur le pont d'EBE).
+  const ongletDemande = useCible("onglet");
+  const activite = useCible("activite");
+  const demande: Onglet | null = activite ? "pont" : ongletDemande && ONGLETS.includes(ongletDemande) ? (ongletDemande as Onglet) : null;
+  const [onglet, setOnglet] = useState<Onglet>(demande ?? "pont");
+  const { tour } = useAncre();
+  useEffect(() => {
+    // Un lien suivi depuis la page même rouvre l'onglet visé, même choisi à la main entre-temps.
+    if (demande) setOnglet(demande);
+  }, [demande, tour]);
+  const totaux = d?.by_activity?.totals ?? [];
+  const activiteVisee = activite ? (totaux.find((t) => String(t.activity_id) === activite) ?? null) : null;
+  const marcheVisee = activite ? ((d?.bridge ?? []).find((b) => b.key === `activity.${activite}`) ?? null) : null;
+  useDefiler(activiteVisee ? `activite-${activiteVisee.activity_id}` : marcheVisee ? "pont" : null, !!d && onglet === "pont", tour, activiteVisee ? "center" : "start");
   const bridge = (d?.bridge ?? []).map((b) => ({ ...b, court: COURT_PONT[b.key] ?? (b.key.startsWith("activity.") && b.label.length > 12 ? b.label.split(" ")[0] : undefined) }));
   const debut = bridge.find((b) => b.kind === "total");
   const fin = [...bridge].reverse().find((b) => b.kind === "total");
@@ -88,6 +98,18 @@ function Corps() {
   return (
     <div>
       <EnTeteSection exporter={`/analyse/groupe/rentabilite.xlsx${query}`} question="D'où vient la marge, et où s'érode-t-elle ?" reponse={reponse ?? undefined} periode={periode} onPeriode={setPeriode} label={d?.period.label} quality={d?.quality} />
+      {d && activite && (
+        <BandeauCible absent={!activiteVisee && !marcheVisee}>
+          {activiteVisee || marcheVisee ? (
+            <>
+              Activité <strong className="font-semibold">« {activiteVisee?.name ?? marcheVisee?.label} »</strong> mise en évidence
+              {marcheVisee && activiteVisee ? " : sa marche du pont d'EBE et ses totaux des douze derniers mois." : marcheVisee ? " : sa marche du pont d'EBE." : " : ses totaux des douze derniers mois."}
+            </>
+          ) : (
+            <>L&apos;activité visée n&apos;a ni produit ni charge imputés sur la période affichée.</>
+          )}
+        </BandeauCible>
+      )}
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!d && !error && <AttenteSection />}
       {d && (
@@ -104,8 +126,8 @@ function Corps() {
           />
           {onglet === "pont" && (
             <div className="grid gap-5 xl:grid-cols-12">
-              <Card title="Pont d'EBE, d'un exercice à l'autre" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Volume, prix et mix du transport, puis les autres métiers</span>}>
-                {bridge.length ? <Cascade label="Pont d'EBE entre les deux périodes" steps={bridge} hauteur={330} /> : <Vide titre="Pas de pont d'EBE" hint="Il faut des écritures validées sur les deux périodes." />}
+              <Card title={<span id="pont">Pont d&apos;EBE, d&apos;un exercice à l&apos;autre</span>} className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Volume, prix et mix du transport, puis les autres métiers</span>}>
+                {bridge.length ? <Cascade label="Pont d'EBE entre les deux périodes" steps={bridge} hauteur={330} surligne={marcheVisee?.key} /> : <Vide titre="Pas de pont d'EBE" hint="Il faut des écritures validées sur les deux périodes." />}
                 {te && (
                   <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                     <Chiffre label="Effet volume" value={`${te.volume >= 0 ? "+" : "−"}${fmtShort(Math.abs(te.volume))}`} hint={`${fmtInt(te.volume_m3)} m³ contre ${fmtInt(te.volume_m3_previous)} m³`} />
@@ -124,6 +146,25 @@ function Corps() {
                       <div className="mt-4 border-t border-line pt-3">
                         <div className="mb-2 text-[12.5px] font-semibold text-ink-2">Marge par activité</div>
                         <AreaChart label="Marge mensuelle par activité" labels={d.by_activity.months.map((m) => moisCourt(m, true))} series={seriesMarge.map((s, i) => ({ key: s.key, label: s.label.replace(/ : marge$/, ""), values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={150} format={(v) => fmtGNF(v)} />
+                      </div>
+                    )}
+                    {totaux.length > 0 && (
+                      <div className="mt-4 border-t border-line pt-3">
+                        <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12.5px]">
+                          <span className="font-semibold text-ink-2">Les douze derniers mois</span>
+                          <span className="text-[11.5px] text-muted">Produits · marge (produits moins charges imputées)</span>
+                        </div>
+                        <ul className="space-y-1 text-[12.5px]">
+                          {totaux.map((t, i) => (
+                            <li key={t.activity_id ?? `na-${i}`} id={`activite-${t.activity_id}`} className={cx("flex scroll-mt-28 items-center justify-between gap-3 rounded-lg px-2 py-1", t.activity_id !== null && t.activity_id === activiteVisee?.activity_id && cx(CIBLE, "bg-accent-doux/60"))}>
+                              <span className="min-w-0 truncate font-medium text-ink-2">{t.name}</span>
+                              <span className="whitespace-nowrap tabular text-muted">
+                                {gnfOu(t.revenue)} · <span className={cx("font-semibold", t.margin < 0 ? "text-danger" : "text-ink-2")}>{gnfOu(t.margin)}</span>
+                                {t.margin_rate !== null && ` (${pctOu(t.margin_rate)})`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </>

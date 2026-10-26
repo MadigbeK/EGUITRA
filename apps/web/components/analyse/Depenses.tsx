@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Badge, Card, DataTable, ErrorBox, cx } from "@/components/ui";
 import { Benford, Pareto, PetitsMultiples, Treemap } from "@/components/analyse/charts";
-import { AttenteSection, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useContexte, usePeriode } from "@/components/analyse/commun";
+import { AttenteSection, CIBLE_BLOC, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, fmtDate, fmtPct, fmtShort, moisCourt, pctOu, pluriel, useAncreVisee, useContexte, usePeriode } from "@/components/analyse/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeDepenses } from "@/lib/analyse-types";
 import { fmtDec, fmtGNF, fmtInt } from "@/lib/format";
@@ -43,6 +43,8 @@ function Corps() {
   const outliers = d?.outliers ?? [];
   const doublons = duplicates.reduce((s, x) => s + x.amount_at_risk, 0);
   const drift = d?.suppliers?.drift ?? [];
+  // Bloc visé par un constat : #benford, #doublons ou #inhabituels.
+  const { eclat } = useAncreVisee(!!d);
   const reponse = d && (
     <>
       {total > 0 ? (
@@ -78,7 +80,7 @@ function Corps() {
               {tuiles.length ? <Treemap label="Treemap des dépenses par catégorie et activité" items={tuiles} hauteur={380} /> : <Vide titre="Aucune charge sur la période" />}
               {d.cube.activities.length === 1 && d.cube.activities[0]?.id === null && tuiles.length > 0 && <p className="mt-2 text-[12px] leading-snug text-muted">Aucune charge n&apos;est imputée sur une activité : tout est « non affecté ». Renseignez l&apos;axe Activité pour lire les métiers.</p>}
             </Card>
-            <Card title="Loi de Benford sur les montants" className="xl:col-span-5" actions={benford && benford.n > 0 ? <Badge tone={benford.conformity === "nonconformity" ? "danger" : benford.conformity === "marginal" ? "warn" : "ok"}>{benford.conformity_label}</Badge> : undefined}>
+            <Card title={<span id="benford">Loi de Benford sur les montants</span>} className={cx("xl:col-span-5 transition-shadow duration-500", eclat === "benford" && CIBLE_BLOC)} actions={benford && benford.n > 0 ? <Badge tone={benford.conformity === "nonconformity" ? "danger" : benford.conformity === "marginal" ? "warn" : "ok"}>{benford.conformity_label}</Badge> : undefined}>
               {benford && benford.n > 0 && benford.digits.length ? (
                 <>
                   <Benford label="Premier chiffre des montants" digits={benford.digits} n={benford.n} suspicious={benford.suspicious} conformity={benford.conformity_label} hauteur={230} />
@@ -150,7 +152,7 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Factures en double probable" className="xl:col-span-6" padded={false} actions={<Badge tone={duplicates.length ? "danger" : "ok"}>{duplicates.length ? `${fmtShort(doublons)} GNF` : "Aucun"}</Badge>}>
+            <Card title={<span id="doublons">Factures en double probable</span>} className={cx("xl:col-span-6 transition-shadow duration-500", eclat === "doublons" && CIBLE_BLOC)} padded={false} actions={<Badge tone={duplicates.length ? "danger" : "ok"}>{duplicates.length ? `${fmtShort(doublons)} GNF` : "Aucun"}</Badge>}>
               <DataTable
                 dense
                 rows={duplicates}
@@ -166,7 +168,7 @@ function Corps() {
                 ]}
               />
             </Card>
-            <Card title="Montants inhabituels dans leur catégorie" className="xl:col-span-6" padded={false} actions={<span className="text-[12.5px] text-muted">Score robuste &gt; 3,5 sur le logarithme des montants</span>}>
+            <Card title={<span id="inhabituels">Montants inhabituels dans leur catégorie</span>} className={cx("xl:col-span-6 transition-shadow duration-500", eclat === "inhabituels" && CIBLE_BLOC)} padded={false} actions={<span className="text-[12.5px] text-muted">Score robuste &gt; 3,5 sur le logarithme des montants</span>}>
               <DataTable
                 dense
                 rows={outliers}

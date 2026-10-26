@@ -383,6 +383,38 @@ class TestAnalyseGroupe(FinanceDataMixin, ApiCase):
         self.assertTrue(0 <= body["score"] <= 100)
         self.assertIn("fiabilite.unbilled_rotations", self._ids(body))
 
+    def test_liens_des_constats(self):
+        """Chaque constat mène à son objet, que l'écran visé sait lire : une ligne (?route=, ?ensemble=,
+        ?client=), un onglet (?onglet=) ou un bloc (#consommation, #doublons)."""
+        transport = self._get("transport")
+        links = {i["id"]: i["link"] for i in transport["insights"]}
+        boke = self.route_boke.id
+        self.assertEqual(links.get(f"transport.route_marge_negative.{boke}"), f"/analyse/transport?route={boke}")
+        self.assertIn(boke, {p["id"] for p in transport["pricing"]}, "La route visée figure dans les tarifs")
+        er02 = next(t for t in transport["trucks"] if t["name"] == "ER-02")
+        self.assertEqual(links.get(f"transport.ensemble_deficitaire.{er02['id']}"),
+                         f"/analyse/transport?ensemble={er02['id']}")
+        self.assertEqual(links.get("transport.consommation_anormale"), "/analyse/transport#consommation")
+        clients = self._get("clients")
+        links = {i["id"]: i["link"] for i in clients["insights"]}
+        self.assertEqual(links.get(f"clients.retard_degradation.{self.client_a.id}"),
+                         f"/analyse/clients?client={self.client_a.id}")
+        self.assertIn(self.client_a.id, {c["id"] for c in clients["segments"]["clients"]})
+        links = {i["id"]: i["link"] for i in self._get("depenses")["insights"]}
+        self.assertEqual(links.get("depenses.doublons"), "/analyse/depenses#doublons")
+        # Point mort et budget : l'onglet qui porte la mesure (Analyse > Rentabilité, Finance > budget).
+        groupe = self.env["eguitra.analytics.groupe"]
+        [point_mort] = groupe._cost_insights({
+            "reliable": True, "safety_margin_pct": 12.0, "method": "Régression mensuelle (essai)",
+            "fixed_monthly": 50_000_000, "variable_rate": 40.0, "r2": 0.9, "n": 12, "breakeven_monthly": 83_000_000,
+            "average_revenue": 95_000_000, "points": [], "line": []})
+        self.assertEqual(point_mort["link"], "/analyse/rentabilite?onglet=structure")
+        [budget] = groupe._budget_insights({"lines": [{
+            "id": 7, "name": "Carburant (essai)", "risk": "dépassement", "risk_probability_pct": 92.0,
+            "annual_budget": 400_000_000, "projected_gap": 60_000_000, "actual_to_date": 230_000_000,
+            "budget_to_date": 200_000_000, "projection": 460_000_000, "monthly_actuals": [40_000_000] * 6}]})
+        self.assertEqual(budget["link"], "/finance/pilotage?onglet=budget")
+
     # ─── Contexte, société et droits ──────────────────────────────────────
 
     def test_contexte(self):
