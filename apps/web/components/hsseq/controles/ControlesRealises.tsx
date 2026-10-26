@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Card, DataTable, ErrorBox, Etat, Field, Kpi, Segmented, Select, Tag, type Tri } from "@/components/ui";
-import { RESULTAT_CONTROLE, Tampon, TYPE_VEHICULE, nomRotation } from "@/components/hsseq/commun";
+import { Card, DataTable, ErrorBox, Etat, Kpi, Segmented, Tag, type Tri } from "@/components/ui";
+import { RESULTAT_CONTROLE, Tampon, nomRotation } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDateTime, fmtInt, fmtPct, pluriel } from "@/lib/format";
 import type { CheckCounts, CheckLine, CheckResult, Page, Referentials, VehicleKind } from "@/lib/hsseq-types";
 import { Pages, requete } from "@/components/hsseq/actions/outils";
-import { ChampSite, ChampVehicule, ChampsPeriode, PhotoManquante, TYPE_ADRESSE, Vehicule, periode } from "./elements";
+import { ChampProfil, ChampSite, ChampVehicule, ChampsPeriode, PhotoManquante, TYPE_ADRESSE, Vehicule, periode } from "./elements";
 
 const PAR_PAGE = 50;
 
@@ -15,8 +15,8 @@ const PAR_PAGE = 50;
 const TRIS = ["reported_at", "result", "reference"] as const;
 
 /** Résultat dans l'adresse et sa clé dans l'API. */
-const RESULTAT_ADRESSE: Record<string, CheckResult> = { conforme: "compliant", reserves: "non_compliant", bloquant: "blocking" };
-type FiltreResultat = "tous" | "conforme" | "reserves" | "bloquant";
+const RESULTAT_ADRESSE: Record<string, CheckResult> = { conforme: "compliant", reserves: "non_compliant", bloquant: "blocking", incomplet: "incomplete" };
+type FiltreResultat = "tous" | "conforme" | "reserves" | "bloquant" | "incomplet";
 
 /**
  * Contrôles avant départ réalisés : taux de départs contrôlés et de conformité sur la période, liste
@@ -52,14 +52,7 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
       <div className="flex flex-wrap items-end gap-3">
         <ChampsPeriode du={du} au={au} ecrire={ecrire} />
         <ChampSite ref_={ref_} valeur={site} onChange={(v) => ecrire({ site: v, vehicule: null })} />
-        <Field label="Profil" className="w-full sm:w-36">
-          <Select
-            value={lire("type")}
-            onChange={(e) => ecrire({ type: e.target.value, vehicule: null })}
-            placeholder="Tous"
-            options={Object.entries(TYPE_ADRESSE).map(([cle, v]) => ({ value: cle, label: TYPE_VEHICULE[v] }))}
-          />
-        </Field>
+        <ChampProfil valeur={lire("type")} onChange={(v) => ecrire({ type: v, vehicule: null })} />
         <ChampVehicule ref_={ref_} valeur={vehicule} type={type} site={site} onChange={(v) => ecrire({ vehicule: v })} />
       </div>
 
@@ -94,6 +87,8 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
             { key: "conforme", label: `Conformes (${fmtInt(n?.by_result.compliant ?? 0)})` },
             { key: "reserves", label: `Avec réserves (${fmtInt(n?.by_result.non_compliant ?? 0)})` },
             { key: "bloquant", label: `Bloquants (${fmtInt(bloquants)})` },
+            // Points bloquants ajoutés à la grille après la saisie : un contrôle complémentaire est attendu.
+            ...((n?.by_result.incomplete ?? 0) > 0 || resultat === "incomplet" ? [{ key: "incomplet" as const, label: `Incomplets (${fmtInt(n?.by_result.incomplete ?? 0)})` }] : []),
           ]}
         />
       </div>
@@ -142,6 +137,7 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
                     <span className="inline-flex flex-wrap items-center gap-1.5">
                       <Tampon mot={RESULTAT_CONTROLE[c.result]} />
                       {c.open_nonconformities > 0 && <Tag>{pluriel(c.open_nonconformities, "non-conformité ouverte", "non-conformités ouvertes")}</Tag>}
+                      {c.open_blocking > 0 && <Tampon mot={c.open_blocking > 1 ? `${fmtInt(c.open_blocking)} bloquantes` : "1 bloquante"} />}
                       {c.photos_missing && <PhotoManquante pluriel />}
                     </span>
                   ),

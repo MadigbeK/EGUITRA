@@ -65,6 +65,21 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
         </Notice>
       )}
       {c.photos_missing && <Notice tone="warn">Photos manquantes : au moins une non-conformité attend encore sa photo, envoyée par NIMOVA Terrain après le contrôle. La photo reste exigée.</Notice>}
+      {c.complement_of && (
+        <Notice>
+          Contrôle complémentaire de{" "}
+          <Link href={`/hsseq/controles?controle=${c.complement_of.id}`} className="font-semibold underline-offset-2 hover:underline">
+            {c.complement_of.reference}
+          </Link>
+          {" "}: il répond aux points ajoutés à la grille après la saisie du contrôle d&apos;origine.
+        </Notice>
+      )}
+      {c.awaiting_items.length > 0 && (
+        <Notice tone={c.awaiting_items.some((a) => a.blocking) ? "danger" : "warn"}>
+          {pluriel(c.awaiting_items.length, "point ajouté", "points ajoutés")} à la grille après la saisie, à répondre par un contrôle complémentaire dans NIMOVA Terrain
+          {c.awaiting_items.some((a) => a.blocking) ? " ; tant que les points bloquants n'ont pas de réponse, le départ reste retenu (motif V01)" : ""} : {c.awaiting_items.map((a) => `${a.label}${a.blocking ? " (bloquant)" : ""}`).join(", ")}.
+        </Notice>
+      )}
 
       <Definitions
         lignes={[
@@ -105,6 +120,22 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
           ))}
         </ol>
       </Rubrique>
+
+      {c.complements.length > 0 && (
+        <Rubrique titre={`Contrôles complémentaires (${c.complements.length})`}>
+          <ul className="divide-y divide-line overflow-hidden rounded-[12px] border border-line">
+            {c.complements.map((k) => (
+              <li key={k.id} className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-[13px]">
+                <Link href={`/hsseq/controles?controle=${k.id}`} className="font-semibold text-accent underline-offset-2 hover:underline">
+                  {k.reference}
+                </Link>
+                <span className="text-muted">{fmtDateTime(k.reported_at)}</span>
+                <Tampon mot={RESULTAT_CONTROLE[k.result]} />
+              </li>
+            ))}
+          </ul>
+        </Rubrique>
+      )}
 
       {c.nonconformities.length > 0 && (
         <Rubrique titre={`Non-conformités (${c.nonconformities.length})`}>

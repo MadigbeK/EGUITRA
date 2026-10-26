@@ -7,9 +7,9 @@ import { Button, Card, DataTable, ErrorBox, Etat, Notice, Segmented } from "@/co
 import { MotifCode, STATUT_NON_CONFORMITE, Tampon, nomRotation } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
 import { fmtDateTime, fmtInt, pluriel } from "@/lib/format";
-import type { Nonconformity, Page, Referentials } from "@/lib/hsseq-types";
+import type { Nonconformity, Page, Referentials, VehicleKind } from "@/lib/hsseq-types";
 import { Bascule, Pages, requete } from "@/components/hsseq/actions/outils";
-import { ChampSite, ChampVehicule, PhotoManquante, Vehicule } from "./elements";
+import { ChampProfil, ChampSite, ChampVehicule, PhotoManquante, TYPE_ADRESSE, Vehicule } from "./elements";
 import { LeverNonConformite } from "./Levee";
 
 /** Nombres servis avec la liste des non-conformités (§7). */
@@ -32,8 +32,9 @@ export function NonConformites({ ref_, lire, ecrire }: { ref_: Referentials | un
   const statut: FiltreStatut = (["levees", "toutes"] as string[]).includes(lire("statut")) ? (lire("statut") as FiltreStatut) : "ouvertes";
   const bloquantes = lire("bloquantes") === "1";
   const site = lire("site");
+  const type: VehicleKind | null = TYPE_ADRESSE[lire("type")] ?? null;
   const vehicule = lire("vehicule");
-  const filtres = { site_id: site || null, vehicle_id: vehicule || null };
+  const filtres = { site_id: site || null, vehicle_kind: type, vehicle_id: vehicule || null };
   const cle = `${requete(filtres)}|${statut}|${bloquantes}`;
   const [position, setPosition] = useState({ cle, offset: 0 });
   const offset = position.cle === cle ? position.offset : 0;
@@ -82,7 +83,8 @@ export function NonConformites({ ref_, lire, ecrire }: { ref_: Referentials | un
           Bloquantes seulement
         </Bascule>
         <ChampSite ref_={ref_} valeur={site} onChange={(v) => ecrire({ site: v, vehicule: null })} />
-        <ChampVehicule ref_={ref_} valeur={vehicule} site={site} onChange={(v) => ecrire({ vehicule: v })} />
+        <ChampProfil valeur={lire("type")} onChange={(v) => ecrire({ type: v, vehicule: null })} />
+        <ChampVehicule ref_={ref_} valeur={vehicule} type={type} site={site} onChange={(v) => ecrire({ vehicule: v })} />
       </div>
 
       <Card padded={false}>

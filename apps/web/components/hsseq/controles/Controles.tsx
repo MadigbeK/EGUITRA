@@ -20,12 +20,15 @@ const PARAMETRES_VUE = ["resultat", "statut", "bloquantes", "test", "annules", "
 /**
  * Contrôles (§3, §5) : contrôles avant départ réalisés, non-conformités et leur levée, alcootests.
  * Vue, filtres et fiche ouverte portés par l'adresse ; la fiche d'un contrôle s'ouvre à côté de la
- * liste depuis les contrôles comme depuis les non-conformités.
+ * liste depuis les contrôles comme depuis les non-conformités. L'auditeur externe ne lit pas les
+ * alcootests (le noyau les lui refuse) : l'onglet ne lui est pas montré.
  */
 export function Controles() {
   const { lire, ecrire } = useAdresse();
   const { data: ref } = useReferentiels();
-  const vue: Vue = (VUES as readonly string[]).includes(lire("vue")) ? (lire("vue") as Vue) : "controles";
+  const sansAlcootests = aProfil(ref, "auditeur") && !aProfil(ref, "admin", "direction", "hsseq", "exploitation");
+  const demandee = (VUES as readonly string[]).includes(lire("vue")) ? (lire("vue") as Vue) : "controles";
+  const vue: Vue = demandee === "alcootests" && sansAlcootests ? "controles" : demandee;
   const choisi = vue === "alcootests" ? null : Number(lire("controle")) || null;
   const { data: nc } = useApi<Page<Nonconformity, { open: number; blocking_open: number }>>("/hsseq/checks/nonconformities?status=open&limit=1");
 
@@ -48,7 +51,7 @@ export function Controles() {
         tabs={[
           { key: "controles", label: "Contrôles réalisés" },
           { key: "non-conformites", label: "Non-conformités", count: nc?.counts.open },
-          { key: "alcootests", label: "Alcootests" },
+          ...(sansAlcootests ? [] : [{ key: "alcootests" as const, label: "Alcootests" }]),
         ]}
       />
       <AvecFiche ouverte={choisi !== null} liste={liste} fiche={choisi !== null && <FicheControle key={choisi} id={choisi} onFermer={() => ecrire({ controle: null })} />} />

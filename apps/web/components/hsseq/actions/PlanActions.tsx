@@ -31,8 +31,8 @@ const PAR_PAGE = 50;
 
 /**
  * Plan d'actions : registre unique des actions correctives et préventives (§3, §9.2). Filtres et
- * fiche ouverte portés par l'adresse (statut, origine, responsable, site, echeance, retard=1, q,
- * evenement, action) ; onglets par statut avec leur nombre ; la fiche s'ouvre à côté de la liste.
+ * fiche ouverte portés par l'adresse (statut, origine, responsable, site, echeance, retard=1, valider=1,
+ * q, evenement, action) ; onglets par statut avec leur nombre ; la fiche s'ouvre à côté de la liste.
  * Venu d'un événement (evenement, passé au noyau en event_id), le registre montre toutes ses actions, closes comprises.
  */
 export function PlanActions() {
@@ -47,6 +47,7 @@ export function PlanActions() {
   const site = lire("site");
   const echeance = lire("echeance");
   const retard = lire("retard") === "1";
+  const aValider = lire("valider") === "1";
   const recherche = lire("q");
   const choisie = Number(lire("action")) || null;
 
@@ -57,6 +58,7 @@ export function PlanActions() {
     site_id: site || null,
     due_before: echeance || null,
     overdue: retard ? 1 : null,
+    approval_pending: aValider ? 1 : null,
     search: recherche || null,
     event_id: evenement,
   };
@@ -104,6 +106,11 @@ export function PlanActions() {
         <Bascule actif={retard} onChange={(v) => ecrire({ retard: v ? "1" : null })} nombre={compte?.counts.overdue}>
           En retard
         </Bascule>
+        {(aValider || (compte?.counts.approval_pending ?? 0) > 0) && (
+          <Bascule actif={aValider} onChange={(v) => ecrire({ valider: v ? "1" : null })} nombre={compte?.counts.approval_pending}>
+            À valider par la direction
+          </Bascule>
+        )}
         <Button
           className="ml-auto"
           loading={export_ === "en_cours"}
@@ -187,7 +194,8 @@ export function PlanActions() {
                     <span className="inline-flex flex-col items-start gap-1">
                       <Tampon mot={STATUT_ACTION[a.status]} />
                       {a.status === "to_verify" && a.verification_date && <span className="whitespace-nowrap text-[12px] text-muted">Vérification le {fmtDate(a.verification_date)}</span>}
-                      {a.approval_required && <Tampon mot="À valider" />}
+                      {a.effective !== null && <Tampon mot={a.effective ? "Efficace" : "Non efficace"} />}
+                      {a.approval_pending && <Tampon mot="À valider" />}
                     </span>
                   ),
                 },

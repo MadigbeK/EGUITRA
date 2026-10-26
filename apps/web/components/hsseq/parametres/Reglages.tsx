@@ -9,7 +9,7 @@ import type { HsseqSettings, HsseqSettingsPatch, IndicatorCode, Referentials } f
 import type { Me } from "@/lib/types";
 import { champsEnErreur, messageErreur } from "./outils";
 
-/** Cibles proposées par le contrat (§4), servies par le noyau tant qu'aucune n'est saisie. */
+/** Cibles proposées par le contrat (§4) et par le noyau au lot 2, servies tant qu'aucune n'est saisie. */
 const CIBLES_PROPOSEES: Record<IndicatorCode, number> = {
   frequency_rate: 5,
   severity_rate: 0.2,
@@ -27,6 +27,8 @@ const CIBLES_PROPOSEES: Record<IndicatorCode, number> = {
   co2_emissions: 1.18,
   tanker_shortage: 1.5,
   tipper_variance: 5,
+  audits_completion: 100,
+  immobilizations: 0,
 };
 
 type Dates = "lock_start_date" | "qualifications_required_from" | "employee_file_required_from" | "documents_required_from";

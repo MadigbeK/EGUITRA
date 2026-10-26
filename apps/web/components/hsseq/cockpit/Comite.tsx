@@ -4,26 +4,28 @@ import Link from "next/link";
 import { ArrowUpRight } from "@/components/icons";
 import { Badge, Card, Notice, Repartition, cx } from "@/components/ui";
 import { INDICATEUR, fmtCible, fmtIndicateur } from "@/components/hsseq/commun";
+import { useApi } from "@/lib/api-client";
 import { ETATS } from "@/lib/couleurs";
 import { MONTHS_FR, fmtDate, pluriel } from "@/lib/format";
 import type { Cockpit, Indicator } from "@/lib/hsseq-types";
+import type { Me } from "@/lib/types";
 import { LIEN } from "./ATraiter";
 import {
   MOT_ETAT,
-  PROACTIFS,
-  REACTIFS,
+  deLaFamille,
   etatIndicateur,
+  etatMois,
   fmtCase,
   fmtPrevu,
   indicateursMontres,
   lienIndicateur,
+  lienPermis,
   liens,
   moisComite,
   moisEnEcart,
   prevuMois,
   realiseMois,
   reference,
-  tient,
   tonEtatIndicateur,
   unite,
   type EtatIndicateur,
@@ -59,12 +61,13 @@ function listeMois(mois: string[]): string {
 /**
  * Comité mensuel HSSEQ, au format des donneurs d'ordre : santé globale des indicateurs (conformes,
  * sous surveillance, non conformes), points d'attention, puis indicateurs proactifs et réactifs,
- * prévu contre réalisé par mois, avec l'état de chacun. Tout vient de GET /hsseq/cockpit.
+ * prévu contre réalisé par mois, avec l'état de chacun. Tout vient de GET /hsseq/cockpit, états et
+ * familles compris ; le rapport mensuel de chaque donneur d'ordre se tire de « Rapport mensuel ».
  */
 export function ComiteMensuel({ c }: { c: Cockpit }) {
   const mois = moisComite(c);
-  const lignes: Ligne[] = indicateursMontres(c).map((i) => ({ i, ref: reference(i.code), etat: etatIndicateur(i, mois, c.period.type), ecarts: moisEnEcart(i, mois, c.period.type) }));
-  const parFamille = (codes: readonly string[]) => lignes.filter((l) => codes.includes(l.i.code)).sort((a, b) => codes.indexOf(a.i.code) - codes.indexOf(b.i.code));
+  const { data: me } = useApi<Me>("/auth/me");
+  const lignes: Ligne[] = indicateursMontres(c).map((i) => ({ i, ref: reference(i), etat: etatIndicateur(i), ecarts: moisEnEcart(i, mois) }));
   const compte = (e: EtatIndicateur) => lignes.filter((l) => l.etat === e).length;
   const attention = lignes.filter((l) => l.etat === "non_conforme" || l.etat === "surveillance").sort((a, b) => ORDRE.indexOf(a.etat) - ORDRE.indexOf(b.etat));
   const premier = mois[0];
@@ -73,9 +76,16 @@ export function ComiteMensuel({ c }: { c: Cockpit }) {
     <Card
       title="Comité mensuel"
       actions={
-        <Link href={liens.actions(c.filters, { origine: "review", statut: "toutes" })} className={LIEN}>
-          Actions décidées en revue de direction <ArrowUpRight className="h-3.5 w-3.5" />
-        </Link>
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {lienPermis("/hsseq/rapports", me?.profiles) && (
+            <Link href={`/hsseq/rapports?mois=${c.period.month}`} className={LIEN}>
+              Rapports des donneurs d&apos;ordre <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+          <Link href={liens.actions(c.filters, { origine: "review", statut: "toutes" })} className={LIEN}>
+            Actions décidées en revue de direction <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </span>
       }
     >
       <p className="max-w-[90ch] text-[13.5px] leading-relaxed text-ink-2">
@@ -94,7 +104,7 @@ export function ComiteMensuel({ c }: { c: Cockpit }) {
           </p>
           <Repartition parts={ORDRE.map((e) => ({ key: e, label: MOT_ETAT[e], value: compte(e), color: COULEUR_ETAT[e] }))} format={(v) => pluriel(v, "indicateur")} />
           <p className="mt-3 text-[12px] leading-snug text-muted">
-            Conforme : cible tenue sur la période et chaque mois affiché. Sous surveillance : cible tenue sur la période, manquée sur au moins un mois. Non conforme : cible manquée sur la période.
+            Conforme : cible tenue sur la période. Sous surveillance : à moins de 15 % de la cible, ou cible tenue sur 12 mois mais manquée le dernier mois. Non conforme : cible manquée de plus de 15 % (une cible nulle n&apos;a pas de marge).
           </p>
         </section>
 
@@ -104,25 +114,25 @@ export function ComiteMensuel({ c }: { c: Cockpit }) {
           </h3>
           {attention.length === 0 ? (
             <div className="mt-3">
-              <Notice tone="ok">Tous les indicateurs suivis tiennent leur cible sur la période et sur chaque mois affiché.</Notice>
+              <Notice tone="ok">Tous les indicateurs suivis tiennent leur cible sur la période.</Notice>
             </div>
           ) : (
             <ul className="mt-2 divide-y divide-line/80">
               {attention.map((l) => (
-                <PointAttention key={l.i.code} l={l} c={c} nbMois={mois.length} />
+                <PointAttention key={l.i.code} l={l} c={c} nbMois={mois.length} permis={(href) => lienPermis(href, me?.profiles)} />
               ))}
             </ul>
           )}
         </section>
       </div>
 
-      <TableFamille titre="3. Indicateurs proactifs" sousTitre="Ce que l'on fait pour prévenir : contrôles, alcootests, déclaration, actions, habilitations." id="comite-proactifs" lignes={parFamille(PROACTIFS)} mois={mois} c={c} />
-      <TableFamille titre="4. Indicateurs réactifs" sousTitre="Ce que l'on constate : accidents, gravité, positifs, dérogations, consommation, écarts de produit." id="comite-reactifs" lignes={parFamille(REACTIFS)} mois={mois} c={c} />
+      <TableFamille titre="3. Indicateurs proactifs" sousTitre="Ce que l'on fait pour prévenir : contrôles, alcootests, déclaration, actions, habilitations, audits." id="comite-proactifs" lignes={deLaFamille(lignes, "proactive")} mois={mois} c={c} />
+      <TableFamille titre="4. Indicateurs réactifs" sousTitre="Ce que l'on constate : accidents, gravité, positifs, dérogations, immobilisations, consommation, écarts de produit." id="comite-reactifs" lignes={deLaFamille(lignes, "reactive")} mois={mois} c={c} />
 
       <details className="group mt-6 border-t border-line pt-4">
         <summary className="cursor-pointer text-[13px] font-semibold text-accent outline-offset-2">Définitions, formules et sources</summary>
         <dl className="mt-4 grid gap-x-8 gap-y-3 text-[12.5px] leading-snug sm:grid-cols-2">
-          {[...parFamille(PROACTIFS), ...parFamille(REACTIFS)].map(({ i, ref }) => (
+          {[...deLaFamille(lignes, "proactive"), ...deLaFamille(lignes, "reactive")].map(({ i, ref }) => (
             <div key={i.code}>
               <dt className="font-semibold text-ink">
                 <span className="font-mono text-muted">{ref}</span> {i.label || INDICATEUR[i.code]}
@@ -138,9 +148,10 @@ export function ComiteMensuel({ c }: { c: Cockpit }) {
   );
 }
 
-function PointAttention({ l, c, nbMois }: { l: Ligne; c: Cockpit; nbMois: number }) {
+function PointAttention({ l, c, nbMois, permis }: { l: Ligne; c: Cockpit; nbMois: number; permis: (href: string) => boolean }) {
   const { i } = l;
-  const lienListe = lienIndicateur(i, c);
+  const lien = lienIndicateur(i, c);
+  const lienListe = lien && permis(lien.href) ? lien : null;
   return (
     <li className="py-3">
       <div className="flex items-start justify-between gap-3">
@@ -151,8 +162,10 @@ function PointAttention({ l, c, nbMois }: { l: Ligne; c: Cockpit; nbMois: number
         <Badge tone={tonEtatIndicateur(l.etat)}>{MOT_ETAT[l.etat]}</Badge>
       </div>
       <p className="mt-1 text-[12.5px] leading-snug text-muted">
-        {l.etat === "non_conforme" ? `Réalisé ${fmtIndicateur(i.value, i.unit)} pour une cible ${fmtCible(i.target, i.unit, i.direction)} sur la période` : `Cible tenue sur la période (${fmtIndicateur(i.value, i.unit)})`}
-        {l.ecarts.length > 0 ? ` ; écart sur ${l.ecarts.length} mois sur ${nbMois} : ${listeMois(l.ecarts)}.` : "."}
+        {i.met === false
+          ? `Réalisé ${fmtIndicateur(i.value, i.unit)} pour une cible ${fmtCible(i.target, i.unit, i.direction)} sur la période${l.etat === "surveillance" ? ", à moins de 15 % de la cible" : ""}`
+          : `Cible tenue sur la période (${fmtIndicateur(i.value, i.unit)}), manquée le dernier mois`}
+        {l.ecarts.length > 0 ? ` ; écart sur ${l.ecarts.length} mois sur ${nbMois} : ${listeMois(l.ecarts).replace(/\.?$/, ".")}` : "."}
       </p>
       {lienListe && (
         <Link href={lienListe.href} className={cx(LIEN, "mt-1")}>
@@ -189,7 +202,7 @@ function TableFamille({ titre, sousTitre, id, lignes, mois, c }: { titre: string
         <div role="region" aria-label={`Tableau : ${titre.replace(/^\d+\.\s*/, "")}`} tabIndex={0} className="mt-3 overflow-x-auto rounded-xl border border-line outline-offset-2">
           <table className="w-full min-w-[760px] border-collapse text-[13px]">
             <caption className="sr-only">
-              {titre} : prévu par mois, réalisé de chaque mois, réalisé de la période et état. Une case marquée d&apos;un losange manque le prévu.
+              {titre} : prévu par mois, réalisé de chaque mois, réalisé de la période et état. Une case marquée d&apos;un losange manque la cible ; une case en orange en est à moins de 15 %.
             </caption>
             <thead>
               <tr className="border-b border-line bg-panel-2 text-[12px] font-semibold text-muted">
@@ -231,16 +244,16 @@ function TableFamille({ titre, sousTitre, id, lignes, mois, c }: { titre: string
                     </th>
                     <td className="whitespace-nowrap px-3 py-2.5 text-right text-ink-2">{fmtPrevu(prevu, i.unit, i.direction)}</td>
                     {mois.map((m) => {
-                      const v = realiseMois(i, m);
-                      const ecart = tient(v, prevu, i.direction) === false;
+                      const etatCase = etatMois(i, m);
                       return (
-                        <td key={m} className={cx("whitespace-nowrap px-2 py-2.5 text-right", m === c.period.month && "bg-accent-doux/30", ecart ? "font-semibold text-danger" : "text-ink")}>
-                          {ecart && <Ecart />}
-                          {fmtCase(v, i.unit)}
+                        <td key={m} className={cx("whitespace-nowrap px-2 py-2.5 text-right", m === c.period.month && "bg-accent-doux/30", etatCase === "missed" ? "font-semibold text-danger" : etatCase === "watch" ? "font-medium text-warn" : "text-ink")}>
+                          {etatCase === "missed" && <Ecart />}
+                          {etatCase === "watch" && <span className="sr-only">à surveiller : </span>}
+                          {fmtCase(realiseMois(i, m), i.unit)}
                         </td>
                       );
                     })}
-                    <td className={cx("whitespace-nowrap border-l border-line px-3 py-2.5 text-right font-semibold", i.met === false ? "text-danger" : "text-ink")}>{fmtCase(i.value, i.unit)}</td>
+                    <td className={cx("whitespace-nowrap border-l border-line px-3 py-2.5 text-right font-semibold", i.status === "missed" ? "text-danger" : i.status === "watch" ? "text-warn" : "text-ink")}>{fmtCase(i.value, i.unit)}</td>
                     <td className="px-3 py-2.5 pr-4">
                       <Badge tone={tonEtatIndicateur(etat)}>{MOT_ETAT[etat]}</Badge>
                     </td>

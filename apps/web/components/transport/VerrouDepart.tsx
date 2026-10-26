@@ -21,6 +21,8 @@ import useSWR from "swr";
 import { BadgeCheck, Bell, CheckCircle2, Clock, Lock, RefreshCw, Truck } from "@/components/icons";
 import { Button, ErrorBox, Field, Loading, Modal, Notice, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { HORS_VERROU, STATUT_DEROGATION, TYPE_VEHICULE, Tampon, nomRotation } from "@/components/hsseq/commun";
+import { PlanTrajet } from "@/components/hsseq/trajets/PlanTrajet";
+import { Repesee } from "@/components/hsseq/trajets/Repesee";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { fmtDateTime, pluriel } from "@/lib/format";
 import type { Departure, DepartureBlocked, LockEvaluation, LockReason, NewWaiver, Page, ReasonCode, TransportBlocker, Waiver } from "@/lib/hsseq-types";
@@ -110,6 +112,8 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
   const [info, setInfo] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
   const [demande, setDemande] = useState(false);
+  // Plan de trajet (V08) et repesée (V07) : montés à la première apparition du motif, gardés pour la séance.
+  const [vus, setVus] = useState({ plan: false, pesee: false });
   const titreRefus = useRef<HTMLHeadingElement>(null);
   const commandes = useRef<HTMLDivElement>(null);
 
@@ -133,6 +137,10 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
   }
 
   const lignes = derogations.data?.items ?? [];
+  const v07 = evaluation.reasons.find((r) => r.code === "V07") ?? null;
+  const v08 = evaluation.reasons.some((r) => r.code === "V08");
+  // La levée reste lisible après la nouvelle vérification : le composant reste monté une fois paru.
+  if ((v08 && !vus.plan) || (v07 && !vus.pesee)) setVus({ plan: vus.plan || v08, pesee: vus.pesee || Boolean(v07) });
   const enService = evaluation.lock_active !== false;
   const avis = avertissements(evaluation);
   const attente = (code: string) => lignes.find((w) => w.reason_code === code && w.status === "pending_hsseq");
@@ -280,6 +288,9 @@ export function VerrouDepart({ rotationId, depart, onChange, onEvaluation, onPar
           {pluriel(referentiels?.breath_test_window_hours ?? FENETRES.breath_test_window_hours, "heure")} pour l&apos;alcootest du conducteur. Vérifiez à nouveau une fois les saisies faites.
         </Notice>
       )}
+
+      {!parti && vus.plan && <PlanTrajet rotationId={rotationId} onChange={() => void reverifier()} />}
+      {!parti && vus.pesee && <Repesee rotationId={rotationId} vehiculeId={depart?.vehicle.id} motif={v07} onPesee={(r) => void lu.mutate(r.lock, { revalidate: false })} />}
 
       <DerogationsRotation
         id={`derogations-${rotationId}`}

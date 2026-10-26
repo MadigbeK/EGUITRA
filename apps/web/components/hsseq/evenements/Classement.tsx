@@ -60,6 +60,12 @@ function Lecture({ e, referentiels }: { e: Evenement; referentiels?: Referential
           <Ligne terme="Gravité réelle" valeur={e.actual_severity ?? "–"} />
           <Ligne terme="Gravité potentielle" valeur={e.potential_severity ?? "–"} />
           <Ligne terme="Probabilité" valeur={e.probability ?? "–"} />
+          {e.declared?.potential_severity && e.declared.probability && (
+            <Ligne
+              terme="Estimation du déclarant"
+              valeur={`Gravité réelle ${e.declared.actual_severity ?? "–"}, potentielle ${e.declared.potential_severity}, probabilité ${e.declared.probability} : criticité ${e.declared.criticality ?? e.declared.potential_severity * e.declared.probability}`}
+            />
+          )}
           <Ligne terme="Arrêt de travail" valeur={e.lost_time ? `Oui, ${fmtInt(e.days_lost)} jours perdus` : "Non"} />
           <Ligne terme="Véhicule immobilisé" valeur={e.vehicle_immobilized ? "Oui" : "Non"} />
           {e.classified_at && <Ligne terme="Classé le" valeur={`${fmtJourHeure(e.classified_at)}${e.classified_by ? `, par ${e.classified_by.name}` : ""}`} />}

@@ -1,15 +1,17 @@
 /**
- * Outils du cockpit HSSEQ : filtres lus dans l'adresse, liens vers les listes, familles des
- * indicateurs (proactifs et réactifs, au format du comité des donneurs d'ordre), prévu et réalisé par
- * mois, état d'un indicateur pour le comité.
+ * Outils du cockpit HSSEQ : filtres lus dans l'adresse, liens vers les listes, ordre des indicateurs
+ * dans leur famille (proactifs et réactifs, au format du comité des donneurs d'ordre), prévu et
+ * réalisé par mois, état d'un indicateur pour le comité.
  *
- * Les données viennent toutes de GET /hsseq/cockpit (contrat, §4) ; rien n'est inventé ici. Deux
- * règles sont propres à l'écran, en attendant des champs du noyau (voir le rapport de la session) :
- * le prévu d'un mois (la cible, ramenée au mois pour un nombre sur 12 mois) et l'état « Sous
- * surveillance » (cible tenue sur la période, manquée sur au moins un des mois affichés).
+ * Les données viennent toutes de GET /hsseq/cockpit (contrat, §4) ; rien n'est inventé ici : la
+ * famille d'un indicateur, son état et celui de chaque mois sont servis par le noyau (`family`,
+ * `status`). Une seule règle est propre à l'écran : le prévu d'un mois, la cible ramenée au mois pour
+ * un nombre sur 12 mois glissants.
  */
 
-import type { Cockpit, CockpitPeriod, Indicator, IndicatorCode, IndicatorUnit, VehicleKind } from "@/lib/hsseq-types";
+import type { Cockpit, CockpitPeriod, Indicator, IndicatorCode, IndicatorFamily, IndicatorStatus, IndicatorUnit, VehicleKind } from "@/lib/hsseq-types";
+import type { Profile } from "@/lib/types";
+import { NAV } from "@/lib/nav";
 import { INSECABLE, fmtFixe, fmtInt, fmtRatio } from "@/lib/format";
 import type { TonEtat } from "@/lib/couleurs";
 import { tonHsseq } from "@/components/hsseq/commun";
@@ -94,19 +96,28 @@ export function moisLong(mois: string): string {
 /* ─── Familles du comité ──────────────────────────────────────────────── */
 
 /**
- * Indicateurs proactifs : ce que l'on fait pour prévenir (contrôles, alcootests, déclaration des
- * presque-accidents, actions, habilitations). Réactifs : ce que l'on constate (accidents, gravité,
- * positifs, dérogations, consommation, écarts de produit). Ordre fixe : il donne les références P1…, R1….
+ * Ordre des indicateurs dans leur famille, servie par le noyau (`family`). Proactifs : ce que l'on fait
+ * pour prévenir (contrôles, alcootests, déclaration des presque-accidents, actions, habilitations,
+ * audits). Réactifs : ce que l'on constate (accidents, gravité, positifs, dérogations, immobilisations,
+ * consommation, écarts de produit). L'ordre donne les références P1…, R1… ; les codes du lot 2 sont
+ * ajoutés en fin de liste pour garder les références du lot 1.
  */
-export const PROACTIFS: readonly IndicatorCode[] = ["check_completion", "check_compliance", "breath_test_completion", "reporting_ratio", "actions_on_time", "actions_effectiveness", "qualifications_valid"];
-export const REACTIFS: readonly IndicatorCode[] = ["frequency_rate", "severity_rate", "road_accidents_per_mkm", "breath_test_positives", "waivers", "fuel_consumption", "co2_emissions", "tanker_shortage", "tipper_variance"];
+export const ORDRE_FAMILLE: Record<IndicatorFamily, readonly IndicatorCode[]> = {
+  proactive: ["check_completion", "check_compliance", "breath_test_completion", "reporting_ratio", "actions_on_time", "actions_effectiveness", "qualifications_valid", "audits_completion"],
+  reactive: ["frequency_rate", "severity_rate", "road_accidents_per_mkm", "breath_test_positives", "waivers", "fuel_consumption", "co2_emissions", "tanker_shortage", "tipper_variance", "immobilizations"],
+};
 
-/** Référence d'un indicateur dans le comité : « P3 », « R1 ». */
-export function reference(code: IndicatorCode): string {
-  const p = PROACTIFS.indexOf(code);
-  if (p >= 0) return `P${p + 1}`;
-  const r = REACTIFS.indexOf(code);
-  return r >= 0 ? `R${r + 1}` : "–";
+/** Référence d'un indicateur dans le comité : « P3 », « R1 » ; « – » pour un code inconnu de l'écran. */
+export function reference(i: Pick<Indicator, "code" | "family">): string {
+  const rang = ORDRE_FAMILLE[i.family].indexOf(i.code);
+  return rang >= 0 ? `${i.family === "proactive" ? "P" : "R"}${rang + 1}` : "–";
+}
+
+/** Indicateurs d'une famille, dans l'ordre du comité ; un code inconnu de l'écran passe en fin. */
+export function deLaFamille<T extends { i: Indicator }>(lignes: T[], famille: IndicatorFamily): T[] {
+  const ordre = ORDRE_FAMILLE[famille];
+  const rang = (code: IndicatorCode) => (ordre.includes(code) ? ordre.indexOf(code) : ordre.length);
+  return lignes.filter((l) => l.i.family === famille).sort((a, b) => rang(a.i.code) - rang(b.i.code));
 }
 
 /** Indicateurs calculés sur 12 mois glissants, même quand le cockpit montre un mois (contrat, §4). */
@@ -163,21 +174,19 @@ export function prevuMois(i: Indicator, periode: CockpitPeriod): number | null {
   return periode === "12m" && i.unit === "count" ? i.target / 12 : i.target;
 }
 
-/** Valeur tenant sa cible selon le sens favorable ; nul sans valeur ou sans cible. */
-export function tient(valeur: number | null | undefined, cible: number | null, sens: "up" | "down"): boolean | null {
-  if (valeur === null || valeur === undefined || cible === null) return null;
-  return sens === "down" ? valeur <= cible : valeur >= cible;
-}
-
 /** Réalisé d'un mois, tiré de la série. */
 export function realiseMois(i: Indicator, mois: string): number | null {
   return i.series.find((p) => p.month === mois)?.value ?? null;
 }
 
-/** Mois affichés où le réalisé manque le prévu. */
-export function moisEnEcart(i: Indicator, mois: string[], periode: CockpitPeriod): string[] {
-  const prevu = prevuMois(i, periode);
-  return mois.filter((m) => tient(realiseMois(i, m), prevu, i.direction) === false);
+/** État d'un mois de la série, servi par le noyau. */
+export function etatMois(i: Indicator, mois: string): IndicatorStatus {
+  return i.series.find((p) => p.month === mois)?.status ?? "no_data";
+}
+
+/** Mois affichés où le réalisé manque la cible (état « missed » du noyau). */
+export function moisEnEcart(i: Indicator, mois: string[]): string[] {
+  return mois.filter((m) => etatMois(i, m) === "missed");
 }
 
 /* ─── État pour le comité ─────────────────────────────────────────────── */
@@ -196,15 +205,15 @@ export function tonEtatIndicateur(e: EtatIndicateur): TonEtat {
   return tonHsseq(MOT_ETAT[e], e === "surveillance" ? "warn" : "neutral");
 }
 
+const ETAT_DU_NOYAU: Record<IndicatorStatus, EtatIndicateur> = { met: "conforme", watch: "surveillance", missed: "non_conforme", no_data: "sans_donnee" };
+
 /**
- * Conforme : cible tenue sur la période (`met` du noyau) et sur chacun des mois affichés. Sous
- * surveillance : tenue sur la période, manquée sur au moins un mois. Non conforme : manquée sur la
- * période. Sans donnée : pas de valeur ou pas de cible.
+ * État d'un indicateur sur la période, servi par le noyau (`status`, contrat §4) : conforme, sous
+ * surveillance (à moins de 15 % de la cible, ou tenue sur 12 mois mais manquée le dernier mois), non
+ * conforme, sans donnée.
  */
-export function etatIndicateur(i: Indicator, mois: string[], periode: CockpitPeriod): EtatIndicateur {
-  if (i.met === null) return "sans_donnee";
-  if (!i.met) return "non_conforme";
-  return moisEnEcart(i, mois, periode).length ? "surveillance" : "conforme";
+export function etatIndicateur(i: Indicator): EtatIndicateur {
+  return ETAT_DU_NOYAU[i.status] ?? "sans_donnee";
 }
 
 /* ─── Écriture ────────────────────────────────────────────────────────── */
@@ -254,7 +263,17 @@ export function unite(i: Indicator): string {
 /* ─── Liens des indicateurs ───────────────────────────────────────────── */
 
 /**
- * Liste qui détaille un indicateur, quand elle existe au lot 1. Un indicateur qui ignore le site
+ * Lien ouvert au compte : l'écran visé est au menu de HSSEQ pour l'un de ses profils (l'auditeur ne lit
+ * pas les habilitations, le chef de parc pas le rapport mensuel). Un écran hors du menu reste permis.
+ */
+export function lienPermis(href: string, profils: readonly Profile[] | undefined): boolean {
+  const chemin = href.split("?")[0];
+  const entree = NAV.hsseq.flatMap((s) => s.items).find((x) => x.href === chemin);
+  return !entree?.profiles || !profils || entree.profiles.some((p) => profils.includes(p));
+}
+
+/**
+ * Liste qui détaille un indicateur, quand elle existe. Un indicateur qui ignore le site
  * (TF, TG : heures de RH par société) mène à la liste de toute la société ; un indicateur sur 12 mois
  * glissants, aux douze mois.
  */
@@ -283,6 +302,12 @@ export function lienIndicateur(i: Indicator, c: Cockpit): { href: string; label:
       return { href: liens.actions(p, { retard: 1 }), label: "Actions en retard" };
     case "actions_effectiveness":
       return { href: liens.actions(p, { statut: "a_verifier" }), label: "Vérifications d'efficacité" };
+    case "qualifications_valid":
+      return { href: "/hsseq/habilitations", label: "Habilitations" };
+    case "audits_completion":
+      return { href: "/hsseq/conformite", label: "Programme d'audits" };
+    case "immobilizations":
+      return { href: "/hsseq/immobilisations", label: "Immobilisations" };
     default:
       return null;
   }

@@ -22,6 +22,7 @@ import { Couts } from "./Couts";
 import { Enquete, OuvrirEnquete, enqueteOuverte } from "./Enquete";
 import { Resume } from "./Resume";
 import { ActionsLiees, Journal, Notifications } from "./Suivi";
+import { BoutonImmobiliser, ImmobilisationEvenement } from "@/components/hsseq/immobilisations/BoutonImmobiliser";
 
 type Onglet = "resume" | "classement" | "enquete" | "actions" | "couts" | "notifications" | "journal";
 const ONGLETS: readonly Onglet[] = ["resume", "classement", "enquete", "actions", "couts", "notifications", "journal"];
@@ -171,6 +172,8 @@ export function FicheEvenement({ id }: { id: string }) {
                 <RotateCcw className="h-4 w-4" /> Rouvrir
               </Button>
             )}
+            {/* Immobilisation du véhicule (V09) : la réponse est l'immobilisation, la fiche se relit. */}
+            <BoutonImmobiliser evenement={ev} onImmobilise={() => void mutate()} />
             {ev.rights.can_edit && (
               <Button onClick={() => setCorriger(true)}>
                 <Pencil className="h-4 w-4" /> Corriger la déclaration
@@ -186,6 +189,11 @@ export function FicheEvenement({ id }: { id: string }) {
         {refus && (
           <div className="mt-4">
             <Notice tone="danger">{refus}</Notice>
+          </div>
+        )}
+        {(ev.immobilization || ev.immobilization_proposed) && (
+          <div className="mt-4">
+            <ImmobilisationEvenement evenement={ev} />
           </div>
         )}
       </section>

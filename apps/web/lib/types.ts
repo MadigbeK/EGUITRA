@@ -14,7 +14,9 @@ export type Profile =
   /** Responsable HSSEQ : administration du module, enquêtes, dérogations, détail des alcootests. */
   | "hsseq"
   /** Conducteur : le téléphone seul (Rotations), sans accès à l'application web HSSEQ. */
-  | "conducteur";
+  | "conducteur"
+  /** Auditeur externe : NIMOVA · HSSEQ en lecture seule, sur ses sites et jusqu'à sa date de fin d'accès. */
+  | "auditeur";
 
 export interface Company {
   id: number;

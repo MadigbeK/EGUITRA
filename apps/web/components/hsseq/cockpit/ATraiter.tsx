@@ -14,8 +14,8 @@ import { liens, type Perimetre } from "./outils";
 /** Lien discret d'une carte vers sa liste. */
 export const LIEN = "no-print inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline";
 
-/** Grand chiffre d'une carte « à traiter », puis sa phrase. */
-function Chiffre({ valeur, ton, children }: { valeur: number; ton?: "danger" | "warn"; children: ReactNode }) {
+/** Grand chiffre d'une carte du cockpit, puis sa phrase. */
+export function Chiffre({ valeur, ton, children }: { valeur: number; ton?: "danger" | "warn"; children: ReactNode }) {
   return (
     <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
       <span className={cx("font-display text-[34px] font-[650] leading-none tracking-[-0.03em] tabular", valeur > 0 && ton === "danger" ? "text-danger" : valeur > 0 && ton === "warn" ? "text-warn" : "text-ink")}>{fmtInt(valeur)}</span>
@@ -78,6 +78,8 @@ function CodeMotif({ r }: { r: LockReason }) {
 
 function DepartsDuJour({ c }: { c: Cockpit }) {
   const d = c.blocked_departures;
+  // L'auditeur reçoit les comptes sans les lignes (noms des conducteurs) : pas de partage bloqué / à contrôler.
+  const sansDetail = d.blocked > 0 && d.items.length === 0;
   const aControler = d.items.filter((x) => x.pending_checks_only).length;
   const bloques = d.blocked - aControler;
   const [tout, setTout] = useState(false);
@@ -107,15 +109,19 @@ function DepartsDuJour({ c }: { c: Cockpit }) {
             <span className="inline-flex items-center gap-1.5">
               <Tampon mot="Bloqué" /> <span className="tabular">{fmtInt(bloques)}</span>
             </span>
-            <span className="inline-flex items-center gap-1.5">
-              <Tampon mot="À contrôler" /> <span className="tabular">{fmtInt(aControler)}</span>
-            </span>
+            {!sansDetail && (
+              <span className="inline-flex items-center gap-1.5">
+                <Tampon mot="À contrôler" /> <span className="tabular">{fmtInt(aControler)}</span>
+              </span>
+            )}
             <span className="inline-flex items-center gap-1.5">
               <Tampon mot="Autorisé" /> <span className="tabular">{fmtInt(d.allowed)}</span>
             </span>
           </p>
-          <p className="mt-2 text-[12px] leading-snug text-muted">« À contrôler » : seuls le contrôle avant départ ou l&apos;alcootest restent à saisir au terrain.</p>
-          {d.items.length > 0 ? (
+          <p className="mt-2 text-[12px] leading-snug text-muted">
+            {sansDetail ? "Le détail des départs bloqués, qui nomme les conducteurs, n'est pas servi à votre profil." : "« À contrôler » : seuls le contrôle avant départ ou l'alcootest restent à saisir au terrain."}
+          </p>
+          {sansDetail ? null : d.items.length > 0 ? (
             <ul className="mt-4 divide-y divide-line/80 border-t border-line/80">
               {montres.map((x) => (
                 <LigneDepart key={x.rotation.id} x={x} c={c} />

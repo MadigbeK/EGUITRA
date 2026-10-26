@@ -114,12 +114,38 @@ const TON_HSSEQ: Readonly<Record<string, TonEtat>> = {
   // Actions.
   "À faire": "neutral",
   "À vérifier": "warn",
+  // Audits et conformité (lot 2).
+  "Écart majeur": "danger",
+  "Écart mineur": "warn",
+  Observation: "neutral",
+  Planifié: "neutral",
+  Réalisé: "neutral",
+  Ouvert: "warn",
+  "Sans action": "warn",
+  "Partiellement conforme": "warn",
+  "Non évalué": "neutral",
+  "Revue en retard": "danger",
+  // Immobilisations, plans de trajet, pesées (lot 2).
+  Immobilisé: "danger",
+  "Remis en service": "ok",
+  "À établir": "warn",
+  Surcharge: "danger",
+  // Rapport mensuel et alertes d'échéance (lot 2).
+  Validé: "ok",
+  "J-7": "warn",
+  "J-30": "neutral",
+  // Registre des risques (lot 2).
+  "À évaluer": "warn",
+  "Revue échue": "danger",
+  "En place": "ok",
+  "À revoir": "warn",
   Close: "neutral",
   "En retard": "danger",
   Efficace: "ok",
   "Non efficace": "danger",
   // Contrôles, non-conformités, alcootests.
   "Avec réserves": "warn",
+  Incomplet: "warn",
   "Non conforme": "danger",
   Ouverte: "warn",
   Levée: "ok",
@@ -393,6 +419,7 @@ export const RESULTAT_CONTROLE: Record<CheckResult, string> = {
   compliant: "Conforme",
   non_compliant: "Avec réserves",
   blocking: "Bloquant",
+  incomplete: "Incomplet",
 };
 
 export const REPONSE_POINT: Record<CheckAnswerValue, string> = {
@@ -481,6 +508,8 @@ export const INDICATEUR: Record<IndicatorCode, string> = {
   co2_emissions: "Émissions de CO₂",
   tanker_shortage: "Écarts de livraison, citernes",
   tipper_variance: "Écarts de tonnage, bennes",
+  audits_completion: "Audits réalisés contre planifiés",
+  immobilizations: "Immobilisations de véhicules",
 };
 
 const SUFFIXE: Record<IndicatorUnit, string> = {

@@ -11,8 +11,9 @@ import { messageErreur } from "./outils";
 
 /**
  * Motifs du verrou de départ (§4.2) : activation de chaque motif et sites où il ne s'applique pas.
- * V01 et V03 ne se dérogent jamais ; V06 à V09 sont déclarés pour le lot 2 et ne s'activent pas
- * encore (refus `not_in_lot_1`). Le noyau évalue le verrou à chaque départ, sans contournement.
+ * V01 et V03 ne se dérogent jamais. V06 à V09 (lot 2) sont livrés désactivés : l'administration ou le
+ * Responsable HSSEQ les activent par type de véhicule et par site. Le noyau évalue le verrou à chaque
+ * départ, sans contournement.
  */
 export function Motifs() {
   const { data, error, mutate } = useApi<ReasonSetting[]>("/hsseq/lock/reasons");
@@ -94,7 +95,7 @@ export function Motifs() {
                     <span className={cx("text-[13px]", r.disabled_sites.length ? "font-medium text-ink" : "text-ink-2")}>
                       {r.disabled_sites.length ? `Hors ${r.disabled_sites.map((x) => x.name).join(", ")}` : "Tous les sites"}
                     </span>
-                    {r.lot === 1 && (
+                    {r.lot <= 2 && (
                       <Button variant="ghost" size="sm" className="-ml-2.5" onClick={() => setParSite(r)} disabled={!sites} aria-label={`Sites du motif ${r.code}`}>
                         <MapPin className="h-3.5 w-3.5" /> Par site
                       </Button>
@@ -107,9 +108,9 @@ export function Motifs() {
                 label: "Activation",
                 sortValue: (r) => (r.active ? 0 : 1),
                 render: (r) =>
-                  r.lot === 2 ? (
+                  r.lot > 2 ? (
                     <span className="inline-flex items-center gap-2 text-[12.5px] text-muted">
-                      <Tag>Lot 2</Tag> non évalué
+                      <Tag>Lot {r.lot}</Tag> non évalué
                     </span>
                   ) : (
                     <Interrupteur actif={r.active} occupe={enCours === r.code} nom={`Motif ${r.code} actif`} onBasculer={() => void basculer(r)} />

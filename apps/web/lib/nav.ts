@@ -31,6 +31,8 @@ export const RH_GESTION: Profile[] = ["admin", "direction", "rh"];
  * et l'exploitation (chef de parc). Le conducteur n'y entre pas : il passe par le téléphone.
  */
 export const HSSEQ: Profile[] = ["admin", "direction", "hsseq", "exploitation"];
+/** Lecture de l'auditeur externe (lot 2), en plus : le noyau borne ses réponses à ses sites et refuse toute écriture. */
+const HSSEQ_LECTURE: Profile[] = [...HSSEQ, "auditeur"];
 
 /** Navigation par application ; chaque entrée n'apparaît qu'aux profils listés (offre, chapitre 3.4). */
 export const NAV: Record<AppCode, NavSection[]> = {
@@ -214,16 +216,29 @@ export const NAV: Record<AppCode, NavSection[]> = {
   hsseq: [
     {
       label: "Pilotage",
-      items: [{ href: "/hsseq", label: "Cockpit", icon: "LayoutDashboard", profiles: HSSEQ }],
+      items: [
+        { href: "/hsseq", label: "Cockpit", icon: "LayoutDashboard", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/rapports", label: "Rapport mensuel", icon: "FileText", profiles: ["admin", "direction", "hsseq"] },
+      ],
     },
     {
       label: "Maîtrise des risques",
       items: [
-        { href: "/hsseq/evenements", label: "Événements", icon: "ShieldAlert", profiles: HSSEQ },
+        { href: "/hsseq/evenements", label: "Événements", icon: "ShieldAlert", profiles: HSSEQ_LECTURE },
         // Tout compte interne responsable d'une action la met à jour, droits renvoyés par la fiche.
-        { href: "/hsseq/actions", label: "Plan d'actions", icon: "ListChecks", profiles: HSSEQ },
-        { href: "/hsseq/controles", label: "Contrôles", icon: "ShieldCheck", profiles: HSSEQ },
-        { href: "/hsseq/derogations", label: "Dérogations", icon: "BadgeCheck", profiles: HSSEQ },
+        { href: "/hsseq/actions", label: "Plan d'actions", icon: "ListChecks", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/risques", label: "Registre des risques", icon: "Target", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/controles", label: "Contrôles", icon: "ShieldCheck", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/derogations", label: "Dérogations", icon: "BadgeCheck", profiles: HSSEQ_LECTURE },
+        { href: "/hsseq/immobilisations", label: "Immobilisations", icon: "Lock", profiles: HSSEQ_LECTURE },
+      ],
+    },
+    {
+      label: "Personnel et conformité",
+      items: [
+        // Habilitations : pas l'auditeur (le noyau les sert à l'administration, à la direction, à HSSEQ et au chef de parc).
+        { href: "/hsseq/habilitations", label: "Habilitations", icon: "UserCog", profiles: HSSEQ },
+        { href: "/hsseq/conformite", label: "Audits et conformité", icon: "ScrollText", profiles: HSSEQ_LECTURE },
       ],
     },
     {

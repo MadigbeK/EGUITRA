@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { ArrowUpRight } from "@/components/icons";
 import { Kpi } from "@/components/ui";
-import { INDICATEUR, TYPE_VEHICULE, fmtCible, fmtIndicateur, tonIndicateur } from "@/components/hsseq/commun";
-import type { Cockpit, Indicator } from "@/lib/hsseq-types";
-import { GLISSANTS, SANS_OBJET_LOT1, indicateursMontres, lienIndicateur } from "./outils";
+import { INDICATEUR, TYPE_VEHICULE, fmtCible, fmtIndicateur } from "@/components/hsseq/commun";
+import { useApi } from "@/lib/api-client";
+import type { TonEtat } from "@/lib/couleurs";
+import type { Cockpit, Indicator, IndicatorStatus } from "@/lib/hsseq-types";
+import type { Me } from "@/lib/types";
+import { GLISSANTS, SANS_OBJET_LOT1, indicateursMontres, lienIndicateur, lienPermis } from "./outils";
 import { LIEN } from "./ATraiter";
 
 /**
@@ -20,6 +23,7 @@ const REGISTRE = "grid grid-cols-2 gap-4 lg:grid-cols-4 max-sm:[&_.kpi]:px-3.5 m
  * indicateur sans objet pour le profil choisi (écart benne sur les citernes) n'est pas montré.
  */
 export function BandeIndicateurs({ c }: { c: Cockpit }) {
+  const { data: me } = useApi<Me>("/auth/me");
   const visibles = indicateursMontres(c);
   const masques = c.indicators.length - visibles.length;
   return (
@@ -35,27 +39,32 @@ export function BandeIndicateurs({ c }: { c: Cockpit }) {
       </div>
       <div className={REGISTRE}>
         {visibles.map((i) => (
-          <Indicateur key={i.code} i={i} c={c} />
+          <Indicateur key={i.code} i={i} c={c} permis={(href) => lienPermis(href, me?.profiles)} />
         ))}
       </div>
     </section>
   );
 }
 
-function Indicateur({ i, c }: { i: Indicator; c: Cockpit }) {
-  const lienListe = lienIndicateur(i, c);
+/** Sceau d'un indicateur selon son état servi par le noyau ; « Sous surveillance » à surveiller. */
+const TON_ETAT: Record<IndicatorStatus, TonEtat> = { met: "ok", watch: "warn", missed: "danger", no_data: "neutral" };
+
+function Indicateur({ i, c, permis }: { i: Indicator; c: Cockpit; permis: (href: string) => boolean }) {
+  const lien = lienIndicateur(i, c);
+  const lienListe = lien && permis(lien.href) ? lien : null;
   const horsSite = !i.site_scoped && c.filters.site_id !== null;
   const serie = i.series.flatMap((p) => (p.value === null ? [] : [p.value]));
   return (
     <Kpi
       label={i.label || INDICATEUR[i.code]}
       value={fmtIndicateur(i.value, i.unit)}
-      tone={tonIndicateur(i.met)}
+      tone={TON_ETAT[i.status] ?? "neutral"}
       serie={serie}
       hint={
         <>
           <span className="block">
             {i.target === null ? "Sans cible" : `Cible ${fmtCible(i.target, i.unit, i.direction)}`}
+            {i.status === "watch" ? " · sous surveillance" : ""}
             {c.period.type === "month" && GLISSANTS.has(i.code) ? " · 12 mois glissants" : ""}
           </span>
           <span className="block">Source : {i.source}</span>

@@ -20,6 +20,10 @@ import http from "node:http";
 import { URL } from "node:url";
 import crypto from "node:crypto";
 import { enregistrerAnalyse } from "./analyse.mjs";
+import { enregistrerConformite } from "./hsseq-conformite.mjs";
+import { enregistrerHabilitationsRapports } from "./hsseq-habilitations-rapports.mjs";
+import { enregistrerRisques } from "./hsseq-risques.mjs";
+import { enregistrerTrajets, immobilisationDeLEvenement, immobilisationEnCours, immobilisationProposee, immobiliser, motifSurcharge, motifTrajet } from "./hsseq-trajets.mjs";
 import { enregistrerProprietaires, fuelPriceAt, marginShown, monthlyOf, OWNERSHIP_LABELS, seedProprietaires, standardOf } from "./transport-proprietaires.mjs";
 
 const PORT = Number(process.env.PORT) || 8170;
@@ -442,6 +446,7 @@ const PROFILE_DEFS = [
   { code: "porteur", name: "Porteur de projet", description: "Portail AxisPro : dépôt des pièces, suivi du dossier, échanges avec le cabinet." },
   { code: "hsseq", name: "Responsable HSSEQ", description: "Événements, enquêtes, actions, grilles de contrôle, dérogations au verrou, détail des alcootests." },
   { code: "conducteur", name: "Conducteur", description: "NIMOVA Terrain : contrôle avant départ, alcootest, déclaration d'événement." },
+  { code: "auditeur", name: "Auditeur externe", description: "NIMOVA · HSSEQ en lecture seule, sur ses sites et jusqu'à sa date de fin d'accès." },
 ];
 /** « terrain » : application native NIMOVA Terrain, ouverte à la connexion mais absente des espaces du web. */
 const APPS = ["finance", "transport", "axispro", "portail", "mobile", "analyse", "hsseq", "terrain"];
@@ -453,7 +458,7 @@ const APP_PROFILES = {
   mobile: ["admin", "exploitation"],
   transport: ["admin", "direction", "finance", "exploitation"],
   analyse: ["admin", "direction", "finance", "cabinet"],
-  hsseq: ["admin", "direction", "hsseq", "exploitation"],
+  hsseq: ["admin", "direction", "hsseq", "exploitation", "auditeur"],
   terrain: ["hsseq", "exploitation", "conducteur"],
 };
 const INTERNAL = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet"];
@@ -497,12 +502,14 @@ const USERS = [
   { id: 19, login: "a.diakite", name: "Alhassane Diakité", email: "a.diakite@eguitra.example", profiles: ["exploitation"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-14T16:02:57Z" },
   { id: 21, login: "cabinet", name: "Aïssatou Barry", email: "a.barry@axispro.example", profiles: ["cabinet"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-15T08:47:30Z" },
   { id: 22, login: "t.diallo", name: "Thierno Diallo", email: "t.diallo@axispro.example", profiles: ["cabinet"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-14T15:20:02Z" },
+  // Auditeur externe (lot 2 HSSEQ) : lecture seule, site de Matoto, accès jusqu'au 31/12/2026.
+  { id: 24, login: "auditeur", name: "Moussa Kaba", email: "m.kaba@audit-conseil.example", profiles: ["auditeur"], companies: [1], company_id: 1, mfa: true, active: true, temp: false, last_login: "2026-10-20T09:14:00Z", hsseq_audit_until: "2026-12-31", hsseq_audit_site_ids: [1] },
   { id: 23, login: "a.keita", name: "Aminata Keïta", email: "a.keita@axispro.example", profiles: ["cabinet"], companies: [2], company_id: 2, mfa: false, active: true, temp: true, last_login: null },
   { id: 41, login: "porteur", name: "Ibrahima Sow", email: "i.sow@rizerie-kankan.example", profiles: ["porteur"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-11T20:03:15Z" },
   { id: 42, login: "nob.laiterie", name: "Néné Oumou Bah", email: "contact@laiterie-fouta.example", profiles: ["porteur"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-09-02T09:12:00Z" },
   { id: 43, login: "f.camara.peche", name: "Fodé Camara", email: "f.camara@pecheries-kamsar.example", profiles: ["porteur"], companies: [2], company_id: 2, mfa: true, active: true, temp: false, last_login: "2026-10-09T18:27:41Z" },
 ];
-const SPECIAL_LOGINS = { porteur: 41, parc: 12, provisoire: 15, cabinet: 21, hsseq: 16, conducteur: 17, boffa: 18, dg: 8, finance: 5 };
+const SPECIAL_LOGINS = { porteur: 41, parc: 12, provisoire: 15, cabinet: 21, hsseq: 16, conducteur: 17, boffa: 18, dg: 8, finance: 5, auditeur: 24 };
 const DEFAULT_USER_ID = 2;
 const userById = (id) => USERS.find((u) => u.id === id);
 const userName = (id) => userById(id)?.name ?? "Système";
@@ -3769,11 +3776,13 @@ function seed() {
  * ══════════════════════════════════════════════════════════════════════════ */
 
 const ROUTES = [];
+/** Segments nommés d'une route : `:action` (mot), `:month` (AAAA-MM), `:slug` (code) ; tout autre est un identifiant. */
+const SEGMENTS = { ":action": "([a-z_-]+)", ":month": "(\\d{4}-\\d{2})", ":slug": "([A-Za-z0-9_.-]+)" };
 function route(method, pattern, profiles, handler, options = {}) {
   const regex = new RegExp(
     `^${pattern
       .split("/")
-      .map((seg) => (seg.startsWith(":") ? (seg === ":action" ? "([a-z_-]+)" : "(\\d+)") : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+      .map((seg) => (seg.startsWith(":") ? (SEGMENTS[seg] ?? "(\\d+)") : seg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
       .join("/")}$`,
   );
   ROUTES.push({ method, pattern, regex, profiles, handler, public: Boolean(options.public) });
@@ -6580,8 +6589,10 @@ route("POST", "/portail/dossiers/:id/messages", ["porteur"], (ctx) => {
  * ══════════════════════════════════════════════════════════════════════════ */
 
 const HS_READ = ["admin", "direction", "hsseq", "exploitation"];
-const HS_APP = [...HS_READ, "conducteur", "rh"];
-const HS_EVENT_READ = [...HS_READ, "conducteur"];
+const HS_APP = [...HS_READ, "conducteur", "rh", "auditeur"];
+const HS_EVENT_READ = [...HS_READ, "conducteur", "auditeur"];
+/** Lecture de l'auditeur externe (lot 2), en plus du lot 1 : contrôles, grilles, non-conformités, dérogations, motifs. */
+const HS_AUDIT_READ = [...HS_READ, "auditeur"];
 const HS_FIELD = ["hsseq", "exploitation", "conducteur"];
 const HS_SETUP = ["admin", "hsseq"];
 /** Profils qui lisent toute fiche HSSEQ de leurs sociétés (READ_ALL du noyau). */
@@ -6595,16 +6606,43 @@ const HS_SETTINGS_DEFAUT = {
   lock_start_date: TODAY, qualifications_required_from: null, employee_file_required_from: null, documents_required_from: null,
   level_moderate_min: 4, level_significant_min: 8, level_high_min: 15, investigation_hours_high: 72, investigation_days_significant: 7,
   investigation_days_moderate: 15, client_notice_hours: 24, verification_min_criticality: 8, verification_days: 90, escalation_days: 30,
+  night_start_hour: 19, night_end_hour: 6, max_driving_hours: 9,
   costly_action_threshold: 50_000_000, check_window_hours: 12, breath_test_window_hours: 4, director_id: null, targets: {},
 };
 const HS_SETTINGS_DATES = ["lock_start_date", "qualifications_required_from", "employee_file_required_from", "documents_required_from"];
 const HS_SETTINGS_NOMBRES = ["level_moderate_min", "level_significant_min", "level_high_min", "investigation_hours_high", "investigation_days_significant", "investigation_days_moderate", "client_notice_hours", "verification_min_criticality", "verification_days", "escalation_days", "costly_action_threshold", "check_window_hours", "breath_test_window_hours"];
+/** Réglages des plans de trajet (lot 2) : plage de nuit et conduite au plus par jour, en heures décimales. */
+const HS_SETTINGS_DECIMAUX = ["night_start_hour", "night_end_hour", "max_driving_hours"];
 /** Cibles proposées par le contrat (§4), remplacées indicateur par indicateur par `targets`. */
-const HS_TARGETS = { frequency_rate: 5, severity_rate: 0.2, road_accidents_per_mkm: 1.5, reporting_ratio: 10, check_completion: 100, check_compliance: 95, breath_test_completion: 100, breath_test_positives: 0, waivers: 2, actions_on_time: 90, actions_effectiveness: 80, qualifications_valid: 100, fuel_consumption: 44, co2_emissions: 1.18, tanker_shortage: 1.5, tipper_variance: 5 };
+const HS_TARGETS = { frequency_rate: 5, severity_rate: 0.2, road_accidents_per_mkm: 1.5, reporting_ratio: 10, check_completion: 100, check_compliance: 95, breath_test_completion: 100, breath_test_positives: 0, waivers: 2, actions_on_time: 90, actions_effectiveness: 80, qualifications_valid: 100, fuel_consumption: 44, co2_emissions: 1.18, tanker_shortage: 1.5, tipper_variance: 5, audits_completion: 100, immobilizations: 0 };
+/** Famille d'un indicateur pour le comité des donneurs d'ordre (FAMILY du noyau). */
+const HS_FAMILY = {
+  frequency_rate: "reactive", severity_rate: "reactive", road_accidents_per_mkm: "reactive", reporting_ratio: "proactive", check_completion: "proactive",
+  check_compliance: "proactive", breath_test_completion: "proactive", breath_test_positives: "reactive", waivers: "reactive", actions_on_time: "proactive",
+  actions_effectiveness: "proactive", qualifications_valid: "proactive", fuel_consumption: "reactive", co2_emissions: "reactive", tanker_shortage: "reactive",
+  tipper_variance: "reactive", audits_completion: "proactive", immobilizations: "reactive",
+};
+/**
+ * État d'une valeur au regard de sa cible (indicator_status du noyau, marge de surveillance de 85 %) :
+ * met, watch, missed ou no_data. Sens « down » : conforme jusqu'à la cible, sous surveillance jusqu'à
+ * cible ÷ 0,85 ; une cible nulle n'a pas de marge.
+ */
+function hsIndicatorStatus(value, target, direction) {
+  if (value === null || value === undefined || target === null || target === undefined) return "no_data";
+  if (direction === "up") return value >= target ? "met" : value >= target * 0.85 ? "watch" : "missed";
+  if (value <= target) return "met";
+  return target > 0 && value <= target / 0.85 ? "watch" : "missed";
+}
 /** Sites de rattachement des comptes d'exploitation (absent : tous les sites). */
 const HS_USER_SITES = { 12: [1], 18: [2] };
 /** Salariés RH liés à un compte conducteur (employee.user_id, employee.driver_id). */
 const HS_EMPLOYEES = [{ id: 501, user_id: 17, driver_id: 1, matricule: "EG-0417" }];
+/** Agents du parc sans chauffeur lié (salariés RH de la maquette, en plus des chauffeurs). */
+const HS_STAFF = [
+  { id: 950, name: "Ibrahima Camara", site_id: 1 },
+  { id: 951, name: "Aïcha Diallo", site_id: 1 },
+  { id: 952, name: "Mamadou Saliou Barry", site_id: 2 },
+];
 /** Photo de maquette : image PNG d'un pixel. */
 const HS_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 /** Motifs du verrou (§4) : libellé, source, levée, types de véhicule, dérogeable, lot. */
@@ -6708,11 +6746,46 @@ const hsLockActive = (r) => Boolean(hsSettings(r.company_id ?? 1).lock_start_dat
 const hsIs = (ctx, profile) => ctx.user.profiles.includes(profile);
 const hsFull = (ctx) => hasProfile(ctx, HS_ALL);
 /** Portée du compte, comme le noyau : « all », « site » (chef de parc), « self » (conducteur et autres). */
-const hsScope = (ctx) => (hsFull(ctx) ? "all" : hsIs(ctx, "exploitation") ? "site" : "self");
-const hsSites = (ctx) => (hsFull(ctx) ? [] : HS_USER_SITES[ctx.user.id] ?? []);
+const hsScope = (ctx) => (hsFull(ctx) ? "all" : hsIs(ctx, "exploitation") || hsIs(ctx, "auditeur") ? "site" : "self");
+/** Sites du chef de parc, sinon ceux de l'auditeur (lot 2) ; vide pour une lecture complète. */
+const hsSites = (ctx) => (hsFull(ctx) ? [] : hsIs(ctx, "auditeur") && !hsIs(ctx, "exploitation") ? ctx.user.hsseq_audit_site_ids ?? [] : HS_USER_SITES[ctx.user.id] ?? []);
+/** Les noms des personnes (conducteurs, victimes, témoins, déclarants) ne sont pas servis à l'auditeur. */
+const hsPersonalHidden = (ctx) => hsIs(ctx, "auditeur") && !hsFull(ctx);
+
+/**
+ * Réponse lue par l'auditeur : ni déclarant, ni auteur d'un contrôle, ni nom des personnes d'un événement
+ * (personal_data_hidden du noyau). Les autres comptes reçoivent la réponse telle quelle.
+ */
+function hsMasquer(ctx, row) {
+  if (!hsPersonalHidden(ctx) || !row) return row;
+  const masque = { ...row };
+  if ("reported_by" in masque) masque.reported_by = null;
+  if ("author" in masque) masque.author = null;
+  if (Array.isArray(masque.people)) masque.people = masque.people.map((p) => ({ ...p, person_id: null, name: null }));
+  return masque;
+}
+
+/** Auditeur externe : lecture seule, refusé au-delà de sa date de fin d'accès ou sans site (auditor_guard du noyau). */
+function hsAuditorGuard(user, method) {
+  const until = user.hsseq_audit_until;
+  if (!until || TODAY > until) {
+    throw hsForbidden(until ? "Accès d'auditeur échu ou sans date de fin : demandez sa prolongation au Responsable HSSEQ." : "Accès d'auditeur sans date de fin : le Responsable HSSEQ la fixe d'abord.");
+  }
+  if (!user.profiles.some((p) => ["exploitation", ...HS_ALL].includes(p)) && !(user.hsseq_audit_site_ids ?? []).length) {
+    throw hsForbidden("Périmètre d'audit sans site : le Responsable HSSEQ le définit d'abord.");
+  }
+  if (method !== "GET" && method !== "HEAD") throw hsForbidden("Profil auditeur : lecture seule.");
+}
+/**
+ * Site lisible par le compte : tout site en lecture complète ; pour le chef de parc et l'auditeur, leurs
+ * sites seulement, fermé par défaut (objet sans site ou compte sans site : non). Le compte « self » est
+ * borné objet par objet (auteur, conducteur), ailleurs.
+ */
 function hsSiteOk(ctx, siteId) {
-  const sites = hsSites(ctx);
-  return !sites.length || !siteId || sites.includes(siteId);
+  const scope = hsScope(ctx);
+  if (scope === "all") return true;
+  if (scope === "site") return Boolean(siteId) && hsSites(ctx).includes(siteId);
+  return true;
 }
 const hsEmployee = (ctx) => HS_EMPLOYEES.find((e) => e.user_id === ctx.user.id) ?? null;
 const hsMyDriver = (ctx) => hsEmployee(ctx)?.driver_id ?? null;
@@ -6867,7 +6940,8 @@ function hsCheckLine(c) {
     id: c.id, reference: c.reference, template: { id: t.id, name: t.name, version: c.template_version ?? t.version }, kind: c.kind, vehicle_kind: c.vehicle_kind,
     vehicle: hsVehicleRef(c.vehicle_id), rotation: hsRotationRef(hsRotation(c.rotation_id)), driver: hsDriverRef(c.driver_id), site: hsSiteRef(c.site_id),
     author: hsUser(c.performed_by), reported_at: c.reported_at, result: c.result, open_nonconformities: ncs.filter((n) => n.status === "open").length,
-    photos_missing: ncs.some(hsNcPhotosMissing),
+    open_blocking: ncs.filter((n) => n.status === "open" && n.blocking).length, photos_missing: ncs.some(hsNcPhotosMissing),
+    complement_of: c.complement_of_id ? { id: c.complement_of_id, reference: HS.checks.find((x) => x.id === c.complement_of_id)?.reference ?? "" } : null,
   };
 }
 function hsCheckDetail(ctx, c) {
@@ -6885,8 +6959,12 @@ function hsCheckDetail(ctx, c) {
     nonconformities: ncs.map((n) => hsNcRow(ctx, n)),
     attachments: hsAttachments("check", c.id, (a) => a.role !== "signature"),
     history: hsScope(ctx) === "self" ? [] : hsHistory("check", c.id),
+    // Points ajoutés à la grille après la saisie (aucun dans la maquette) et contrôles complémentaires.
+    awaiting_items: c.awaiting_items ?? [],
+    complements: HS.checks.filter((x) => x.complement_of_id === c.id).sort((a, b) => a.reported_at.localeCompare(b.reported_at)).map(hsCheckLine),
     transitions: liftable ? ["lift"] : [],
-    rights: { can_edit: hsIs(ctx, "hsseq"), can_close: liftable, can_approve: false },
+    // Pas de correction d'un contrôle saisi (pas de PATCH) : can_edit toujours faux.
+    rights: { can_edit: false, can_close: liftable, can_approve: false },
   };
 }
 
@@ -6988,7 +7066,7 @@ function hsReasons(ctx, rot, applyWaivers = true) {
   const s = hsSettings();
   const on = (code) => {
     const r = hsReasonSetting(code);
-    return r.active && r.lot === 1 && r.vehicle_kinds.includes(kind) && !r.disabled_sites.includes(site);
+    return r.active && r.lot <= 2 && r.vehicle_kinds.includes(kind) && !r.disabled_sites.includes(site);
   };
   const created = stamp(rot.date_loading, 5, 0);
   const hs = hsIs(ctx, "hsseq");
@@ -7023,6 +7101,25 @@ function hsReasons(ctx, rot, applyWaivers = true) {
   if (expired.length) add("V05", `${addDays(expired.map((x) => x.expiry_date).sort()[0], 1)}T00:00:00Z`, expired.map((x) => `${HS_DOC_LABELS[x.kind].toLowerCase()} expirée le ${frDate(x.expiry_date)}`).join(", "));
   const missing = ["insurance", "inspection"].filter((k) => !docs.some((x) => x.kind === k));
   if (missing.length) add("V05", null, missing.map((k) => `${HS_DOC_LABELS[k].toLowerCase()} non renseignée`).join(", "), false, s.documents_required_from && day >= s.documents_required_from ? "block" : "warn");
+  // V06 (lot 2) : barémage et certificat d'étanchéité de la citerne, expirés ou non renseignés.
+  if (kind === "tanker") {
+    const v06 = HS.docs.filter((x) => x.vehicle_id === v.id && ["calibration", "tightness"].includes(x.kind));
+    const perimes = v06.filter((x) => x.expiry_date < day);
+    if (perimes.length) add("V06", `${addDays(perimes.map((x) => x.expiry_date).sort()[0], 1)}T00:00:00Z`, perimes.map((x) => `${HS_DOC_LABELS[x.kind]} expiré le ${frDate(x.expiry_date)}`).join(", "));
+    const absents = ["calibration", "tightness"].filter((k) => !v06.some((x) => x.kind === k));
+    if (absents.length) add("V06", null, absents.map((k) => `${HS_DOC_LABELS[k]} non renseigné`).join(", "), false, s.documents_required_from && day >= s.documents_required_from ? "block" : "warn");
+  }
+  // V07 et V08 (lot 2) : surcharge pesée (bennes) et plan de trajet, lus dans les tables du module hsseq-trajets.
+  const v07 = motifSurcharge(rot);
+  if (v07) add("V07", v07.since, v07.detail);
+  const v08 = motifTrajet(rot);
+  if (v08) add("V08", v08.since, v08.detail);
+  // V09 (lot 2) : véhicule immobilisé par un événement en cours d'enquête (table du module hsseq-trajets).
+  const immobilisation = (DB.hsseq.immobilizations ?? []).find((i) => i.vehicle_id === v.id && i.status === "active");
+  if (immobilisation) {
+    const ev = HS.events.find((e) => e.id === immobilisation.event_id);
+    add("V09", immobilisation.since, `${v.name} immobilisé par l'événement ${ev?.reference ?? `#${immobilisation.event_id}`}${ev ? ` (${ev.title})` : ""}.`);
+  }
   const waived = [];
   if (applyWaivers) {
     hsExpireWaivers();
@@ -7094,7 +7191,7 @@ function hsEventTransitions(ctx, e) {
     actions: ["close"],
     closed: ["reopen"],
   }[e.status];
-  return t.filter((x) => x !== "close" || !actions.some(hsActionOpen));
+  return [...t.filter((x) => x !== "close" || !actions.some(hsActionOpen)), ...(immobilisationProposee(e) ? ["immobilize"] : [])];
 }
 /** Personne en cause : `id` est la ligne, `person_id` le chauffeur ou le salarié. */
 const hsPersonRow = (p) => ({ id: p.line_id, kind: p.kind, person_id: p.kind === "third_party" ? null : p.id ?? null, name: p.name, role: p.role, days_off: p.days_off ?? 0 });
@@ -7120,7 +7217,12 @@ function hsEventDetail(ctx, e) {
   const declarant = e.reported_by === ctx.user.id && e.status === "reported" && hasProfile(ctx, ["exploitation", "conducteur", "hsseq"]);
   return {
     ...hsEventLine(e), description: e.description, location: e.location, latitude: e.latitude, longitude: e.longitude, gps_accuracy: e.gps_accuracy, source: e.source, client_uuid: e.client_uuid, reported_at: e.reported_at,
-    synced_at: e.synced_at, offline: e.offline, people: e.people.map(hsPersonRow), lost_time: e.lost_time, days_lost: e.days_lost, leave_id: e.leave_id ?? null, vehicle_immobilized: e.vehicle_immobilized,
+    synced_at: e.synced_at, offline: e.offline, people: e.people.map(hsPersonRow), lost_time: e.lost_time, days_lost: e.days_lost, leave_id: e.leave_id ?? null,
+    declared: {
+      actual_severity: e.declared_actual_severity ?? null, potential_severity: e.declared_potential_severity ?? null, probability: e.declared_probability ?? null,
+      criticality: e.declared_potential_severity && e.declared_probability ? e.declared_potential_severity * e.declared_probability : null,
+    },
+    vehicle_immobilized: e.vehicle_immobilized, immobilization: immobilisationDeLEvenement(e.id), immobilization_proposed: immobilisationProposee(e),
     classified_at: e.classified_at, classified_by: hsUser(e.classified_by), closed_at: e.closed_at, closed_by: hsUser(e.closed_by), reopen_reason: e.reopen_reason ?? null,
     investigation: hsInvestigationRow(e),
     actions: self ? [] : hsEventActions(e).map(hsActionLine),
@@ -7161,11 +7263,21 @@ function hsActionOriginLabel(a) {
     return e ? `${e.reference} ${e.title}` : null;
   }
   if (a.check_id) return HS.checks.find((x) => x.id === a.check_id)?.reference ?? null;
+  // Constat d'audit (lot 2) : référence et description.
+  if (a.origin === "audit") {
+    const f = (DB.hsseq.findings ?? []).find((x) => x.id === a.origin_id);
+    return f ? `${f.reference} ${String(f.description ?? "").slice(0, 120)}` : null;
+  }
+  // Risque (lot 2) : référence et événement redouté.
+  const risque = a.origin === "risk" ? (DB.hsseq.risks ?? []).find((x) => x.id === a.origin_id) : null;
+  if (risque) return `${risque.reference} ${String(risque.feared_event ?? "").slice(0, 120)}`;
   return null;
 }
 const hsActionCriticality = (a) => (a.event_id ? hsCriticality(HS.events.find((x) => x.id === a.event_id) ?? {}) ?? 0 : 0);
 const hsIsCostly = (a) => (a.estimated_cost ?? 0) >= hsSettings().costly_action_threshold;
 const hsNeedsApproval = (a) => hsIsCostly(a) && !a.approved_at;
+/** Validation de la direction attendue : action coûteuse non validée, ni close ni annulée. */
+const hsApprovalPending = (a) => hsNeedsApproval(a) && !["closed", "cancelled"].includes(a.status);
 const hsDaysOverdue = (a) => (["todo", "in_progress"].includes(a.status) && a.due_date < TODAY ? daysBetween(a.due_date, TODAY) : 0);
 function hsActionLine(a) {
   const e = a.event_id ? HS.events.find((x) => x.id === a.event_id) : null;
@@ -7174,7 +7286,9 @@ function hsActionLine(a) {
     event: e ? { id: e.id, reference: e.reference } : null, control_level: a.control_level ?? null, owner: hsUser(a.owner_id), due_date: a.due_date,
     status: a.status, overdue: hsDaysOverdue(a) > 0, days_overdue: hsDaysOverdue(a),
     verification_required: hsActionCriticality(a) >= hsSettings().verification_min_criticality, verification_date: a.verification_date,
-    site: hsSiteRef(a.site_id), estimated_cost: a.estimated_cost ?? 0, approval_required: hsNeedsApproval(a),
+    site: hsSiteRef(a.site_id), estimated_cost: a.estimated_cost ?? 0, approval_required: hsNeedsApproval(a), approval_pending: hsApprovalPending(a),
+    // Résultat de la vérification d'efficacité, nul tant qu'elle n'est pas faite.
+    effective: a.verified_at ? (a.effective ?? null) : null,
   };
 }
 /** Relances déjà envoyées au responsable : J-7, J0, chaque semaine de retard, escalade après le délai des paramètres. */
@@ -7219,7 +7333,7 @@ function hsNewAction(values) {
     owner_id: values.owner_id, due_date: values.due_date, status: values.status ?? "todo", expected_evidence: values.expected_evidence ?? HS_PROOFS[values.control_level] ?? null,
     estimated_cost: values.estimated_cost ?? 0, approved_at: null, approved_by: null, approved_cost: null, created_at: values.created_at ?? hsNow(), created_by: values.created_by ?? 16,
     started_at: null, done_at: null, verified_at: null, verified_by: null, verification_comment: null, effective: false, verification_date: null, closed_at: null,
-    cancel_reason: null, reopen_reason: null, site_id: values.site_id ?? 1,
+    cancel_reason: null, reopen_reason: null, site_id: values.site_id === undefined ? 1 : values.site_id,
   };
   a.reference = `ACT/2026/${pad(a.id, 4)}`;
   HS.actions.push(a);
@@ -7428,10 +7542,22 @@ function hsIndicators(ctx, q, month, period) {
     ["tanker_shortage", "Écarts de livraison des citernes", "per_mille", "down", "Transport", "Volume manquant ÷ volume livré", true, (m) => (kinds.includes("tanker") && kindFilter !== "tipper" ? tankerShortage(m) : null)],
     // Sans objet au lot 1 : le noyau le sert nul, sans série.
     ["tipper_variance", "Écarts de tonnage des bennes", "per_mille", "down", "Transport", "Écart de tonnage ÷ tonnage chargé", true, () => null, "Sans objet au lot 1 : une seule pesée par rotation, pas de tonnage livré."],
+    // Lot 2 : audits du mois (annulés exclus) et immobilisations posées dans le mois.
+    ["audits_completion", "Audits réalisés contre planifiés", "pct", "up", "Audits", "Audits réalisés ÷ audits planifiés du mois (audits annulés exclus)", true,
+      (m) => {
+        const list = (DB.hsseq.audits ?? []).filter((a) => a.status !== "cancelled" && String(a.planned_date ?? "").slice(0, 7) === m && (!site || a.site_id === site));
+        return pct(list.filter((a) => ["done", "closed"].includes(a.status)).length, list.length);
+      }],
+    ["immobilizations", "Immobilisations de véhicules (V09)", "count", "down", "Événements, verrou de départ", "Immobilisations posées dans le mois par un événement en cours d'enquête", true,
+      (m) => (DB.hsseq.immobilizations ?? []).filter((i) => String(i.since ?? "").slice(0, 7) === m && (!site || i.site_id === site) && kinds.includes(hsKind(hsVehicle(i.vehicle_id)) ?? "tanker")).length],
   ];
   const s = hsSettings();
   return defs.map(([code, label, unit, direction, source, formula, siteScoped, fn, note = null, companyLevel = false]) => {
-    const series = months.map((m) => ({ month: m, value: transport || companyLevel ? fn(m) : null }));
+    const target = code in (s.targets ?? {}) ? s.targets[code] : HS_TARGETS[code];
+    const series = months.map((m) => {
+      const v = transport || companyLevel ? fn(m) : null;
+      return { month: m, value: v, target: target ?? null, status: hsIndicatorStatus(v, target, direction) };
+    });
     const values = series.map((p) => p.value).filter((v) => v !== null);
     let value = series[series.length - 1].value;
     if (period === "12m" && !["rate", "ratio"].includes(unit)) {
@@ -7444,9 +7570,11 @@ function hsIndicators(ctx, q, month, period) {
       const couples = groupBy(list, (w) => `${hsSite(w.site_id)?.name ?? "Sans site"}|${w.reason_code}`);
       breakdown = [...couples].sort((a, b) => a[0].localeCompare(b[0])).map(([cle, ws]) => ({ site: cle.split("|")[0], reason_code: cle.split("|")[1], count: ws.length }));
     }
-    const target = code in (s.targets ?? {}) ? s.targets[code] : HS_TARGETS[code];
     const met = value === null || target === null || target === undefined ? null : direction === "down" ? value <= target : value >= target;
-    return { code, label, value, target: target ?? null, unit, direction, met, source, formula, series, breakdown, site_scoped: siteScoped, note };
+    let status = hsIndicatorStatus(value, target, direction);
+    // Cible tenue sur la période mais manquée le dernier mois de la série : sous surveillance.
+    if (status === "met" && period === "12m" && series[series.length - 1].status === "missed") status = "watch";
+    return { code, label, value, target: target ?? null, unit, direction, met, status, family: HS_FAMILY[code] ?? "reactive", source, formula, series, breakdown, site_scoped: siteScoped, note };
   });
 }
 
@@ -7879,19 +8007,34 @@ route("PATCH", "/hsseq/sites/:id", HS_SETUP, (ctx) => {
 });
 
 /* Référentiels */
+/**
+ * Salariés en poste (RH) : chaque chauffeur actif, sous l'identifiant de son dossier salarié, et les
+ * agents du parc ; site : celui de l'ensemble du chauffeur, quand il est connu.
+ */
+function hsEmployeeRows() {
+  const chauffeurs = [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].map((d) => {
+    const site = HS.driverSites.get(d.id) ?? null;
+    return { id: HS_EMPLOYEES.find((x) => x.driver_id === d.id)?.id ?? 500 + d.id, name: d.name, site_id: site };
+  });
+  return [...chauffeurs, ...HS_STAFF].map((e) => ({ id: e.id, name: e.name, company: companyRef(1), site_id: e.site_id, site: hsSiteRef(e.site_id) })).sort((a, b) => byFr(a.name, b.name));
+}
+
 route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
   const vehicles = [...DB.vehicles.filter((v) => v.company_id === 1 && v.state !== "off"), ...HS.tippers];
   const self = hsScope(ctx) === "self";
   const mine = hsMyDriver(ctx);
-  const drivers = [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].filter((d) => !self || d.id === mine);
+  // Auditeur : pas de liste nominative des conducteurs.
+  const drivers = hsPersonalHidden(ctx) ? [] : [...DB.drivers.filter((d) => d.company_id === 1 && d.active), ...HS.drivers].filter((d) => !self || d.id === mine);
   // Responsables possibles d'une action : comptes internes hors conducteurs ; aucun pour le conducteur.
   const owners = self ? [] : USERS.filter((u) => u.active && u.companies.includes(1) && u.profiles.some((p) => !["conducteur", "porteur"].includes(p))).sort((a, b) => byFr(a.name, b.name));
   const s = hsSettings();
   return {
     sites: HS.sites.map(hsSiteRow),
-    vehicles: vehicles.map((v) => ({ ...hsVehicleRef(v.id), site_id: hsVehicleSite(v), driver_id: v.driver_id ?? null, payload_tonnes: v.payload_tonnes ?? null })),
+    vehicles: vehicles.map((v) => ({ ...hsVehicleRef(v.id), site_id: hsVehicleSite(v), driver_id: v.driver_id ?? null, payload_tonnes: v.payload_tonnes ?? null, immobilized: Boolean(immobilisationEnCours(v.id)) })),
     drivers: drivers.map((d) => ({ id: d.id, name: d.name, site_id: HS.driverSites.get(d.id) ?? null })).sort((a, b) => byFr(a.name, b.name)),
     owners: owners.map((u) => ({ id: u.id, name: u.name })),
+    // Profils qui déclarent ou gèrent les personnes en cause, hors conducteur (EVENT_PEOPLE du noyau).
+    employees: hasProfile(ctx, ["admin", "direction", "hsseq", "exploitation"]) ? hsEmployeeRows() : [],
     criticality_thresholds: hsThresholds(s),
     costly_action_threshold: s.costly_action_threshold,
     check_window_hours: s.check_window_hours,
@@ -7899,6 +8042,30 @@ route("GET", "/hsseq/referentials", HS_APP, (ctx) => {
     vehicle_kinds: [{ code: "tanker", label: "Citerne" }, { code: "tipper", label: "Benne" }],
     me: { profiles: [...ctx.user.profiles].sort(), site_ids: hsSites(ctx), employee_id: hsEmployee(ctx)?.id ?? null, driver_id: mine },
   };
+});
+
+/* Auditeurs externes (lot 2) : date de fin d'accès et sites audités (admin, hsseq) */
+function hsAuditorRow(u) {
+  return {
+    id: u.id, name: u.name, login: u.login, access_until: u.hsseq_audit_until ?? null, expired: Boolean(u.hsseq_audit_until) && u.hsseq_audit_until < TODAY,
+    sites: (u.hsseq_audit_site_ids ?? []).map(hsSiteRef).filter(Boolean), companies: u.companies.map(companyRef),
+  };
+}
+const hsAuditors = (ctx) => USERS.filter((u) => u.active && u.profiles.includes("auditeur") && u.companies.some((c) => ctx.user.companies.includes(c)));
+route("GET", "/hsseq/auditors", HS_SETUP, (ctx) => hsAuditors(ctx).map(hsAuditorRow));
+route("PATCH", "/hsseq/auditors/:id", HS_SETUP, (ctx) => {
+  const u = hsAuditors(ctx).find((x) => x.id === ctx.params[0]);
+  if (!u) throw notFound("Auditeur introuvable.");
+  const b = ctx.body;
+  if ("access_until" in b) u.hsseq_audit_until = dateArg(b, "access_until");
+  if ("site_ids" in b) {
+    if (!Array.isArray(b.site_ids)) throw hsBad("Sites invalides.", ["site_ids"]);
+    const ids = b.site_ids.map(Number);
+    if (ids.some((id) => !u.companies.includes(hsSite(id)?.company_id))) throw hsRule("business_rule", "Un site audité appartient à une société de l'auditeur.", { fields: ["site_ids"] });
+    u.hsseq_audit_site_ids = ids;
+  }
+  hsLog("auditor", u.id, ctx.user.id, "write", "access_until", null, u.hsseq_audit_until ?? "", hsNow(), "Périmètre ou durée de l'auditeur");
+  return hsAuditorRow(u);
 });
 
 /* Paramètres de la société (admin, hsseq) */
@@ -7911,7 +8078,7 @@ function hsSettingsCompany(ctx, src) {
 }
 function hsSettingsRow(company) {
   const s = hsSettings(company);
-  const row = Object.fromEntries([...HS_SETTINGS_DATES, ...HS_SETTINGS_NOMBRES].map((k) => [k, s[k] ?? null]));
+  const row = Object.fromEntries([...HS_SETTINGS_DATES, ...HS_SETTINGS_NOMBRES, ...HS_SETTINGS_DECIMAUX].map((k) => [k, s[k] ?? null]));
   return { ...row, company: companyRef(company), director: hsUser(s.director_id), criticality_thresholds: hsThresholds(s), targets: { ...s.targets } };
 }
 route("GET", "/hsseq/settings", HS_SETUP, (ctx) => hsSettingsRow(hsSettingsCompany(ctx, ctx.query)));
@@ -7931,6 +8098,12 @@ route("PATCH", "/hsseq/settings", HS_SETUP, (ctx) => {
     if (!Number.isFinite(n)) throw hsBad(`Valeur invalide : ${key}.`, [key]);
     values[key] = key === "costly_action_threshold" ? n : Math.trunc(n);
   }
+  for (const key of HS_SETTINGS_DECIMAUX) {
+    if (!(key in b)) continue;
+    const n = Number(b[key] || 0);
+    if (!Number.isFinite(n)) throw hsBad(`Valeur invalide : ${key}.`, [key]);
+    values[key] = n;
+  }
   if ("director_id" in b) values.director_id = userById(hsId(b, "director_id"))?.id ?? null;
   if ("targets" in b) {
     if (!b.targets || typeof b.targets !== "object" || Array.isArray(b.targets)) throw hsBad("Cibles attendues par code d'indicateur.", ["targets"]);
@@ -7946,12 +8119,77 @@ route("PATCH", "/hsseq/settings", HS_SETUP, (ctx) => {
   if (!(1 < next.level_moderate_min && next.level_moderate_min < next.level_significant_min && next.level_significant_min < next.level_high_min && next.level_high_min <= 25)) {
     throw businessRule("Seuils de criticité attendus croissants, entre 2 et 25.");
   }
+  if (!(next.night_start_hour >= 0 && next.night_start_hour < 24 && next.night_end_hour >= 0 && next.night_end_hour < 24) || next.max_driving_hours < 0) {
+    throw businessRule("Heures de nuit entre 0 et 24, durée de conduite positive.");
+  }
   Object.assign(s, values);
   return hsSettingsRow(company);
 });
 
 /* Cockpit et échéances */
-route("GET", "/hsseq/cockpit", HS_READ, (ctx) => {
+/**
+ * Matrice des événements de la période (le mois, ou les douze mois qui s'y terminent) par gravité
+ * potentielle × probabilité, probabilité 5 en tête ; les événements non classés restent hors matrice.
+ */
+function hsEventMatrix(events, month, period) {
+  const debut = period === "12m" ? addMonths(`${month}-01`, -11) : `${month}-01`;
+  const fin = `${monthEnd(`${month}-01`)}T23:59:59`;
+  const dans = events.filter((e) => e.occurred_at >= debut && e.occurred_at <= fin);
+  const counts = new Map();
+  for (const e of dans) if (e.potential_severity && e.probability) counts.set(`${e.potential_severity}|${e.probability}`, (counts.get(`${e.potential_severity}|${e.probability}`) ?? 0) + 1);
+  const cells = [];
+  for (let p = 5; p >= 1; p -= 1) {
+    for (let g = 1; g <= 5; g += 1) cells.push({ severity: g, potential_severity: g, probability: p, criticality: g * p, level: hsLevel(g * p), count: counts.get(`${g}|${p}`) ?? 0 });
+  }
+  return { matrix: cells, matrix_unclassified: dans.length - sum(cells, (c) => c.count) };
+}
+
+/**
+ * Situation du lot 2 au cockpit (lot2_blocks du noyau), bornée aux sites du compte, d'après les tables
+ * des modules du lot 2 : risques en vigueur, audits de l'année, constats ouverts, exigences et maturité
+ * (pas pour le chef de parc), immobilisations en cours.
+ */
+function hsLot2Blocks(ctx, q, month) {
+  // Portée fermée par défaut : hors lecture complète, un objet sans site n'est pas compté (lot2_blocks du noyau).
+  const bornes = hsScope(ctx) === "all" ? null : hsSites(ctx);
+  const surSite = (x) => (!bornes || bornes.includes(x.site_id)) && (!q.site_id || x.site_id === Number(q.site_id));
+  const niveaux = (list, f) => Object.fromEntries(["low", "moderate", "significant", "high"].map((n) => [n, list.filter((x) => f(x) === n).length]));
+  const risks = (DB.hsseq.risks ?? []).filter((x) => x.status === "active" && surSite(x));
+  const niveauDe = (x, prefixe) => x[prefixe]?.level ?? x[`${prefixe}_level`] ?? hsLevel((x[prefixe]?.severity ?? x[`${prefixe}_severity`] ?? 0) * (x[prefixe]?.probability ?? x[`${prefixe}_probability`] ?? 0));
+  const year = Number(month.slice(0, 4));
+  const audits = (DB.hsseq.audits ?? []).filter((a) => a.status !== "cancelled" && surSite(a) && String(a.planned_date ?? "") >= `${year}-01-01` && String(a.planned_date ?? "") <= monthEnd(`${month}-01`));
+  const done = audits.filter((a) => ["done", "closed"].includes(a.status)).length;
+  const findings = (DB.hsseq.findings ?? []).filter((f) => f.status === "open" && surSite(f));
+  const immobilizations = (DB.hsseq.immobilizations ?? []).filter((i) => i.status === "active" && surSite(i)).sort((a, b) => String(b.since).localeCompare(String(a.since)));
+  const blocks = {
+    risks: { active: risks.length, by_raw_level: niveaux(risks, (x) => niveauDe(x, "raw")), by_residual_level: niveaux(risks, (x) => niveauDe(x, "residual")), reviews_overdue: risks.filter((x) => x.review_date && x.review_date < TODAY).length },
+    audits: { year, planned: audits.length, done, rate: audits.length ? Math.round((done * 1000) / audits.length) / 10 : null },
+    findings: { open_by_class: Object.fromEntries(["major", "minor", "observation"].map((k) => [k, findings.filter((f) => f.classification === k).length])) },
+    immobilizations: {
+      active: immobilizations.length,
+      items: immobilizations.slice(0, 8).map((i) => ({ id: i.id, vehicle: hsVehicleRef(i.vehicle_id), site: hsSiteRef(i.site_id), event: { id: i.event_id, reference: HS.events.find((e) => e.id === i.event_id)?.reference ?? `#${i.event_id}` }, since: i.since })),
+    },
+    requirements: null,
+    iso_maturity: null,
+  };
+  if (hasProfile(ctx, ["admin", "direction", "hsseq", "auditeur"])) {
+    const reqs = DB.hsseq.requirements ?? [];
+    const statuts = ["compliant", "partial", "non_compliant", "not_evaluated"];
+    blocks.requirements = { by_status: Object.fromEntries(statuts.map((s) => [s, reqs.filter((x) => x.status === s).length])), non_compliant: reqs.filter((x) => x.status === "non_compliant").length };
+    const normes = [["iso_45001", "ISO 45001"], ["iso_14001", "ISO 14001"], ["iso_9001", "ISO 9001"], ["other", "Autre"]];
+    const maturity = normes.flatMap(([code, label]) => {
+      const subset = reqs.filter((x) => x.standard === code);
+      if (!subset.length) return [];
+      const evaluated = subset.filter((x) => x.status !== "not_evaluated");
+      const score = sum(evaluated, (x) => (x.status === "compliant" ? 1 : x.status === "partial" ? 0.5 : 0));
+      return [{ standard: code, label, requirements: subset.length, evaluated: evaluated.length, score: evaluated.length ? Math.round((score * 1000) / evaluated.length) / 10 : null }];
+    });
+    blocks.iso_maturity = maturity.length ? maturity : null;
+  }
+  return blocks;
+}
+
+route("GET", "/hsseq/cockpit", [...HS_READ, "auditeur"], (ctx) => {
   const q = ctx.query;
   const period = q.period || "month";
   if (!["month", "12m"].includes(period)) throw hsBad("Période : month ou 12m.", ["period"]);
@@ -7963,21 +8201,37 @@ route("GET", "/hsseq/cockpit", HS_READ, (ctx) => {
   const frozen = month < TODAY.slice(0, 7) && next5 <= TODAY;
   const overdue = HS.actions.filter((a) => ["todo", "in_progress"].includes(a.status) && a.due_date < TODAY && hsFilter(ctx, q, a.site_id, null) && hsSiteOk(ctx, a.site_id));
   const events = HS.events.filter((e) => hsFilter(ctx, q, e.site_id, null) && hsSiteOk(ctx, e.site_id));
+  // Portée fermée par défaut : hors lecture complète, un compte sans site ne lit pas le cockpit.
+  if (hsScope(ctx) !== "all" && !hsSites(ctx).length) throw hsForbidden("Aucun site n'est rattaché à votre compte : le cockpit se lit par site.");
+  const indicators = hsIndicators(ctx, q, month, period);
+  const byReason = Object.fromEntries(["V02", "V04", "V05", "V06", "V07", "V08", "V09"].map((code) => [code, 0]));
+  for (const b of indicators.find((i) => i.code === "waivers")?.breakdown ?? []) byReason[b.reason_code] = (byReason[b.reason_code] ?? 0) + b.count;
+  const lot2 = hsLot2Blocks(ctx, q, month);
+  const blocked = hsDepartures(ctx, TODAY, q, true);
+  let deadlines = hsDeadlines(ctx, { ...q, kind: "", horizon: "30" });
+  if (hsPersonalHidden(ctx)) {
+    // Auditeur : ni conducteurs des départs bloqués, ni échéances des personnes.
+    blocked.items = [];
+    deadlines = { ...deadlines, items: deadlines.items.filter((d) => d.kind === "vehicle_document") };
+  }
+  const kindOk = (e) => !q.vehicle_kind || hsKind(hsVehicle(e.vehicle_id)) === q.vehicle_kind;
   return {
     period: { type: period, month, date_from: `${month}-01`, date_to: minDate(monthEnd(`${month}-01`), TODAY), label: monthLabel(`${month}-01`), frozen, frozen_on: frozen ? next5 : null },
     filters: { company_id: q.company_id ? Number(q.company_id) : null, site_id: q.site_id ? Number(q.site_id) : null, vehicle_kind: q.vehicle_kind || null },
     referentials: { companies: ctx.user.companies.map(companyRef), sites: HS.sites.map((s) => ({ id: s.id, name: s.name })) },
     hours_basis: "presence",
-    indicators: hsIndicators(ctx, q, month, period),
-    blocked_departures: hsDepartures(ctx, TODAY, q, true),
+    indicators,
+    blocked_departures: blocked,
     overdue_actions: { total: overdue.length, items: overdue.sort((a, b) => a.due_date.localeCompare(b.due_date) || a.id - b.id).slice(0, 8).map(hsActionLine) },
-    deadlines: hsDeadlines(ctx, { ...q, kind: "", horizon: "30" }),
+    deadlines,
     events: {
       to_classify: events.filter((e) => e.status === "reported").length,
       overdue_investigations: events.filter(hsEventOverdue).length,
       high_open: events.filter((e) => e.status !== "closed" && hsLevel(hsCriticality(e)) === "high").length,
+      ...hsEventMatrix(events.filter(kindOk), month, period),
     },
-    iso_maturity: null,
+    waivers_by_reason: byReason,
+    ...lot2,
     computed_at: hsNow(),
   };
 });
@@ -8068,14 +8322,14 @@ route("GET", "/hsseq/events", HS_EVENT_READ, (ctx) => {
     byStatus[e.status]++;
     byLevel[hsLevel(hsCriticality(e)) ?? "unclassified"]++;
   }
-  return hsPage(ctx, list, { by_status: byStatus, by_level: byLevel, overdue_investigations: list.filter(hsEventOverdue).length }, hsEventLine);
+  return hsPage(ctx, list, { by_status: byStatus, by_level: byLevel, overdue_investigations: list.filter(hsEventOverdue).length }, (e) => hsMasquer(ctx, hsEventLine(e)));
 });
 route("GET", "/hsseq/events/export.xlsx", HS_READ, (ctx) => {
   const list = hsSort(hsEventList(ctx), null, HS_EVENT_SORTS, "-occurred_at");
   const rows = list.map((e) => [e.reference, e.occurred_at.slice(0, 10), e.title, HS_TYPE_LABELS[e.type], e.domain, HS_STATUS_LABELS[e.status], hsSite(e.site_id)?.name ?? "", e.vehicle_id ? hsVehicle(e.vehicle_id).name : "", e.actual_severity ?? "", e.potential_severity ?? "", e.probability ?? "", hsCriticality(e) ?? "", HS_LEVEL_LABELS[hsLevel(hsCriticality(e))] ?? "Non classé", hsEventActions(e).filter(hsActionOpen).length, sum(e.costs, (c) => c.amount), userName(e.reported_by)]);
   return fileReply(xlsxBuffer([{ name: "Registre des événements HSSEQ", rows: [["Référence", "Survenu le", "Titre", "Type", "Domaine", "Statut", "Site", "Ensemble", "Gravité réelle", "Gravité potentielle", "Probabilité", "Criticité", "Niveau", "Actions ouvertes", "Coût total", "Déclaré par"], ...rows] }]), XLSX, `registre_evenements_hsseq_${TODAY.replaceAll("-", "")}.xlsx`);
 });
-route("GET", "/hsseq/events/:id", HS_EVENT_READ, (ctx) => hsEventDetail(ctx, hsEventOf(ctx, ctx.params[0])));
+route("GET", "/hsseq/events/:id", HS_EVENT_READ, (ctx) => hsMasquer(ctx, hsEventDetail(ctx, hsEventOf(ctx, ctx.params[0]))));
 route("GET", "/hsseq/events/:id/report.pdf", HS_READ, (ctx) => {
   const e = hsEventOf(ctx, ctx.params[0]);
   const inv = hsInvestigationRow(e);
@@ -8101,7 +8355,8 @@ function hsPeople(data) {
     if (!p || typeof p !== "object" || !["driver", "employee", "third_party"].includes(p.kind)) throw hsBad("Personne : kind driver, employee ou third_party.", ["people"]);
     const role = p.role || "victim";
     if (!["victim", "driver", "witness", "perpetrator", "third_party"].includes(role)) throw hsBad("Rôle d'une personne inconnu.", ["people"]);
-    const target = hsId(p, "id") ?? hsId(p, "person_id");
+    // person_id (le chauffeur ou le salarié) avant id : une fiche relue renvoie aussi l'id de sa ligne.
+    const target = hsId(p, "person_id") ?? hsId(p, "id");
     let name = hsText(p, "name", 200);
     let id = null;
     if (p.kind === "driver" && target) {
@@ -8109,9 +8364,9 @@ function hsPeople(data) {
       if (!d) throw notFound("Chauffeur introuvable.");
       [id, name] = [d.id, d.name];
     } else if (p.kind === "employee" && target) {
-      const emp = HS_EMPLOYEES.find((x) => x.id === target);
+      const emp = hsEmployeeRows().find((x) => x.id === target);
       if (!emp) throw notFound("Salarié introuvable.");
-      [id, name] = [emp.id, userName(emp.user_id)];
+      [id, name] = [emp.id, emp.name];
     }
     if (!id && !name) throw hsMissing("Personne sans identifiant ni nom.", ["people"]);
     return { line_id: ++HS.seq.person, kind: p.kind, id, name, role, days_off: Math.max(0, Math.trunc(Number(p.days_off) || 0)) };
@@ -8174,6 +8429,13 @@ route("POST", "/hsseq/events", ["admin", "direction", "hsseq", "exploitation", "
     investigation: null, costs: [], deadlines: { investigation_due: null, client_notice_due: null, client_notified_at: null },
   };
   hsEventValues(ctx, e, b);
+  // Notes estimées par le déclarant : gardées à part du classement, en lecture seule ensuite.
+  for (const key of ["actual_severity", "potential_severity", "probability"]) {
+    if (b[key] === undefined || b[key] === null || b[key] === "") continue;
+    const note = Number(b[key]);
+    if (!Number.isInteger(note) || note < 1 || note > 5) throw hsBad("Gravités et probabilité se notent de 1 à 5.", [key]);
+    e[`declared_${key}`] = note;
+  }
   e.domain = e.domain ?? HS_TYPES[e.type];
   e.id = ++HS.seq.event;
   e.reference = `EVT/2026/${pad(e.id, 4)}`;
@@ -8265,6 +8527,8 @@ route("DELETE", "/hsseq/events/:id/costs/:id", ["hsseq"], (ctx) => {
 });
 route("POST", "/hsseq/events/:id/:action", ["hsseq"], (ctx) => {
   const action = ctx.params[1];
+  // Immobilisation du véhicule (V09, lot 2) : servie par le module hsseq-trajets.
+  if (action === "immobilize") return immobiliser(ctx, ctx.params[0]);
   if (!["classify", "investigate", "plan", "close", "reopen"].includes(action)) throw notFound("Transition inconnue.");
   const e = hsEventOf(ctx, ctx.params[0]);
   const b = ctx.body;
@@ -8335,6 +8599,7 @@ function hsActionList(ctx) {
     && (!q.owner_id || a.owner_id === hsId(q, "owner_id")) && (!["1", "true"].includes(q.mine) || a.owner_id === ctx.user.id)
     && (!["1", "true"].includes(q.overdue) || hsDaysOverdue(a) > 0) && (!q.site_id || a.site_id === hsId(q, "site_id"))
     && (!q.due_before || a.due_date <= dateArg(q, "due_before")) && (!q.event_id || a.event_id === hsId(q, "event_id"))
+    && (!["1", "true"].includes(q.approval_pending) || hsApprovalPending(a))
     && (!s || [a.reference, a.description].some((x) => x.toLowerCase().includes(s))));
 }
 route("GET", "/hsseq/actions", null, (ctx) => {
@@ -8342,7 +8607,7 @@ route("GET", "/hsseq/actions", null, (ctx) => {
   const list = hsSort(hsActionList(ctx), ctx.query.sort, HS_ACTION_SORTS, "due_date");
   const byStatus = { todo: 0, in_progress: 0, to_verify: 0, closed: 0, cancelled: 0 };
   for (const a of list) byStatus[a.status]++;
-  return hsPage(ctx, list, { by_status: byStatus, overdue: list.filter((a) => hsDaysOverdue(a) > 0).length, verifications_due: list.filter((a) => a.status === "to_verify" && a.verification_date && a.verification_date <= TODAY).length }, hsActionLine);
+  return hsPage(ctx, list, { by_status: byStatus, overdue: list.filter((a) => hsDaysOverdue(a) > 0).length, verifications_due: list.filter((a) => a.status === "to_verify" && a.verification_date && a.verification_date <= TODAY).length, approval_pending: list.filter(hsApprovalPending).length }, hsActionLine);
 });
 route("GET", "/hsseq/actions/export.xlsx", HS_READ, (ctx) => {
   const list = hsSort(hsActionList(ctx), null, HS_ACTION_SORTS, "due_date");
@@ -8396,6 +8661,16 @@ route("POST", "/hsseq/actions", ["hsseq"], (ctx) => {
     if (!source) throw notFound("Fiche d'origine introuvable.");
     if (origin === "event" && source.status === "closed") throw hsRule("invalid_transition", "Événement clôturé : rouvrez-le avant d'y ajouter une action.");
     site = source.site_id ?? 1;
+  } else if (origin === "audit") {
+    // origin_id : le constat ; son audit doit être planifié ou réalisé.
+    if (!originId) throw hsMissing("Constat d'origine manquant.", ["origin_id"]);
+    const constat = (DB.hsseq.findings ?? []).find((x) => x.id === originId);
+    if (!constat) throw notFound("Constat introuvable.");
+    const audit = (DB.hsseq.audits ?? []).find((x) => x.id === constat.audit_id);
+    if (audit && !["planned", "done"].includes(audit.status)) throw hsRule("invalid_transition", "Audit clos ou annulé : rouvrez-le avant d'ajouter une action à ses constats.");
+    site = constat.site_id ?? audit?.site_id ?? null;
+  } else if (origin === "review") {
+    site = null;
   }
   const a = hsNewAction({ description: "", origin, origin_id: originId, owner_id: ctx.user.id, due_date: TODAY, created_by: ctx.user.id, site_id: site });
   a.expected_evidence = null;
@@ -8457,7 +8732,7 @@ route("POST", "/hsseq/actions/:id/:action", null, (ctx) => {
 });
 
 /* Contrôles : grilles */
-route("GET", "/hsseq/checks/templates", [...HS_READ, "conducteur"], (ctx) => {
+route("GET", "/hsseq/checks/templates", [...HS_AUDIT_READ, "conducteur"], (ctx) => {
   const q = ctx.query;
   const active = String(q.active ?? "1").toLowerCase();
   const config = hasProfile(ctx, HS_SETUP);
@@ -8515,23 +8790,23 @@ route("PATCH", "/hsseq/checks/templates/:id", HS_SETUP, (ctx) => {
 });
 
 /* Contrôles et non-conformités */
-route("GET", "/hsseq/checks/nonconformities", HS_READ, (ctx) => {
+route("GET", "/hsseq/checks/nonconformities", HS_AUDIT_READ, (ctx) => {
   const q = ctx.query;
   const statuses = hsList(q.status);
   if (q.sort && !["found_at", "-found_at"].includes(q.sort)) throw hsBad("Tri inconnu.", ["sort"]);
-  const list = HS.ncs.filter((n) => hsSiteOk(ctx, n.site_id) && hsFilter(ctx, q, n.site_id, null) && (!statuses || statuses.includes(n.status)) && (!["1", "true"].includes(q.blocking) || n.blocking) && (!q.vehicle_id || n.vehicle_id === hsId(q, "vehicle_id")))
+  const list = HS.ncs.filter((n) => hsSiteOk(ctx, n.site_id) && hsFilter(ctx, q, n.site_id, hsKind(hsVehicle(n.vehicle_id)) ?? "none") && (!statuses || statuses.includes(n.status)) && (!["1", "true"].includes(q.blocking) || n.blocking) && (!q.vehicle_id || n.vehicle_id === hsId(q, "vehicle_id")))
     .sort((a, b) => (q.sort === "found_at" ? a.found_at.localeCompare(b.found_at) : b.found_at.localeCompare(a.found_at)) || b.id - a.id);
   return hsPage(ctx, list, { open: list.filter((n) => n.status === "open").length, blocking_open: list.filter((n) => n.status === "open" && n.blocking).length }, (n) => hsNcRow(ctx, n));
 });
 const HS_CHECK_SORTS = { reported_at: (c) => c.reported_at, result: (c) => c.result, reference: (c) => c.reference };
-route("GET", "/hsseq/checks", [...HS_READ, "conducteur"], (ctx) => {
+route("GET", "/hsseq/checks", [...HS_AUDIT_READ, "conducteur"], (ctx) => {
   const q = ctx.query;
   const from = dateArg(q, "date_from");
   const to = dateArg(q, "date_to");
   const results = hsList(q.result);
   const list = hsSort(HS.checks.filter((c) => hsCanSeeCheck(ctx, c) && hsFilter(ctx, q, c.site_id, c.vehicle_kind) && (!from || c.reported_at.slice(0, 10) >= from) && (!to || c.reported_at.slice(0, 10) <= to)
     && ["vehicle_id", "rotation_id", "driver_id"].every((k) => !q[k] || c[k] === hsId(q, k)) && (!results || results.includes(c.result))), q.sort, HS_CHECK_SORTS, "-reported_at");
-  const byResult = { compliant: 0, non_compliant: 0, blocking: 0 };
+  const byResult = { compliant: 0, non_compliant: 0, blocking: 0, incomplete: 0 };
   for (const c of list) byResult[c.result]++;
   const counts = { by_result: byResult };
   if (hsScope(ctx) !== "self") {
@@ -8545,14 +8820,14 @@ route("GET", "/hsseq/checks", [...HS_READ, "conducteur"], (ctx) => {
     }
     Object.assign(counts, { departures: departures.length, departures_checked: departures.filter((r) => HS.checks.some((c) => c.rotation_id === r.id && c.kind === "pre_departure")).length });
   }
-  return hsPage(ctx, list, counts, hsCheckLine);
+  return hsPage(ctx, list, counts, (c) => hsMasquer(ctx, hsCheckLine(c)));
 });
 function hsCheckOf(ctx, id) {
   const c = HS.checks.find((x) => x.id === id);
   if (!c || !hsCanSeeCheck(ctx, c)) throw notFound("Contrôle introuvable.");
   return c;
 }
-route("GET", "/hsseq/checks/:id", [...HS_READ, "conducteur"], (ctx) => hsCheckDetail(ctx, hsCheckOf(ctx, ctx.params[0])));
+route("GET", "/hsseq/checks/:id", [...HS_AUDIT_READ, "conducteur"], (ctx) => hsMasquer(ctx, hsCheckDetail(ctx, hsCheckOf(ctx, ctx.params[0]))));
 route("POST", "/hsseq/checks", HS_FIELD, (ctx) => {
   const b = ctx.body;
   requireFields(b, "template_id", "answers");
@@ -8648,7 +8923,9 @@ route("GET", "/hsseq/breath-tests", [...HS_READ, "conducteur"], (ctx) => {
     const day = t.reported_at.slice(0, 10);
     return (annules ? t.active === false : t.active !== false) && hsCanSeeTest(ctx, t) && (!q.company_id || Number(q.company_id) === 1) && (!q.site_id || hsTestSite(t) === Number(q.site_id))
       && (!date || day === date) && (!from || day >= from) && (!to || day <= to) && (!q.rotation_id || t.rotation_id === hsId(q, "rotation_id")) && (!q.driver_id || t.driver_id === hsId(q, "driver_id"))
-      && (!statuses || statuses.includes(hsTestStatus(t)));
+      && (!statuses || statuses.includes(hsTestStatus(t)))
+      // Profil de l'ensemble de la rotation du test : un test pas encore rattaché n'en a pas.
+      && (!q.vehicle_kind || hsKind(hsVehicle(hsRotation(t.rotation_id)?.vehicle_id)) === q.vehicle_kind);
   }).sort((a, b) => (["reported_at", "date"].includes(q.sort) ? a.reported_at.localeCompare(b.reported_at) : b.reported_at.localeCompare(a.reported_at)) || b.id - a.id);
   const counts = access === "done" ? {} : { by_status: { compliant: 0, non_compliant: 0, not_done: 0 } };
   if (counts.by_status) for (const t of list) counts.by_status[hsTestStatus(t)]++;
@@ -8726,6 +9003,32 @@ route("POST", "/hsseq/lock/evaluate", ["admin", "direction", "hsseq", "exploitat
   return hsEvaluate(ctx, rot);
 });
 /** Rotations du jour (saisies ou en route) : le conducteur les siennes, le chef de parc celles de ses sites, hsseq et l'administration toutes. */
+/**
+ * Rotations chargées ou en cours à une date (aujourd'hui par défaut), tous états, d'un ensemble
+ * (vehicle_id) ou de tous : rattacher un événement à une rotation, même partie ou terminée. Conducteur :
+ * ses propres rotations ; hors lecture complète, les ensembles des sites du compte.
+ */
+route("GET", "/hsseq/rotations", ["admin", "direction", "hsseq", "exploitation", "conducteur"], (ctx) => {
+  const q = ctx.query;
+  const day = dateArg(q, "date") ?? TODAY;
+  const vehicleId = q.vehicle_id ? hsId(q, "vehicle_id") : null;
+  if (vehicleId && !hsVehicle(vehicleId)) throw notFound("Ensemble introuvable.");
+  const self = hsScope(ctx) === "self";
+  const mine = hsMyDriver(ctx);
+  const enCours = (r) => r.date_loading === day || (r.date_loading < day && (r.state === "en_route" || (r.date_delivery ?? r.date_loading) >= day));
+  const items = [...DB.rotations.filter((r) => r.company_id === 1), ...HS.rotations]
+    .filter((r) => r.state !== "cancelled" && enCours(r) && (!vehicleId || r.vehicle_id === vehicleId))
+    .filter((r) => (self ? Boolean(mine) && r.driver_id === mine : hsSiteOk(ctx, hsVehicleSite(hsVehicle(r.vehicle_id)))))
+    .sort((a, b) => b.date_loading.localeCompare(a.date_loading) || b.id - a.id)
+    .slice(0, 200);
+  return {
+    date: day,
+    items: items.map((r) => ({
+      ...hsRotationRef(r), vehicle: hsVehicleRef(r.vehicle_id), driver: hsDriverRef(r.driver_id), site: hsSiteRef(hsVehicleSite(hsVehicle(r.vehicle_id))),
+      departed_at: r.departed_at ?? null, date_delivery: r.date_delivery ?? null, date_return: r.date_return ?? null,
+    })),
+  };
+});
 route("GET", "/hsseq/me/rotations", ["admin", "hsseq", "exploitation", "conducteur"], (ctx) => {
   const day = dateArg(ctx.query, "date", TODAY);
   const items = hsDepartureRotations(day)
@@ -8747,13 +9050,14 @@ route("GET", "/hsseq/lock/departures", HS_READ, (ctx) => {
   return hsDepartures(ctx, day, ctx.query);
 });
 const hsReasonRow = (r) => ({ ...r, disabled_sites: r.disabled_sites.map(hsSiteRef).filter(Boolean) });
-route("GET", "/hsseq/lock/reasons", HS_READ, () => HS.reasons.map(hsReasonRow));
+route("GET", "/hsseq/lock/reasons", HS_AUDIT_READ, () => HS.reasons.map(hsReasonRow));
 route("PATCH", "/hsseq/lock/reasons", HS_SETUP, (ctx) => {
   const [code] = requireFields(ctx.body, "code");
   const s = hsReasonSetting(code);
   if (!s) throw notFound("Motif inconnu.");
   const b = ctx.body;
-  if ("active" in b && b.active && s.lot > 1) throw hsRule("not_in_lot_1", `Le motif ${code} relève du lot ${s.lot} : il n'est pas encore évalué.`, { fields: ["active"] });
+  // Lot courant : 2 (CURRENT_LOT du noyau) ; les motifs V06 à V09, livrés désactivés, s'activent.
+  if ("active" in b && b.active && s.lot > 2) throw hsRule("not_in_lot_1", `Le motif ${code} relève du lot ${s.lot} : il n'est pas encore évalué.`, { fields: ["active"] });
   if ("vehicle_kinds" in b && (!Array.isArray(b.vehicle_kinds ?? []) || (b.vehicle_kinds ?? []).some((k) => !["tanker", "tipper"].includes(k)))) throw hsBad("Types de véhicule : tanker, tipper.", ["vehicle_kinds"]);
   if ("waivable" in b && Boolean(b.waivable) !== s.waivable) throw hsRule("business_rule", "Le caractère dérogeable d'un motif ne se modifie pas.", { fields: ["waivable"] });
   if ("active" in b) s.active = Boolean(b.active);
@@ -8770,7 +9074,7 @@ function hsWaiverOf(ctx, id) {
   return w;
 }
 const HS_WAIVER_SORTS = { requested_at: (w) => w.requested_at, status: (w) => w.status, reference: (w) => w.reference };
-route("GET", "/hsseq/waivers", HS_READ, (ctx) => {
+route("GET", "/hsseq/waivers", HS_AUDIT_READ, (ctx) => {
   const q = ctx.query;
   hsExpireWaivers();
   const statuses = hsList(q.status);
@@ -8783,7 +9087,7 @@ route("GET", "/hsseq/waivers", HS_READ, (ctx) => {
   for (const w of list) byStatus[w.status]++;
   return hsPage(ctx, list, { by_status: byStatus }, (w) => hsWaiverRow(ctx, w));
 });
-route("GET", "/hsseq/waivers/:id", HS_READ, (ctx) => hsWaiverRow(ctx, hsWaiverOf(ctx, ctx.params[0])));
+route("GET", "/hsseq/waivers/:id", HS_AUDIT_READ, (ctx) => hsWaiverRow(ctx, hsWaiverOf(ctx, ctx.params[0])));
 route("POST", "/hsseq/waivers", ["exploitation"], (ctx) => {
   const [rotationId, code] = requireFields(ctx.body, "rotation_id", "reason_code");
   const rot = hsRotation(Number(rotationId));
@@ -8860,7 +9164,8 @@ const HS_ATTACH_MODELS = {
   },
 };
 /** Fiche close : plus de pièce ajoutée ni retirée. */
-const hsClosed = (model, r) => ({ event: r.status === "closed", action: ["closed", "cancelled"].includes(r.status), nonconformity: r.status !== "open", waiver: !["pending_hsseq", "active"].includes(r.status) })[model] ?? false;
+const hsClosed = (model, r) => ({ event: r.status === "closed", action: ["closed", "cancelled"].includes(r.status), nonconformity: r.status !== "open", waiver: !["pending_hsseq", "active"].includes(r.status), risk: r.status === "archived",
+  audit: ["closed", "cancelled"].includes(r.status), finding: ["closed", "cancelled"].includes((DB.hsseq.audits ?? []).find((x) => x.id === r.audit_id)?.status) })[model] ?? false;
 /** Ajouter une pièce : son auteur ou responsable, le chef de parc du site, ou hsseq. */
 function hsCanAttach(ctx, model, r) {
   if (hsClosed(model, r)) return false;
@@ -8868,6 +9173,8 @@ function hsCanAttach(ctx, model, r) {
   const yard = hsScope(ctx) === "site";
   if (model === "event") return r.reported_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
   if (model === "action") return r.owner_id === ctx.user.id;
+  // Risque (lot 2) : son propriétaire, en plus de hsseq.
+  if (model === "risk") return r.owner_id === ctx.user.id;
   if (model === "check") return r.performed_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
   if (model === "nonconformity") return HS.checks.find((c) => c.id === r.check_id)?.performed_by === ctx.user.id || (yard && hsSiteOk(ctx, r.site_id));
   return model === "waiver" && r.requested_by === ctx.user.id;
@@ -8891,7 +9198,7 @@ route("POST", "/hsseq/attachments", null, (ctx) => {
   const file = uploadedFile(ctx, 8 * 1048576, "Fichier");
   const mimetype = detectType(file.data);
   if (!["image/jpeg", "image/png", "application/pdf"].includes(mimetype)) throw new ApiError(415, "unsupported_type", "Formats acceptés : JPEG, PNG ou PDF.");
-  const role = model === "action" ? "evidence" : model === "nonconformity" && record.status === "open" && fields.role === "lift" ? "lift" : "photo";
+  const role = ["action", "risk", "audit", "finding", "requirement"].includes(model) ? "evidence" : model === "nonconformity" && record.status === "open" && fields.role === "lift" ? "lift" : "photo";
   const a = hsAttach(model, id, ctx.user.id, checkedName(file.filename, mimetype, "photo"), mimetype, file.data, { caption: fields.caption ? String(fields.caption).slice(0, 300) : null, client_uuid: fields.client_uuid || null, role });
   return hsAttachmentRow(a);
 });
@@ -8924,6 +9231,39 @@ route("DELETE", "/hsseq/attachments/:id", null, (ctx) => {
   HS.files.delete(a.id);
   return { status: "ok" };
 });
+
+/* ─── NIMOVA · HSSEQ, lot 2 (routes dans hsseq-*.mjs) ─────────────────────── */
+
+/**
+ * Références passées aux modules du lot 2 : outils généraux, puis toutes les constantes et fonctions de
+ * la section HSSEQ ci-dessus (portée, droits, pages, historique, pièces jointes, notifications…). Les
+ * modules s'enregistrent après seed(), quand DB.hsseq porte déjà les tables du lot 1.
+ */
+const HS_REFS = {
+  route, reply, fileReply, xlsxBuffer, ApiError, DB, USERS, TODAY, COMPANIES, hasProfile, intArg, limitOf, offsetOf,
+  TR_READ, HS_READ, HS_APP, HS_EVENT_READ, HS_FIELD, HS_SETUP, HS_ALL, HS_SETTINGS_DEFAUT, HS_SETTINGS_DATES,
+  HS_SETTINGS_NOMBRES, HS_TARGETS, HS_USER_SITES, HS_EMPLOYEES, HS_PNG, HS_REASONS, HS_NOT_WAIVABLE, HS_TYPES,
+  HS_TYPE_LABELS, HS_STATUS_LABELS, HS_ACTION_LABELS, HS_LEVEL_LABELS, HS_DOMAINS, HS_DOC_LABELS, HS_COST_KINDS,
+  HS_CONTROL_LEVELS, HS_ORIGINS, HS_FACTORS, HS_METHODS, HS_PROOFS, hsNow, hsAddMinutes, hsSettings, hsThresholds,
+  hsInvestigationMinutes, hsLevel, hsLevelMethod, hsUser, hsVehicle, hsVehicleByName, hsKind, hsVehicleSite,
+  hsVehicleRef, hsDriver, hsDriverRef, hsRotation, hsRouteName, hsRotationRef, hsSite, hsSiteRef, hsRotationEnd,
+  hsRotationAt, hsDepartureRotations, hsLockActive, hsIs, hsFull, hsScope, hsSites, hsPersonalHidden, hsAuditorGuard,
+  hsSiteOk, hsEmployee, hsMyDriver, hsCanSeeEvent, hsCanSeeAction, hsCanSeeCheck, hsCanLift, hsForbidden, hsRule,
+  hsMissing, hsBad, hsNum, hsId, hsFilter, hsPage, hsLog, hsHistoryRow, hsHistory, hsAttach, hsPhoto,
+  hsAttachmentRow, hsAttachments, hsClaim, hsIds, hsExisting, hsNotify, hsNotificationRow, hsDirectors,
+  hsHsseqManagers, hsTemplateRow, hsCreateCheck, hsNcPhotosMissing, hsNcRow, hsCheckLine, hsCheckDetail,
+  hsTestStatus, hsTestAccess, hsTestRow, hsTestSite, hsCanSeeTest, hsLiveTests, hsReasonSetting, hsExpireWaivers,
+  hsAutoAttach, hsRemoveDriver, hsReason, hsReasons, hsEvaluate, hsDepartures, hsCriticality, hsEventActions,
+  hsActionOpen, hsEventOverdue, hsEventLine, hsEventTransitions, hsPersonRow, hsInvestigationRow, hsEventDetail,
+  hsNotifyLevel, hsClassify, hsActionOriginLabel, hsActionCriticality, hsIsCostly, hsNeedsApproval, hsDaysOverdue,
+  hsActionLine, hsReminders, hsActionTransitions, hsActionDetail, hsNewAction, hsWaiverRow, hsCanSeeWaiver,
+  hsDeadlines, hsEventKind, hsEventCounts, hsHours, hsKm, hsLiters, hsSynth, hsIndicators, seedHsseq, hsInternal,
+  hsDateTime, hsReportedAt, hsText, hsSiteRow, hsSiteValues, hsAssignVehicles, hsSettingsCompany, hsSettingsRow,
+  hsEventOf, HS_EVENT_SORTS, hsSort, hsList, hsEventList, hsPeople, hsEventValues, hsActionOf, HS_ACTION_SORTS,
+  hsActionList, hsActionValues, hsTemplateValues, hsItemValues, HS_CHECK_SORTS, hsCheckOf, hsTestOf,
+  hsRotationAllowed, hsReasonRow, hsWaiverOf, HS_WAIVER_SORTS, hsFourEyes, hsWaiverRequire, HS_ATTACH_MODELS,
+  hsClosed, hsCanAttach, hsAttachmentOf,
+};
 
 /* ─── NIMOVA · Analyse (routes dans analyse.mjs) ─────────────────────────── */
 
@@ -9004,6 +9344,7 @@ function handle(req, res, raw, started) {
       company = resolveCompany(user, headers);
       if (passwordTemporary(user) && !OPEN_WITH_TEMPORARY_PASSWORD.has(match.pattern)) throw new ApiError(403, "password_change_required", "Remplacez d'abord votre mot de passe provisoire.");
       if (match.profiles && !user.profiles.some((p) => match.profiles.includes(p))) throw new ApiError(403, "forbidden", "Accès non autorisé pour votre profil.");
+      if (match.pattern.startsWith("/hsseq/") && user.profiles.includes("auditeur")) hsAuditorGuard(user, method);
     } else if (match.pattern === "/auth/login") {
       login = typeof body.login === "string" ? body.login.trim().toLowerCase() : null;
     }
@@ -9040,6 +9381,11 @@ function handle(req, res, raw, started) {
 }
 
 seed();
+// Lot 2 HSSEQ : routes et tables des modules hsseq-*.mjs, sur les données du lot 1 déjà semées.
+enregistrerRisques(HS_REFS);
+enregistrerConformite(HS_REFS);
+enregistrerHabilitationsRapports(HS_REFS);
+enregistrerTrajets(HS_REFS);
 const server = http.createServer((req, res) => {
   const started = process.hrtime.bigint();
   const chunks = [];

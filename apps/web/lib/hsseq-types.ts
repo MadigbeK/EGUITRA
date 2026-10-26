@@ -16,10 +16,11 @@ export interface Ref {
 }
 
 /**
- * Profils ouverts à HSSEQ au lot 1 (« auditeur » viendra au lot 2). Le profil admin implique
- * direction (et finance) dans le noyau : un compte admin porte aussi « direction » dans ses profils.
+ * Profils ouverts à HSSEQ. L'auditeur externe (lot 2) lit en lecture seule, borné à ses sites et à sa
+ * date de fin d'accès. Le profil admin implique direction (et finance) dans le noyau : un compte admin
+ * porte aussi « direction » dans ses profils.
  */
-export type HsseqProfile = "admin" | "direction" | "hsseq" | "exploitation" | "conducteur" | "rh";
+export type HsseqProfile = "admin" | "direction" | "hsseq" | "exploitation" | "conducteur" | "rh" | "auditeur";
 
 /**
  * Droits du compte connecté sur une fiche, calculés par le noyau : l'écran n'affiche que les
@@ -76,7 +77,7 @@ export interface DeviceStamp {
 }
 
 /** Fiche à laquelle une pièce est rattachée (POST /hsseq/attachments, champs model et id). */
-export type AttachmentModel = "event" | "action" | "check" | "nonconformity" | "waiver";
+export type AttachmentModel = "event" | "action" | "check" | "nonconformity" | "waiver" | "risk" | "audit" | "finding" | "requirement";
 
 /** Photo du constat, photo de la correction, preuve de réalisation, signature, document. */
 export type AttachmentRole = "photo" | "lift" | "evidence" | "signature" | "document";
@@ -100,7 +101,7 @@ export interface Attachment {
 }
 
 /** Fiche suivie par le journal (GET /hsseq/log?model&id). */
-export type LogModel = "event" | "action" | "check" | "nonconformity" | "breath_test" | "waiver" | "lock_reason";
+export type LogModel = "event" | "action" | "check" | "nonconformity" | "breath_test" | "waiver" | "lock_reason" | "risk" | "audit" | "finding" | "requirement" | "auditor" | "journey" | "immobilization" | "route" | "rotation";
 
 /** Ligne du journal (§11, traçabilité) : valeurs avant et après, note libre. */
 export interface HistoryEntry {
@@ -188,7 +189,7 @@ export type EventType =
 export type EventStatus = "reported" | "classified" | "investigation" | "actions" | "closed";
 
 /** Transitions, envoyées par POST /hsseq/events/{id}/{transition}. */
-export type EventTransition = "classify" | "investigate" | "plan" | "close" | "reopen";
+export type EventTransition = "classify" | "investigate" | "plan" | "close" | "reopen" | "immobilize";
 
 export type PersonRole = "victim" | "driver" | "witness" | "perpetrator" | "third_party";
 
@@ -341,8 +342,14 @@ export interface Event extends EventLine, DeviceStamp, GpsPosition {
   days_lost: number;
   /** Arrêt RH (eguitra.rh.leave) relié par le Responsable HSSEQ. */
   leave_id: number | null;
-  /** Véhicule immobilisé par l'enquête (motif V09, lot 2) : lu seulement au lot 1. */
+  /** Notes estimées par le déclarant, gardées à part du classement, en lecture seule ensuite. */
+  declared: { actual_severity: Score | null; potential_severity: Score | null; probability: Score | null; criticality: number | null };
+  /** Véhicule immobilisé par l'enquête (motif V09, lot 2). */
   vehicle_immobilized: boolean;
+  /** Immobilisation en cours du véhicule par cet événement, nulle sinon. */
+  immobilization: { id: number; since: string; reason: string | null; imposed_by: Ref | null } | null;
+  /** Immobilisation proposée (criticité élevée, véhicule ni immobilisé ni levé tant que la fiche est ouverte). */
+  immobilization_proposed: boolean;
   classified_at: string | null;
   classified_by: Ref | null;
   closed_at: string | null;
@@ -386,6 +393,10 @@ export interface EventReport {
   vehicle_id?: number | null;
   people?: PersonInput[];
   attachment_ids?: number[];
+  /** Notes estimées par le déclarant (1 à 5), facultatives : le noyau les garde à part du classement. */
+  actual_severity?: Score | null;
+  potential_severity?: Score | null;
+  probability?: Score | null;
 }
 
 /** Corps de PATCH /hsseq/events/{id} : déclaration, plus notes et arrêt pour le profil hsseq. */
@@ -426,7 +437,7 @@ export interface ActionLine {
   reference: string;
   description: string;
   origin: ActionOrigin;
-  /** Fiche d'origine (événement ou contrôle), nulle pour un audit, un risque ou une revue. */
+  /** Fiche d'origine : événement, contrôle, constat (origine « audit ») ou risque ; nulle pour une revue de direction. */
   origin_id: number | null;
   /** « EVT/2026/0012 Titre » pour un événement, la référence du contrôle pour un contrôle. */
   origin_label: string | null;
@@ -444,6 +455,10 @@ export interface ActionLine {
   estimated_cost: number;
   /** Action coûteuse (coût estimé au seuil) pas encore validée par la direction. */
   approval_required: boolean;
+  /** Validation de la direction attendue : action coûteuse non validée, ni close ni annulée. */
+  approval_pending: boolean;
+  /** Résultat de la dernière vérification d'efficacité, nul tant qu'elle n'est pas faite. */
+  effective: boolean | null;
 }
 
 /** Relance du responsable : J-7, J0, chaque semaine de retard, escalade au Directeur général. */
@@ -464,8 +479,6 @@ export interface HsseqAction extends ActionLine {
   done_at: string | null;
   verified_at: string | null;
   verified_by: Ref | null;
-  /** Résultat de la dernière vérification d'efficacité, nul sans vérification. */
-  effective: boolean | null;
   verification_comment: string | null;
   closed_at: string | null;
   cancel_reason: string | null;
@@ -480,6 +493,8 @@ export interface ActionCounts {
   by_status: Record<ActionStatus, number>;
   overdue: number;
   verifications_due: number;
+  /** Actions coûteuses qui attendent la validation de la direction (filtre approval_pending=1). */
+  approval_pending: number;
 }
 
 /** Corps de POST /hsseq/actions (hsseq) ; origine « event » par défaut, origin_id exigé pour event et check. */
@@ -528,7 +543,8 @@ export type CheckAnswerValue = "ok" | "not_ok" | "na" | "not_evaluated";
 export type CheckAnswerInput = "ok" | "not_ok" | "na";
 
 /** Bloquant dès qu'un point bloquant est non conforme ; non conforme (avec réserves) sinon. */
-export type CheckResult = "compliant" | "non_compliant" | "blocking";
+/** « incomplete » : des points bloquants ajoutés à la grille après la saisie attendent un contrôle complémentaire. */
+export type CheckResult = "compliant" | "non_compliant" | "blocking" | "incomplete";
 
 export interface CheckAnswer {
   item_id: number;
@@ -557,8 +573,12 @@ export interface CheckLine {
   reported_at: string;
   result: CheckResult;
   open_nonconformities: number;
+  /** Non-conformités bloquantes encore ouvertes. */
+  open_blocking: number;
   /** Vrai tant qu'une non-conformité du contrôle est sans photo (les photos suivent la fiche). */
   photos_missing: boolean;
+  /** Contrôle complémentaire : le contrôle d'origine qu'il complète. */
+  complement_of: { id: number; reference: string } | null;
 }
 
 export interface Check extends CheckLine, GpsPosition {
@@ -570,10 +590,15 @@ export interface Check extends CheckLine, GpsPosition {
   /** Signature du conducteur : image PNG ou JPEG, pièce jointe de rôle « signature ». */
   signature: Attachment | null;
   nonconformities: Nonconformity[];
+  /** Points ajoutés à la grille après la saisie, à répondre par un contrôle complémentaire (les bloquants retiennent V01). */
+  awaiting_items: Array<{ item_id: number; label: string; blocking: boolean }>;
+  /** Contrôles complémentaires de ce contrôle, du plus ancien au plus récent. */
+  complements: CheckLine[];
+  /** « lift » : une non-conformité se lève ; « complement » : le compte peut saisir le contrôle complémentaire (terrain). */
+  transitions: Array<"lift" | "complement">;
   attachments: Attachment[];
   history: HistoryEntry[];
-  transitions: Array<"lift">;
-  /** can_approve toujours faux au lot 1 (pas de contre-visa). */
+  /** can_edit et can_approve toujours faux : pas de correction d'un contrôle saisi, pas de contre-visa. */
   rights: Rights;
 }
 
@@ -809,6 +834,25 @@ export interface MyRotation {
 }
 
 /** Réponse de GET /hsseq/me/rotations. */
+/** Rotation chargée ou en cours à une date (GET /hsseq/rotations), tous états. */
+export interface RotationAtDate extends RotationRef {
+  vehicle: VehicleRef;
+  driver: Ref | null;
+  site: Ref | null;
+  departed_at: string | null;
+  date_delivery: string | null;
+  date_return: string | null;
+}
+
+/**
+ * GET /hsseq/rotations?date=&vehicle_id= : rotations d'une date pour rattacher un événement, même parties
+ * ou terminées ; le conducteur ne reçoit que les siennes, les autres comptes celles de leurs sites.
+ */
+export interface RotationsAtDate {
+  date: string;
+  items: RotationAtDate[];
+}
+
 export interface MyRotations {
   date: string;
   items: MyRotation[];
@@ -906,14 +950,30 @@ export type IndicatorCode =
   | "fuel_consumption"
   | "co2_emissions"
   | "tanker_shortage"
-  | "tipper_variance";
+  | "tipper_variance"
+  // Lot 2.
+  | "audits_completion"
+  | "immobilizations";
 
 /** Unité d'un indicateur ; commun.tsx la met en forme (fmtIndicateur). */
 export type IndicatorUnit = "rate" | "ratio" | "pct" | "count" | "per_mille" | "l_100km" | "kg_co2_km";
 
+/**
+ * État d'un indicateur au regard de sa cible (indicator_status du noyau). Sous surveillance : à moins de
+ * 15 % de la cible (sens « up » : à partir de 85 % de la cible ; sens « down » : jusqu'à cible ÷ 0,85,
+ * sans marge pour une cible nulle), ou cible tenue sur 12 mois mais manquée le dernier mois.
+ */
+export type IndicatorStatus = "met" | "watch" | "missed" | "no_data";
+
+/** Famille du classement des donneurs d'ordre : proactif (moyens et démarches), réactif (résultats constatés). */
+export type IndicatorFamily = "proactive" | "reactive";
+
 export interface SeriesPoint {
   month: string;
   value: number | null;
+  /** Cible de l'indicateur, et état du point au regard de cette cible. */
+  target: number | null;
+  status: IndicatorStatus;
 }
 
 /** Dérogations activées d'une période, par site (nom) et par motif. */
@@ -934,6 +994,8 @@ export interface Indicator {
   direction: "up" | "down";
   /** Nul sans valeur ou sans cible. */
   met: boolean | null;
+  status: IndicatorStatus;
+  family: IndicatorFamily;
   source: string;
   formula: string;
   /** Douze mois, le dernier étant le mois demandé. */
@@ -965,6 +1027,44 @@ export interface Deadline {
   site: Ref | null;
 }
 
+/** Case de la matrice des événements de la période : `severity` et `potential_severity` portent la gravité potentielle. */
+export interface EventMatrixCell {
+  severity: Score;
+  potential_severity: Score;
+  probability: Score;
+  criticality: number;
+  level: CriticalityLevel;
+  count: number;
+}
+
+/** Classement d'un constat d'audit. */
+export type FindingClass = "major" | "minor" | "observation";
+
+/** Statut d'une exigence du registre. */
+export type RequirementStatus = "compliant" | "partial" | "non_compliant" | "not_evaluated";
+
+/** Norme d'une exigence, pour la maturité. */
+export type Standard = "iso_45001" | "iso_14001" | "iso_9001" | "other";
+
+/** Maturité d'une norme : part des exigences évaluées tenues (conforme 1, partielle 0,5). */
+export interface IsoMaturity {
+  standard: Standard;
+  label: string;
+  requirements: number;
+  evaluated: number;
+  /** En pour cent ; nul sans exigence évaluée. */
+  score: number | null;
+}
+
+/** Véhicule immobilisé en cours (V09), au cockpit : huit au plus. */
+export interface CockpitImmobilization {
+  id: number;
+  vehicle: VehicleRef;
+  site: Ref | null;
+  event: { id: number; reference: string };
+  since: string;
+}
+
 export interface Cockpit {
   period: { type: CockpitPeriod; month: string; date_from: string; date_to: string; label: string; frozen: boolean; frozen_on: string | null };
   filters: { company_id: number | null; site_id: number | null; vehicle_kind: VehicleKind | null };
@@ -972,13 +1072,33 @@ export interface Cockpit {
   /** Base des heures travaillées fournies par RH (paramètre). */
   hours_basis: "paid" | "presence";
   indicators: Indicator[];
-  /** Départs du jour ; `items` limité aux départs bloqués. */
+  /** Départs du jour ; `items` limité aux départs bloqués, vide pour l'auditeur (noms des conducteurs). */
   blocked_departures: Departures;
   overdue_actions: { total: number; items: ActionLine[] };
+  /** Pour l'auditeur, les documents des véhicules seulement (pas d'échéance de personne). */
   deadlines: { horizon_days: number; items: Deadline[] };
-  events: { to_classify: number; overdue_investigations: number; high_open: number };
-  /** Maturité ISO 45001 : nulle au lot 1 (audits au lot 2). */
-  iso_maturity: { score: number; standard: string; assessed_on: string } | null;
+  events: {
+    to_classify: number;
+    overdue_investigations: number;
+    high_open: number;
+    /** Événements de la période (le mois, ou les douze mois qui s'y terminent), au périmètre des filtres. */
+    matrix: EventMatrixCell[];
+    /** Événements de la période pas encore classés, hors matrice. */
+    matrix_unclassified: number;
+  };
+  /** Dérogations de la période par motif (V02, V04 à V09). */
+  waivers_by_reason: Partial<Record<ReasonCode, number>>;
+  /* Lot 2, bornés aux sites du compte. */
+  /** Risques en vigueur par niveau brut et résiduel, revues échues. */
+  risks: { active: number; by_raw_level: Record<CriticalityLevel, number>; by_residual_level: Record<CriticalityLevel, number>; reviews_overdue: number };
+  /** Audits de l'année du mois (annulés exclus) : planifiés, réalisés, taux de réalisation. */
+  audits: { year: number; planned: number; done: number; rate: number | null };
+  findings: { open_by_class: Record<FindingClass, number> };
+  /** Registre des exigences : nul pour le chef de parc (il ne le lit pas). */
+  requirements: { by_status: Record<RequirementStatus, number>; non_compliant: number } | null;
+  immobilizations: { active: number; items: CockpitImmobilization[] };
+  /** Maturité par norme : nulle sans exigence, ou pour le chef de parc. */
+  iso_maturity: IsoMaturity[] | null;
   computed_at: string;
 }
 
@@ -1013,6 +1133,12 @@ export interface Referentials {
   drivers: Array<Ref & { site_id: number | null }>;
   /** Comptes internes hors conducteurs : responsables possibles d'une action ; vide pour le conducteur. */
   owners: Ref[];
+  /**
+   * Salariés en poste (RH), pour désigner une personne en cause : servis aux profils qui déclarent hors
+   * conducteur (administration, direction, hsseq, exploitation), vides sinon. Site : celui de l'ensemble
+   * du chauffeur lié, quand il est connu.
+   */
+  employees: Array<Ref & { company: Ref; site_id: number | null; site: Ref | null }>;
   criticality_thresholds: CriticalityThreshold[];
   /** Seuil d'une action coûteuse, validée par la direction avant démarrage (GNF). */
   costly_action_threshold: number;
@@ -1022,6 +1148,24 @@ export interface Referentials {
   vehicle_kinds: Array<{ code: VehicleKind; label: string }>;
   /** Compte connecté : profils, sites couverts (vide : tous), salarié RH et chauffeur liés. */
   me: { profiles: HsseqProfile[]; site_ids: number[]; employee_id: number | null; driver_id: number | null };
+}
+
+/** Compte du profil auditeur (GET /hsseq/auditors, admin et hsseq) : durée et périmètre de sa lecture. */
+export interface Auditor {
+  id: number;
+  name: string;
+  login: string;
+  /** Fin d'accès ; nulle : l'accès est refusé tant qu'elle n'est pas fixée. */
+  access_until: string | null;
+  expired: boolean;
+  sites: Ref[];
+  companies: Ref[];
+}
+
+/** Corps de PATCH /hsseq/auditors/{id} : sites des sociétés de l'auditeur. */
+export interface AuditorPatch {
+  access_until?: string | null;
+  site_ids?: number[];
 }
 
 /** Paramètres de la société (GET et PATCH /hsseq/settings, admin et hsseq). */

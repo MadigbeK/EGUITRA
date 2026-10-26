@@ -5,9 +5,9 @@ import { Button, Card, DataTable, ErrorBox, Etat, Field, Kpi, Modal, Notice, Seg
 import { ALCOOTEST_FAIT, STATUT_ALCOOTEST, Tampon, nomRotation } from "@/components/hsseq/commun";
 import { apiSend, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDate, fmtDateTime, fmtFixe, fmtInt, fmtPct, pluriel } from "@/lib/format";
-import type { BreathTest, BreathTestCounts, BreathTestDetail, BreathTestStatusValue, CheckCounts, CheckLine, Page, Referentials } from "@/lib/hsseq-types";
+import type { BreathTest, BreathTestCounts, BreathTestDetail, BreathTestStatusValue, CheckCounts, CheckLine, Page, Referentials, VehicleKind } from "@/lib/hsseq-types";
 import { Pages, aProfil, messageErreur, requete } from "@/components/hsseq/actions/outils";
-import { ChampSite, ChampsPeriode, Saisie, periode } from "./elements";
+import { ChampProfil, ChampSite, ChampsPeriode, Saisie, TYPE_ADRESSE, periode } from "./elements";
 
 const PAR_PAGE = 50;
 
@@ -36,9 +36,11 @@ export function Alcootests({ ref_, lire, ecrire }: { ref_: Referentials | undefi
   const niveau = lecture(ref_);
   const { du, au } = periode(lire);
   const site = lire("site");
+  // Profil de l'ensemble de la rotation du test : un test pas encore rattaché n'en a pas.
+  const type: VehicleKind | null = TYPE_ADRESSE[lire("type")] ?? null;
   const statut: FiltreStatut = lire("test") in STATUT_ADRESSE ? (lire("test") as FiltreStatut) : "tous";
   const annules = niveau === "detail" && lire("annules") === "1";
-  const filtres = { date_from: du, date_to: au, site_id: site || null, cancelled: annules ? 1 : null };
+  const filtres = { date_from: du, date_to: au, site_id: site || null, vehicle_kind: type, cancelled: annules ? 1 : null };
   const [annulation, setAnnulation] = useState<BreathTestDetail | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const cle = `${requete(filtres)}|${statut}`;
@@ -80,6 +82,7 @@ export function Alcootests({ ref_, lire, ecrire }: { ref_: Referentials | undefi
       <div className="flex flex-wrap items-end gap-3">
         <ChampsPeriode du={du} au={au} ecrire={ecrire} />
         <ChampSite ref_={ref_} valeur={site} onChange={(v) => ecrire({ site: v })} />
+        <ChampProfil valeur={lire("type")} onChange={(v) => ecrire({ type: v })} />
         {niveau === "detail" && (
           <Segmented
             label="Tests"

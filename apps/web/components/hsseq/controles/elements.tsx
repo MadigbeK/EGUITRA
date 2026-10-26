@@ -12,6 +12,15 @@ export { ChampSite } from "@/components/hsseq/actions/outils";
 /** Type de véhicule dans l'adresse (« citerne », « benne ») et sa clé dans l'API. */
 export const TYPE_ADRESSE: Record<string, VehicleKind> = { citerne: "tanker", benne: "tipper" };
 
+/** Filtre de profil (citerne, benne), porté par l'adresse ; l'API le lit en `vehicle_kind`. */
+export function ChampProfil({ valeur, onChange }: { valeur: string; onChange: (v: string) => void }) {
+  return (
+    <Field label="Profil" className="w-full sm:w-36">
+      <Select value={valeur} onChange={(e) => onChange(e.target.value)} placeholder="Tous" options={Object.entries(TYPE_ADRESSE).map(([cle, v]) => ({ value: cle, label: TYPE_VEHICULE[v] }))} />
+    </Field>
+  );
+}
+
 /** Objectif de saisie d'un contrôle avant départ : moins de 4 minutes (§5). */
 export const DUREE_CIBLE_S = 240;
 
