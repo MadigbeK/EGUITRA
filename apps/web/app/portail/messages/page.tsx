@@ -1,16 +1,18 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Clock, Download, FileText, Lock, Mail, Paperclip, Send, Smartphone, X } from "@/components/icons";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ChevronUp, Clock, Download, FileText, Loader2, Lock, Mail, Paperclip, Send, Smartphone, X } from "@/components/icons";
 import { Button, ErrorBox, FEUILLE, Loading, Notice, Textarea, cx } from "@/components/ui";
 import { EnTete, FORMATS, FORMATS_TEXTE, heure, taille } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
-import { Avatar, LienBouton, PasDeDossier, cleJour, libelleJour, messageErreur, telechargerPiece, verifierFichier } from "@/components/portail/projet/outils";
-import { apiUpload, useApi } from "@/lib/api-client";
-import type { Attachment, Fil, MessageRow } from "@/lib/portail-types";
+import { Avatar, LienBouton, PasDeDossier, cleJour, libelleJour, messageErreur, telechargerPiece, useRetour, verifierFichier, erreurLisible } from "@/components/portail/projet/outils";
+import { apiGet, apiSend, apiUpload } from "@/lib/api-client";
+import type { Attachment, DossierRef, Fil, MessageRow } from "@/lib/portail-types";
 
 /** Écart au-delà duquel deux messages du même auteur ne sont plus regroupés. */
 const REGROUPEMENT = 10 * 60_000;
+/** Relecture des nouveaux messages, onglet visible. */
+const RELECTURE = 20_000;
 
 type Groupe = { cle: string; moi: boolean; cabinet: boolean; auteur: string; messages: MessageRow[] };
 type Jour = { cle: string; libelle: string; groupes: Groupe[] };
@@ -35,6 +37,13 @@ function parJour(messages: MessageRow[]): Jour[] {
   return jours;
 }
 
+/** Messages réunis sans doublon, dans l'ordre du fil (date, puis ordre d'arrivée). */
+function fusion(liste: MessageRow[], ajout: MessageRow[]): MessageRow[] {
+  const parId = new Map(liste.map((m) => [m.id, m]));
+  for (const m of ajout) parId.set(m.id, m);
+  return [...parId.values()].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
+}
+
 /** Texte d'un message : les adresses https deviennent des liens, le reste reste du texte. */
 function TexteMessage({ texte, moi }: { texte: string; moi: boolean }) {
   const morceaux = texte.split(/(https:\/\/[^\s<>"]*[^\s<>".,;:!?)»])/g);
@@ -53,13 +62,15 @@ function TexteMessage({ texte, moi }: { texte: string; moi: boolean }) {
   );
 }
 
-function PieceJointe({ a, onTelecharger }: { a: Attachment; onTelecharger: (a: Attachment) => void }) {
+function PieceJointe({ a, enCours, onTelecharger }: { a: Attachment; enCours: boolean; onTelecharger: (a: Attachment) => void }) {
   return (
     <button
       type="button"
       onClick={() => onTelecharger(a)}
+      disabled={enCours}
+      aria-busy={enCours || undefined}
       aria-label={`Télécharger ${a.name}${a.size ? `, ${taille(a.size)}` : ""}`}
-      className="flex w-full max-w-[320px] items-center gap-2.5 rounded-xl border border-line bg-panel px-3 py-2 text-left shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2"
+      className="flex w-full max-w-[320px] items-center gap-2.5 rounded-xl border border-line bg-panel px-3 py-2 text-left shadow-[0_1px_2px_rgb(16_36_31/0.05)] transition-colors hover:border-line-strong hover:bg-panel-2 disabled:opacity-70"
     >
       <span aria-hidden className="grid h-8 w-8 flex-none place-items-center rounded-lg bg-accent-doux text-accent">
         <FileText className="h-4 w-4" />
@@ -68,12 +79,12 @@ function PieceJointe({ a, onTelecharger }: { a: Attachment; onTelecharger: (a: A
         <span className="block truncate text-[13px] font-medium text-ink">{a.name}</span>
         {a.size ? <span className="block text-[11.5px] text-muted">{taille(a.size)}</span> : null}
       </span>
-      <Download className="h-4 w-4 flex-none text-muted" />
+      {enCours ? <Loader2 className="h-4 w-4 flex-none animate-spin text-muted" /> : <Download className="h-4 w-4 flex-none text-muted" />}
     </button>
   );
 }
 
-function Bulles({ g, onTelecharger }: { g: Groupe; onTelecharger: (a: Attachment) => void }) {
+function Bulles({ g, telechargement, onTelecharger }: { g: Groupe; telechargement: number | null; onTelecharger: (a: Attachment) => void }) {
   return (
     <div className={cx("mb-3 flex gap-2", g.moi ? "justify-end" : "justify-start")}>
       {!g.moi && <Avatar nom={g.auteur} taille={32} plein={g.cabinet} className="mt-[22px]" />}
@@ -106,7 +117,7 @@ function Bulles({ g, onTelecharger }: { g: Groupe; onTelecharger: (a: Attachment
                 <ul className={cx("flex w-full flex-col gap-1.5", g.moi ? "items-end" : "items-start")} aria-label="Pièces jointes">
                   {m.attachments.map((a) => (
                     <li key={a.id} className={cx("flex w-full", g.moi ? "justify-end" : "justify-start")}>
-                      <PieceJointe a={a} onTelecharger={onTelecharger} />
+                      <PieceJointe a={a} enCours={telechargement === a.id} onTelecharger={onTelecharger} />
                     </li>
                   ))}
                 </ul>
@@ -125,29 +136,141 @@ function ajusterHauteur(el: HTMLTextAreaElement | null | undefined) {
   el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
 }
 
-export default function Messagerie() {
-  const { espace, dossier, rafraichir } = usePortail();
-  const chemin = dossier ? `/portail/dossiers/${dossier.id}/fil` : null;
-  const { data, error, mutate } = useApi<Fil>(chemin, { refreshInterval: 20_000, revalidateOnFocus: true });
+/**
+ * Fil d'un dossier : premier chargement (les 200 derniers messages), puis relecture des seuls nouveaux
+ * messages toutes les 20 secondes et au retour sur l'onglet, page précédente à la demande. Les messages
+ * reçus du noyau sont ensuite marqués lus (POST) : jusqu'au dernier reçu par une lecture, jamais au-delà
+ * (son propre message envoyé ne doit pas faire passer pour lu un message du cabinet encore à venir).
+ */
+function useFil(chemin: string, onLus: () => void) {
+  const [fil, setFil] = useState<Fil | null>(null);
+  const [erreur, setErreur] = useState<unknown>(null);
+  const [erreurRelecture, setErreurRelecture] = useState<unknown>(null);
+  const [erreurAnciens, setErreurAnciens] = useState<unknown>(null);
+  const [anciens, setAnciens] = useState(false);
+  const curseur = useRef(0);
+  const marque = useRef(0);
+  const relectureEnCours = useRef(false);
+  // Lu par référence : un nouveau rappel du parent ne relance ni le chargement ni la relecture.
+  const apresLecture = useRef(onLus);
+  useEffect(() => {
+    apresLecture.current = onLus;
+  });
+
+  const marquerLus = useCallback(async () => {
+    const jusqua = curseur.current;
+    if (jusqua <= marque.current || document.hidden) return;
+    try {
+      await apiSend("POST", `${chemin}/lu`, { message_id: jusqua });
+      marque.current = Math.max(marque.current, jusqua);
+      apresLecture.current();
+    } catch {
+      // Repris à la relecture suivante ; une coupure du réseau est signalée par celle-ci.
+    }
+  }, [chemin]);
+
+  const recus = useCallback((messages: MessageRow[]) => {
+    for (const m of messages) curseur.current = Math.max(curseur.current, m.id);
+  }, []);
+
+  const charger = useCallback(async () => {
+    setErreur(null);
+    try {
+      const f = await apiGet<Fil>(chemin);
+      recus(f.messages);
+      setFil(f);
+      void marquerLus();
+    } catch (e) {
+      setErreur(e);
+    }
+  }, [chemin, recus, marquerLus]);
+
+  const relire = useCallback(async () => {
+    if (relectureEnCours.current || document.hidden) return;
+    relectureEnCours.current = true;
+    try {
+      const f = await apiGet<Fil>(`${chemin}?after=${curseur.current}`);
+      recus(f.messages);
+      setFil((avant) => (avant ? { ...avant, consultant: f.consultant, closed: f.closed, messages: fusion(avant.messages, f.messages) } : avant));
+      setErreurRelecture(null);
+      void marquerLus();
+    } catch (e) {
+      setErreurRelecture(e);
+    } finally {
+      relectureEnCours.current = false;
+    }
+  }, [chemin, recus, marquerLus]);
+
+  const plusAnciens = useCallback(async () => {
+    const premier = fil?.messages[0]?.id;
+    if (!premier) return;
+    setAnciens(true);
+    setErreurAnciens(null);
+    try {
+      const f = await apiGet<Fil>(`${chemin}?before=${premier}`);
+      setFil((avant) => (avant ? { ...avant, more: f.more, messages: fusion(f.messages, avant.messages) } : avant));
+    } catch (e) {
+      setErreurAnciens(e);
+    } finally {
+      setAnciens(false);
+    }
+  }, [chemin, fil]);
+
+  const ajouter = useCallback((m: MessageRow) => {
+    setFil((avant) => (avant ? { ...avant, messages: fusion(avant.messages, [m]) } : avant));
+  }, []);
+
+  useEffect(() => {
+    void charger();
+  }, [charger]);
+
+  const pret = fil !== null;
+  useEffect(() => {
+    if (!pret) return;
+    const minuteur = window.setInterval(() => void relire(), RELECTURE);
+    const retour = () => {
+      if (!document.hidden) void relire();
+    };
+    document.addEventListener("visibilitychange", retour);
+    window.addEventListener("focus", retour);
+    return () => {
+      window.clearInterval(minuteur);
+      document.removeEventListener("visibilitychange", retour);
+      window.removeEventListener("focus", retour);
+    };
+  }, [pret, relire]);
+
+  return { fil, erreur, erreurRelecture, erreurAnciens, anciens, charger, relire, plusAnciens, ajouter };
+}
+
+function FilDuDossier({ dossier }: { dossier: DossierRef }) {
+  const { rafraichir } = usePortail();
+  const chemin = `/portail/dossiers/${dossier.id}/fil`;
+  const { fil: data, erreur: error, erreurRelecture, erreurAnciens, anciens, charger, relire, plusAnciens, ajouter } = useFil(chemin, rafraichir);
+  const { setRetour, bandeau } = useRetour();
   const [texte, setTexte] = useState("");
   const [fichier, setFichier] = useState<File | null>(null);
   const [envoi, setEnvoi] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [telechargement, setTelechargement] = useState<number | null>(null);
   const boite = useRef<HTMLDivElement>(null);
   const saisie = useRef<HTMLDivElement>(null);
   const enBas = useRef(true);
   const premier = useRef(true);
+  const hauteurAvant = useRef<number | null>(null);
 
   const messages = data?.messages;
   const jours = useMemo(() => parJour(messages ?? []), [messages]);
   const nombre = messages?.length ?? 0;
   const dernierId = messages?.at(-1)?.id;
 
-  // Nouveau dossier : on repart du bas du fil.
-  useEffect(() => {
-    enBas.current = true;
-    premier.current = true;
-  }, [chemin]);
+  // Messages plus anciens ajoutés en tête : la lecture reste à la même place.
+  useLayoutEffect(() => {
+    const el = boite.current;
+    if (!el || hauteurAvant.current === null) return;
+    el.scrollTop += el.scrollHeight - hauteurAvant.current;
+    hauteurAvant.current = null;
+  }, [nombre]);
 
   // Défilement vers le dernier message, sauf si le porteur relit plus haut.
   useEffect(() => {
@@ -157,19 +280,13 @@ export default function Messagerie() {
     premier.current = false;
   }, [nombre, dernierId]);
 
-  // La lecture du fil marque les messages lus : le compteur du menu se remet à jour.
-  useEffect(() => {
-    if (dernierId !== undefined) rafraichir();
-  }, [dernierId, rafraichir]);
-
-  if (espace && !espace.dossiers.length) return <PasDeDossier />;
-  if (error && !data) return <ErrorBox error={error} onRetry={() => void mutate()} />;
-  if (!data || !dossier) return <Loading label="Chargement de vos échanges…" />;
+  if (error && !data) return <ErrorBox error={erreurLisible(error)} onRetry={() => void charger()} />;
+  if (!data) return <Loading label="Chargement de vos échanges…" />;
 
   const consultant = data.consultant;
 
   async function envoyer() {
-    if (!chemin || envoi) return;
+    if (envoi) return;
     const corps = texte.trim();
     if (!corps && !fichier) return;
     setEnvoi(true);
@@ -184,7 +301,9 @@ export default function Messagerie() {
       const zone = saisie.current?.querySelector("textarea");
       if (zone) zone.style.height = "";
       enBas.current = true;
-      await mutate((f) => (f ? { ...f, messages: [...f.messages.filter((m) => m.id !== row.id), row] } : f), { revalidate: false });
+      ajouter(row);
+      // Un message du cabinet arrivé juste avant l'envoi apparaît aussitôt.
+      void relire();
       zone?.focus();
     } catch (e) {
       setErreur(messageErreur(e));
@@ -194,16 +313,30 @@ export default function Messagerie() {
   }
 
   async function telecharger(a: Attachment) {
+    setTelechargement(a.id);
     try {
       await telechargerPiece(a.id, a.name);
     } catch (e) {
-      setErreur(messageErreur(e));
+      setRetour({ tone: "danger", texte: `« ${a.name} » n'a pas pu être téléchargé : ${messageErreur(e)}` });
+    } finally {
+      setTelechargement(null);
     }
+  }
+
+  function precedents() {
+    hauteurAvant.current = boite.current?.scrollHeight ?? null;
+    void plusAnciens();
   }
 
   return (
     <div className="space-y-0">
       <EnTete surtitre="Échanges" titre="Messages" />
+
+      {erreurRelecture !== null && (
+        <div className="mb-3">
+          <ErrorBox error={erreurLisible(erreurRelecture)} titre="Les nouveaux messages ne peuvent pas être relus pour l'instant." onRetry={() => void relire()} />
+        </div>
+      )}
 
       <section
         aria-label="Messagerie avec le cabinet"
@@ -224,7 +357,7 @@ export default function Messagerie() {
               <span className="hidden sm:inline">{consultant.phone}</span>
             </LienBouton>
           )}
-          <LienBouton href="/portail/rendez-vous" variant="ghost" className="hidden md:inline-flex">
+          <LienBouton href={`/portail/rendez-vous?dossier=${dossier.id}`} variant="ghost" className="hidden md:inline-flex">
             <Clock className="h-4 w-4" />
             Rendez-vous
           </LienBouton>
@@ -243,6 +376,15 @@ export default function Messagerie() {
           }}
           className="min-h-0 flex-1 overflow-y-auto bg-panel-2 px-3 pb-4 sm:px-6"
         >
+          {data.more && (
+            <div className="flex flex-col items-center gap-2 pt-3">
+              <Button variant="ghost" size="sm" loading={anciens} onClick={precedents}>
+                {!anciens && <ChevronUp className="h-4 w-4" />}
+                Afficher les messages précédents
+              </Button>
+              {erreurAnciens !== null && <ErrorBox error={erreurLisible(erreurAnciens)} titre="Les messages précédents n'ont pas pu être chargés." onRetry={precedents} />}
+            </div>
+          )}
           {nombre === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
               <span aria-hidden className="grid h-14 w-14 place-items-center rounded-full bg-accent-doux text-accent">
@@ -260,7 +402,7 @@ export default function Messagerie() {
                   <span className="rounded-full bg-panel/95 px-3 py-1 text-[11.5px] font-semibold text-muted shadow-[0_1px_2px_rgb(16_36_31/0.06)] ring-1 ring-line backdrop-blur">{j.libelle}</span>
                 </div>
                 {j.groupes.map((g) => (
-                  <Bulles key={g.cle} g={g} onTelecharger={(a) => void telecharger(a)} />
+                  <Bulles key={g.cle} g={g} telechargement={telechargement} onTelecharger={(a) => void telecharger(a)} />
                 ))}
               </section>
             ))
@@ -291,7 +433,7 @@ export default function Messagerie() {
                 <Paperclip className="h-4 w-4 flex-none text-accent" />
                 <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">{fichier.name}</span>
                 <span className="flex-none text-[12px] text-muted">{taille(fichier.size)}</span>
-                <button type="button" onClick={() => setFichier(null)} aria-label={`Retirer la pièce jointe ${fichier.name}`} className="grid h-7 w-7 flex-none place-items-center rounded-lg text-muted hover:bg-panel hover:text-ink">
+                <button type="button" onClick={() => setFichier(null)} disabled={envoi} aria-label={`Retirer la pièce jointe ${fichier.name}`} className="grid h-7 w-7 flex-none place-items-center rounded-lg text-muted hover:bg-panel hover:text-ink disabled:opacity-50">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -307,6 +449,7 @@ export default function Messagerie() {
                   accept={FORMATS}
                   className="sr-only"
                   aria-label="Joindre un fichier au message"
+                  disabled={envoi}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     e.target.value = "";
@@ -348,6 +491,16 @@ export default function Messagerie() {
           </form>
         )}
       </section>
+
+      {bandeau}
     </div>
   );
+}
+
+export default function Messagerie() {
+  const { espace, dossier } = usePortail();
+  if (espace && !espace.dossiers.length) return <PasDeDossier />;
+  if (!dossier) return <Loading label="Chargement de vos échanges…" />;
+  // Une clé par dossier : changer de dossier repart d'un fil vide, sans mélanger les messages.
+  return <FilDuDossier key={dossier.id} dossier={dossier} />;
 }

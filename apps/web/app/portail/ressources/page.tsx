@@ -8,6 +8,7 @@ import { Card, Empty, ErrorBox, IconTile, Loading, Tabs, cx } from "@/components
 import { COULEUR, EnTete, iconeRubrique } from "@/components/portail/commun";
 import { Puce, TitreSection, pluriel, sansAccents } from "@/components/portail/cabinet-porteur/briques";
 import { CarteRessource, FORMATS, ORDRE_FORMATS, QuestionsFrequentes } from "@/components/portail/cabinet-porteur/ressources";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { useApi } from "@/lib/api-client";
 import type { ArticleKind, ArticleRow, CategoryRow, Ressources } from "@/lib/portail-types";
 
@@ -67,7 +68,7 @@ export default function CentreRessources() {
     return liste.map((x) => x.a);
   }, [data, index, mots, rubrique, format, vue]);
 
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Chargement des conseils du cabinet…" />;
 
   const articles = data.articles;

@@ -3,11 +3,17 @@
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, Calculator, Clock, FileUp, HandCoins, Mail, Sparkles } from "@/components/icons";
 import { Anneau, Badge, Card, Empty, ErrorBox, Etapes, FEUILLE, Loading, cx, type Tone } from "@/components/ui";
-import { KIND_ICON, dateLongue, quand } from "@/components/portail/commun";
+import { KIND_ICON, dateLongue, formatConakry, instant, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
+import { erreurLisible } from "@/components/portail/projet/outils";
 import { useApi } from "@/lib/api-client";
-import { fmtShort } from "@/lib/format";
+import { INSECABLE, fmtPct, fmtShort } from "@/lib/format";
 import type { NextStep, Tableau } from "@/lib/portail-types";
+
+/** Montant abrégé suivi de sa devise, sans coupure de ligne : « 1,74 Md GNF ». */
+function montant(valeur: number, devise: string) {
+  return `${fmtShort(valeur)}${INSECABLE}${devise || "GNF"}`;
+}
 
 const URGENCE: Record<NextStep["urgency"], { tone: Tone; label: string; trait: string }> = {
   high: { tone: "danger", label: "Prioritaire", trait: "bg-danger" },
@@ -32,10 +38,11 @@ export default function AccueilPortail() {
       </Card>
     );
   }
-  if (error) return <ErrorBox error={error} onRetry={() => void mutate()} />;
+  if (error) return <ErrorBox error={erreurLisible(error)} onRetry={() => void mutate()} />;
   if (!data) return <Loading label="Préparation de votre espace…" />;
   const d = data.dossier;
   const p = data.preparation;
+  const f = data.fundings;
   const prenom = me.name.split(" ")[0];
   const raccourcis = [
     { href: "/portail/pieces", label: "Déposer une pièce", icon: FileUp },
@@ -74,7 +81,7 @@ export default function AccueilPortail() {
             </div>
           </div>
           <div className="flex items-center gap-5 lg:flex-col lg:gap-3">
-            <Anneau value={p.score} taille={150} epaisseur={12} couleur="#7fd3ff" centre={`${p.score} %`} sous="préparation" clair />
+            <Anneau value={p.score} taille={150} epaisseur={12} couleur="#7fd3ff" centre={fmtPct(p.score, 0)} sous="préparation" clair />
             <div className="space-y-1 text-[12.5px] text-white/75 lg:text-center">
               <div><b className="text-white">{p.pieces.validated + p.pieces.received}</b> pièce{p.pieces.validated + p.pieces.received > 1 ? "s" : ""} sur {p.pieces.due} attendue{p.pieces.due > 1 ? "s" : ""}</div>
               <div><b className="text-white">{p.actions.done}</b> action{p.actions.done > 1 ? "s" : ""} validée{p.actions.done > 1 ? "s" : ""} sur {p.actions.total}</div>
@@ -137,14 +144,14 @@ export default function AccueilPortail() {
           ) : (
             <ol className="relative space-y-3 before:absolute before:bottom-2 before:left-[23px] before:top-2 before:w-px before:bg-line">
               {data.upcoming.map((u, i) => {
-                const date = new Date(u.date);
+                const date = instant(u.date);
                 return (
                   <li key={i}>
                     <Link href={u.link} className="relative flex items-center gap-3 rounded-xl p-1 hover:bg-panel-2">
                       <span className="z-[1] grid h-12 w-12 flex-none place-items-center rounded-xl border border-line bg-panel text-center leading-none shadow-[var(--ombre-feuille)]">
                         <span>
-                          <span className="block font-display text-[17px] font-bold text-ink">{date.getDate()}</span>
-                          <span className="block text-[10.5px] font-semibold uppercase text-accent">{date.toLocaleDateString("fr-FR", { month: "short" })}</span>
+                          <span className="block font-display text-[17px] font-bold text-ink">{formatConakry(date, { day: "numeric" })}</span>
+                          <span className="block text-[10.5px] font-semibold uppercase text-accent">{formatConakry(date, { month: "short" })}</span>
                         </span>
                       </span>
                       <span className="min-w-0 flex-1">
@@ -161,14 +168,16 @@ export default function AccueilPortail() {
               })}
             </ol>
           )}
-          <Link href="/portail/projet" className="mt-4 flex items-center gap-3 rounded-xl bg-panel-2 px-4 py-3 hover:bg-panel-3">
+          <Link href={`/portail/projet?dossier=${d.id}`} className="mt-4 flex items-center gap-3 rounded-xl bg-panel-2 px-4 py-3 hover:bg-panel-3">
             <HandCoins className="h-5 w-5 text-accent" />
             <span className="flex-1 text-[13px] text-ink-2">
-              {data.fundings.count ? (
+              {f.count ? (
                 <>
-                  <b className="text-ink">{data.fundings.count}</b> piste{data.fundings.count > 1 ? "s" : ""} de financement, <b className="text-ink">{fmtShort(data.fundings.requested)} {data.fundings.currency}</b> sollicités
-                  {data.fundings.granted > 0 && <>, <b className="text-ok">{fmtShort(data.fundings.granted)}</b> accordés</>}
+                  <b className="text-ink">{f.count}</b> piste{f.count > 1 ? "s" : ""} de financement en cours, <b className="text-ink">{montant(f.requested, f.currency)}</b> sollicités
+                  {f.granted > 0 && <>, <b className="text-ok">{montant(f.granted, f.currency)}</b> accordés</>}
                 </>
+              ) : f.closed ? (
+                "Aucune piste de financement en cours : votre consultant vous en proposera de nouvelles."
               ) : (
                 "Le cabinet vous présentera ici les financements recherchés."
               )}

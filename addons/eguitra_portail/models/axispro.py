@@ -4,10 +4,26 @@ chaque envoi du porteur prévient son consultant. Les messages peuvent porter de
 
 from odoo import api, fields, models
 
-from odoo.addons.eguitra_axispro.models.dossier import COMMITTEE_DECISIONS
 from odoo.addons.eguitra_axispro.models.pilotage import FUNDING_STATES
 
 CABINET_INBOX = "/axispro/portail/messages"
+
+# Décisions du comité telles que le porteur les lit (portail, fil du projet, notifications) : jamais le
+# vocabulaire interne du cabinet (GO, CONDITIONAL GO, HOLD, NO-GO).
+DECISIONS_PORTEUR = {
+    "go": "Avis favorable",
+    "conditional": "Avis favorable sous conditions",
+    "hold": "En attente de compléments",
+    "no_go": "Avis défavorable",
+    "postponed": "Examen reporté",
+}
+
+
+def decision_porteur(code):
+    """Libellé d'une décision du comité pour le porteur ; None sans décision."""
+    if not code:
+        return None
+    return DECISIONS_PORTEUR.get(code, "Décision rendue")
 
 
 def _notify(env, users, kind, title, body, link, dossier):
@@ -118,7 +134,7 @@ class AxisproDossier(models.Model):
                         f"Votre dossier {dossier.reference} avance.", link, dossier)
             if dossier.decision and dossier.decision != old_decision:
                 _notify(self.env, dossier.portal_user_ids, "decision",
-                        f"Décision du comité : {dict(COMMITTEE_DECISIONS)[dossier.decision]}",
+                        f"Décision du comité : {decision_porteur(dossier.decision)}",
                         "Votre consultant vous en détaille les conditions.", link, dossier)
         return result
 
