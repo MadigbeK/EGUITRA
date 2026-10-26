@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { Mail, Printer, RefreshCw } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Kpi, Modal, Notice, PageHeader, Tabs } from "@/components/ui";
-import { ECRITURE_FINANCE } from "@/components/finance/communPieces";
-import { ApiError, apiDownload, apiSend, useApi, useAutorise } from "@/lib/api-client";
-import { fmtDate, fmtDateTime, fmtGNF, fmtShort, pluriel } from "@/lib/format";
+import { Badge, Button, Card, DataTable, Etat, Kpi, Modal, Notice, PageHeader, Tabs, demanderConfirmation } from "@/components/ui";
+import { ECRITURE_FINANCE, useTelechargement } from "@/components/finance/communPieces";
+import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
+import { fmtDate, fmtDateTime, fmtGNF, fmtInt, fmtJours, fmtShort, pluriel } from "@/lib/format";
 
 interface Reminder {
   id: number;
@@ -47,14 +47,19 @@ export default function RemindersPage() {
   // Calcul, envoi et annulation : routes de la finance et de l'administration ; la direction consulte.
   const ecriture = useAutorise(ECRITURE_FINANCE);
 
+  const [calcul, setCalcul] = useState(false);
+
   async function generate() {
     setMessage(null);
+    setCalcul(true);
     try {
       const res = await apiSend<{ created: number }>("POST", "/finance/reminders/generate");
       setMessage({ tone: "ok", text: res.created ? `${pluriel(res.created, "relance")} à envoyer.` : "Aucune nouvelle relance : les retards sont déjà relancés à leur niveau." });
       void mutate();
     } catch (e) {
-      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Calcul impossible." });
+      setMessage({ tone: "danger", text: e instanceof ApiError ? e.message : "Calcul impossible : vérifiez la connexion, puis réessayez." });
+    } finally {
+      setCalcul(false);
     }
   }
 
@@ -63,14 +68,14 @@ export default function RemindersPage() {
       <PageHeader
         title="Relances clients"
         subtitle="Calculées chaque nuit selon le retard : rappel, relance ferme, mise en demeure. Les deux premiers niveaux partent seuls par courriel quand un serveur d'envoi est paramétré ; la mise en demeure attend votre décision."
-        actions={ecriture && <Button onClick={generate}><RefreshCw className="h-4 w-4" /> Calculer maintenant</Button>}
+        actions={ecriture && <Button loading={calcul} onClick={generate}><RefreshCw className="h-4 w-4" /> Calculer maintenant</Button>}
       />
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       {data && !data.mail_server && <div className="mb-4"><Notice tone="warn">Aucun serveur d&apos;envoi de courriel n&apos;est paramétré : les relances s&apos;impriment et se remettent ou s&apos;envoient par courrier.</Notice></div>}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi label="Relances affichées" value={String(rows.length)} />
+        <Kpi label="Relances affichées" value={fmtInt(rows.length)} />
         <Kpi label="Montant relancé" value={fmtShort(rows.reduce((a, r) => a + r.amount_due, 0))} tone="warn" />
-        <Kpi label="Mises en demeure" value={String(rows.filter((r) => r.level === "3").length)} tone="danger" />
+        <Kpi label="Mises en demeure" value={fmtInt(rows.filter((r) => r.level === "3").length)} tone="danger" />
       </div>
       <Tabs tabs={[{ key: "to_send", label: "À envoyer" }, { key: "sent", label: "Envoyées" }]} value={state} onChange={setState} />
       <Card padded={false}>
@@ -79,7 +84,7 @@ export default function RemindersPage() {
             { key: "date", label: "Date", render: (r) => fmtDate(r.date) },
             { key: "partner", label: "Client", render: (r) => r.partner.name },
             { key: "level", label: "Niveau", render: (r) => <Badge tone={LEVEL_TONE[r.level]}>{r.level_label}</Badge> },
-            { key: "days_overdue", label: "Retard", align: "right", render: (r) => `${r.days_overdue} j` },
+            { key: "days_overdue", label: "Retard", align: "right", render: (r) => fmtJours(r.days_overdue) },
             { key: "invoices", label: "Factures", align: "right" },
             { key: "amount_due", label: "Montant échu", align: "right", render: (r) => fmtGNF(r.amount_due) },
             { key: "sent", label: state === "sent" ? "Envoi" : "Courriel", render: (r) => state === "sent" ? `${r.channel === "email" ? "Courriel" : "Courrier"}, ${fmtDateTime(r.sent_at)}` : r.email ?? "–" },
@@ -94,18 +99,31 @@ export default function RemindersPage() {
 function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailServer: boolean; onClose: () => void; onChanged: () => void }) {
   const { data, error: erreurChargement, mutate } = useApi<Reminder & { letter: Letter }>(`/finance/reminders/${id}`);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const ecriture = useAutorise(ECRITURE_FINANCE);
-  async function act(path: string, body?: unknown) {
+  const lettre = useTelechargement();
+
+  /**
+   * Envoi ou annulation : irréversibles, donc confirmés ; boutons bloqués pendant l'appel (un double clic
+   * envoyait deux fois la mise en demeure au client), l'échec affiché.
+   */
+  async function act(cle: string, question: string, action: string, path: string, body?: unknown) {
+    const oui = await demanderConfirmation(question, { action, danger: true });
+    if (!oui) return;
+    setBusy(cle);
     setError(null);
     try {
       await apiSend("POST", path, body);
       void mutate();
       onChanged();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Action impossible.");
+      setError(e instanceof ApiError ? e.message : "Action impossible : vérifiez la connexion, puis réessayez.");
+    } finally {
+      setBusy(null);
     }
   }
   const l = data?.letter;
+  const nature = data?.level === "3" ? "la mise en demeure" : "la relance";
   return (
     <Modal
       open
@@ -114,14 +132,27 @@ function LetterModal({ id, mailServer, onClose, onChanged }: { id: number; mailS
       onClose={onClose}
       footer={data?.state === "to_send" && (
         <>
-          {ecriture && <Button variant="ghost" onClick={() => act(`/finance/reminders/${id}/cancel`)}>Annuler la relance</Button>}
-          <Button onClick={() => void apiDownload(`/finance/reminders/${id}/pdf`, `Relance-${data.partner.name}.pdf`)}><Printer className="h-4 w-4" /> Lettre en PDF</Button>
-          {ecriture && <Button onClick={() => act(`/finance/reminders/${id}/send`, { channel: "letter" })}>Marquer remise par courrier</Button>}
-          {ecriture && mailServer && data.email && <Button variant="primary" onClick={() => act(`/finance/reminders/${id}/send`, { channel: "email" })}><Mail className="h-4 w-4" /> Envoyer à {data.email}</Button>}
+          {ecriture && (
+            <Button variant="ghost" loading={busy === "cancel"} disabled={Boolean(busy)} onClick={() => act("cancel", `Annuler ${nature} de ${data.partner.name} ? Elle ne partira pas, et le calcul de la nuit ne la recréera pas au même niveau.`, "Annuler la relance", `/finance/reminders/${id}/cancel`)}>
+              Annuler la relance
+            </Button>
+          )}
+          <Button loading={lettre.enCours === "pdf"} onClick={() => void lettre.telecharger("pdf", `/finance/reminders/${id}/pdf`, `Relance-${data.partner.name}.pdf`)}><Printer className="h-4 w-4" /> Lettre en PDF</Button>
+          {ecriture && (
+            <Button loading={busy === "letter"} disabled={Boolean(busy)} onClick={() => act("letter", `Marquer ${nature} comme remise par courrier ? Elle passe dans « Envoyées » et ne pourra plus être annulée.`, "Marquer remise", `/finance/reminders/${id}/send`, { channel: "letter" })}>
+              Marquer remise par courrier
+            </Button>
+          )}
+          {ecriture && mailServer && data.email && (
+            <Button variant="primary" loading={busy === "email"} disabled={Boolean(busy)} onClick={() => act("email", `Envoyer ${nature} à ${data.email} ? Le courriel part aussitôt, avec la lettre en PDF.`, "Envoyer", `/finance/reminders/${id}/send`, { channel: "email" })}>
+              <Mail className="h-4 w-4" /> Envoyer à {data.email}
+            </Button>
+          )}
         </>
       )}
     >
       {error && <Notice tone="danger">{error}</Notice>}
+      {lettre.erreur && <Notice tone="danger">{lettre.erreur}</Notice>}
       {!l ? <Etat error={erreurChargement} onRetry={() => mutate()} /> : (
         <article className="space-y-4 text-sm leading-relaxed">
           <div className="flex justify-between">
