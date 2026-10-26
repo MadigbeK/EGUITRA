@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Circle, Clock, Download, FileText, Info, Paperclip, Printer, X, type Icon } from "@/components/icons";
-import { Badge, Button, Card, Empty, ErrorBox, Field, FileButton, Input, Loading, Notice, ProgressBar, Segmented, Select, Tag, cx, type Tone } from "@/components/ui";
+import { useMemo, useRef, useState } from "react";
+import { AlertTriangle, CheckCircle2, Circle, Clock, Download, FileText, FileUp, Info, Paperclip, Printer, X, type Icon } from "@/components/icons";
+import { Badge, Button, Card, Empty, ErrorBox, Field, FileButton, Input, Loading, Notice, ProgressBar, Segmented, Select, Tag, cx, demanderConfirmation, type Tone } from "@/components/ui";
 import { EnTete, FORMATS, quand, taille } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { ZoneDepot } from "@/components/portail/projet/ZoneDepot";
@@ -51,7 +51,7 @@ function Compteur({ valeur, label, tone }: { valeur: number; label: string; tone
   );
 }
 
-function ListeFichiers({ fichiers, cabinet, moi, vide, onTelecharger }: { fichiers: Fichier[]; cabinet?: boolean; moi: string; vide: string; onTelecharger: (f: Fichier) => void }) {
+function ListeFichiers({ fichiers, cabinet, moi, vide, telechargement, onTelecharger }: { fichiers: Fichier[]; cabinet?: boolean; moi: string; vide: string; telechargement: number | null; onTelecharger: (f: Fichier) => void }) {
   const [tout, setTout] = useState(false);
   if (!fichiers.length) return <Empty title={vide} />;
   const visibles = tout ? fichiers : fichiers.slice(0, 8);
@@ -82,8 +82,8 @@ function ListeFichiers({ fichiers, cabinet, moi, vide, onTelecharger }: { fichie
                   </p>
                 )}
               </div>
-              <Button variant="ghost" className="flex-none px-2.5" onClick={() => onTelecharger(f)} aria-label={`Télécharger ${f.name}`}>
-                <Download className="h-4 w-4" />
+              <Button variant="ghost" className="flex-none px-2.5" loading={telechargement === f.id} onClick={() => onTelecharger(f)} aria-label={`Télécharger ${f.name}`}>
+                {telechargement !== f.id && <Download className="h-4 w-4" />}
                 <span className="hidden sm:inline">Télécharger</span>
               </Button>
             </li>
@@ -92,7 +92,7 @@ function ListeFichiers({ fichiers, cabinet, moi, vide, onTelecharger }: { fichie
       </ul>
       {fichiers.length > visibles.length && (
         <Button variant="ghost" className="mt-3 w-full" onClick={() => setTout(true)}>
-          Afficher les {fichiers.length - visibles.length} autres
+          {fichiers.length - visibles.length === 1 ? "Afficher l'autre fichier" : `Afficher les ${fichiers.length - visibles.length} autres fichiers`}
         </Button>
       )}
     </>
@@ -105,9 +105,13 @@ export default function PiecesPortail() {
   const { data, error, mutate } = useApi<Pieces>(chemin);
   const { setRetour, bandeau } = useRetour();
   const [filtre, setFiltre] = useState<Filtre>("toutes");
+  // Un seul dépôt à la fois : la fin d'un dépôt ne peut plus effacer l'indicateur d'un autre, ni un
+  // nouveau clic créer une version en double. La référence bloque aussi deux choix de fichier rapprochés.
   const [envoi, setEnvoi] = useState<number | "autre" | null>(null);
+  const enCoursRef = useRef(false);
   const [tour, setTour] = useState(0);
   const [pdf, setPdf] = useState(false);
+  const [telechargement, setTelechargement] = useState<number | null>(null);
   const [autre, setAutre] = useState<File | null>(null);
   const [intitule, setIntitule] = useState("");
   const [rattache, setRattache] = useState("");
@@ -142,10 +146,27 @@ export default function PiecesPortail() {
   const mesEnvois = data.fichiers.filter((f) => !f.from_cabinet);
   const duCabinet = data.fichiers.filter((f) => f.from_cabinet);
 
+  /** Remplacer une pièce validée la renvoie en vérification : le porteur le confirme d'abord. */
+  async function accepteRemplacement(typeId: number | undefined): Promise<boolean> {
+    const piece = typeId ? data?.attendues.find((p) => p.document_type_id === typeId) : undefined;
+    if (piece?.state !== "validated") return true;
+    return demanderConfirmation(
+      `Le cabinet a validé « ${piece.name} ». La nouvelle version la remplacera et devra être vérifiée à nouveau ; la version validée reste conservée.`,
+      { titre: "Remplacer une pièce validée ?", action: "Remplacer la pièce" },
+    );
+  }
+
   async function deposer(fichier: File, typeId?: number, nom?: string, source: number | "autre" = typeId ?? "autre"): Promise<boolean> {
+    if (enCoursRef.current) return false;
     const faute = verifierFichier(fichier);
     if (faute) {
       setRetour({ tone: "danger", texte: faute });
+      return false;
+    }
+    enCoursRef.current = true;
+    if (!(await accepteRemplacement(typeId))) {
+      enCoursRef.current = false;
+      setTour((t) => t + 1);
       return false;
     }
     setEnvoi(source);
@@ -163,6 +184,7 @@ export default function PiecesPortail() {
       setRetour({ tone: "danger", texte: messageErreur(e) });
       return false;
     } finally {
+      enCoursRef.current = false;
       setEnvoi(null);
       setTour((t) => t + 1);
     }
@@ -179,10 +201,13 @@ export default function PiecesPortail() {
   }
 
   async function telecharger(f: { id: number; name: string }) {
+    setTelechargement(f.id);
     try {
       await telechargerPiece(f.id, f.name);
     } catch (e) {
       setRetour({ tone: "danger", texte: messageErreur(e) });
+    } finally {
+      setTelechargement(null);
     }
   }
 
@@ -309,7 +334,9 @@ export default function PiecesPortail() {
                                 <button
                                   type="button"
                                   onClick={() => void telecharger({ id: piece.last_file!.id, name: piece.name })}
-                                  className="inline-flex items-center gap-1 font-semibold text-accent hover:underline"
+                                  disabled={telechargement === piece.last_file.id}
+                                  aria-busy={telechargement === piece.last_file.id || undefined}
+                                  className="inline-flex items-center gap-1 font-semibold text-accent hover:underline disabled:opacity-60"
                                 >
                                   <Download className="h-3.5 w-3.5" />
                                   Revoir
@@ -325,6 +352,11 @@ export default function PiecesPortail() {
                                   <span aria-hidden className="n-tourne h-3.5 w-3.5 rounded-full border-2 border-accent-vif/25 border-t-accent-vif" />
                                   Envoi en cours…
                                 </span>
+                              ) : envoi !== null ? (
+                                <Button size="sm" disabled title="Un envoi est en cours : attendez qu'il se termine.">
+                                  <FileUp className="h-3.5 w-3.5" />
+                                  {libelle}
+                                </Button>
                               ) : (
                                 <FileButton key={`${piece.document_type_id}-${tour}`} small label={libelle} accept={FORMATS} onFile={(f) => void deposer(f, piece.document_type_id)} />
                               )}
@@ -353,7 +385,7 @@ export default function PiecesPortail() {
                     <div className="truncate text-[13.5px] font-medium text-ink">{autre.name}</div>
                     <div className="text-[12px] text-muted">{taille(autre.size)}</div>
                   </div>
-                  <button type="button" onClick={() => setAutre(null)} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-panel-3 hover:text-ink" aria-label="Retirer ce fichier">
+                  <button type="button" onClick={() => setAutre(null)} disabled={envoi !== null} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-panel-3 hover:text-ink disabled:opacity-50" aria-label="Retirer ce fichier">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -371,7 +403,7 @@ export default function PiecesPortail() {
                     />
                   </Field>
                 )}
-                <Button variant="primary" className="w-full" loading={envoi === "autre"} onClick={() => void envoyerAutre()}>
+                <Button variant="primary" className="w-full" loading={envoi === "autre"} disabled={envoi !== null} onClick={() => void envoyerAutre()}>
                   Envoyer le document
                 </Button>
               </div>
@@ -407,10 +439,10 @@ export default function PiecesPortail() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Mes envois" actions={<span className="text-[13px] text-muted">{mesEnvois.length} fichier{mesEnvois.length > 1 ? "s" : ""}</span>}>
-          <ListeFichiers fichiers={mesEnvois} moi={me.name} vide="Vous n'avez encore envoyé aucun fichier." onTelecharger={(f) => void telecharger(f)} />
+          <ListeFichiers fichiers={mesEnvois} moi={me.name} vide="Vous n'avez encore envoyé aucun fichier." telechargement={telechargement} onTelecharger={(f) => void telecharger(f)} />
         </Card>
         <Card title="Documents du cabinet" actions={<span className="text-[13px] text-muted">{duCabinet.length} fichier{duCabinet.length > 1 ? "s" : ""}</span>}>
-          <ListeFichiers fichiers={duCabinet} cabinet moi={me.name} vide="Le cabinet partagera ici ses documents : modèles, rapports, comptes rendus." onTelecharger={(f) => void telecharger(f)} />
+          <ListeFichiers fichiers={duCabinet} cabinet moi={me.name} vide="Le cabinet partagera ici ses documents : modèles, rapports, comptes rendus." telechargement={telechargement} onTelecharger={(f) => void telecharger(f)} />
         </Card>
       </div>
 
