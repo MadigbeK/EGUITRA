@@ -22,7 +22,11 @@ export type Etape =
   | { nom: "code"; jeton: string }
   | { nom: "activation"; jeton: string; secret: string; uri: string }
   | { nom: "mot_de_passe"; user: Utilisateur }
-  | { nom: "ouverte"; user: Utilisateur };
+  /**
+   * `fraiche` : session ouverte par une connexion avec identifiant (et double authentification) à
+   * l'instant ; fausse pour une session reprise au démarrage, qui passe par le code personnel.
+   */
+  | { nom: "ouverte"; user: Utilisateur; fraiche?: boolean };
 
 interface Session {
   etape: Etape;
@@ -92,7 +96,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const user = utilisateur(rep.user);
       await profilGarde.ecrire(user);
       await claimCache(store, user.id);
-      setEtape(rep.user.password_change_required ? { nom: "mot_de_passe", user } : { nom: "ouverte", user });
+      setEtape(rep.user.password_change_required ? { nom: "mot_de_passe", user } : { nom: "ouverte", user, fraiche: true });
       void revoquerEnAttente(api).catch(() => undefined);
     },
     [api, store],
@@ -177,9 +181,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const seDeconnecter = useCallback(
     async ({ horsReseau = false }: { horsReseau?: boolean } = {}) => {
       if (horsReseau) {
+        // Oubli local, quoi qu'il arrive : la session ne doit jamais rester ouverte sur l'appareil.
         const jeton = await coffreJeton.lire().catch(() => null);
         if (jeton) await aRevoquer.ajouter(jeton).catch(() => undefined);
-        await api.oublier();
+        await api.oublier().catch(() => coffreJeton.effacer().catch(() => undefined));
       } else {
         try {
           await api.deconnecter();

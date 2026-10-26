@@ -64,7 +64,7 @@ function Porte() {
   if (etape.nom !== "ouverte") return <Connexion />;
   return (
     <EnvoiProvider key={etape.user.id} store={store} api={api} userId={etape.user.id}>
-      <Verrou user={etape.user}>
+      <Verrou user={etape.user} fraiche={etape.fraiche === true}>
         <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
       </Verrou>
     </EnvoiProvider>

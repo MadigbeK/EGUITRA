@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { AppState, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Bouton, Texte, vibrer } from "../ui/elements";
 import { espaces, LARGEUR_TABLETTE, marque, mesures, rayons, textes, traits } from "../ui/terrain";
@@ -17,11 +17,14 @@ const PREAVIS = 20_000;
 type Etat = "chargement" | "a_definir" | "ouvert" | "verrouille";
 
 /**
- * Verrou de l'application par le code personnel (système « terrain », § 3.11). Le contenu reste
- * monté dessous : au téléphone, la saisie en cours se retrouve après le code. Cinq erreurs : la
+ * Verrou de l'application par le code personnel (système « terrain », § 3.11). Une session reprise
+ * au démarrage s'ouvre verrouillée ; un code ne se choisit que juste après une connexion avec
+ * identifiant et double authentification, jamais sur une session reprise (elle est alors oubliée, il
+ * faut se reconnecter). Le contenu reste monté dessous : au téléphone, la saisie en cours se retrouve
+ * après le code ; l'écran du code est une fenêtre au-dessus de toutes les autres. Cinq erreurs : la
  * session est oubliée sur l'appareil et sa fermeture part au bureau au premier échange réussi.
  */
-export function Verrou({ user, children }: { user: Utilisateur; children: ReactNode }) {
+export function Verrou({ user, fraiche, children }: { user: Utilisateur; fraiche: boolean; children: ReactNode }) {
   const { seDeconnecter } = useSession();
   const { width } = useWindowDimensions();
   const tablette = width >= LARGEUR_TABLETTE;
@@ -30,9 +33,22 @@ export function Verrou({ user, children }: { user: Utilisateur; children: ReactN
   const quitte = useRef<number | null>(null);
   const dernierGeste = useRef(Date.now());
 
+  // Fraîcheur de la connexion au montage : elle décide de l'état de départ, une fois. La session
+  // change d'identité à chaque étape (profil confirmé par le bureau) : l'état de départ n'est pas
+  // recalculé pour autant, sinon un utilisateur déjà déverrouillé serait reverrouillé.
+  const connexionFraiche = useRef(fraiche);
+  const deconnecter = useRef(seDeconnecter);
+  deconnecter.current = seDeconnecter;
   useEffect(() => {
     let actif = true;
-    void codeAppareil.existe(user.id).then((oui) => actif && setEtat(oui ? "ouvert" : "a_definir"));
+    void codeAppareil.existe(user.id).then((oui) => {
+      if (!actif) return;
+      if (oui) setEtat(connexionFraiche.current ? "ouvert" : "verrouille");
+      else if (connexionFraiche.current) setEtat("a_definir");
+      // Session reprise sans code (installation précédente, application fermée avant le choix du code) :
+      // personne ne peut en choisir un sans s'être reconnecté.
+      else void deconnecter.current({ horsReseau: true });
+    }).catch(() => actif && setEtat("verrouille"));
     return () => {
       actif = false;
     };
@@ -87,9 +103,8 @@ export function Verrou({ user, children }: { user: Utilisateur; children: ReactN
           <Text style={[textes.libelle, { color: "#0b1a16", textAlign: "center" }]}>La tablette se verrouille dans 20 s. Touchez pour rester.</Text>
         </Pressable>
       ) : null}
-      {etat === "verrouille" ? (
-        <View style={StyleSheet.absoluteFill}>
-          <SaisieCode
+      <Modal visible={etat === "verrouille"} animationType="none" statusBarTranslucent onRequestClose={() => undefined}>
+        <SaisieCode
             titre={`${user.name}, votre code personnel`}
             aide="Pour reprendre là où vous en étiez."
             onCode={async (code) => {
@@ -107,8 +122,7 @@ export function Verrou({ user, children }: { user: Utilisateur; children: ReactN
             }}
             secondaire={{ titre: "Changer d'utilisateur", action: () => void seDeconnecter().catch(() => seDeconnecter({ horsReseau: true })) }}
           />
-        </View>
-      ) : null}
+      </Modal>
     </View>
   );
 }
