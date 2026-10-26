@@ -1,10 +1,9 @@
 "use client";
 
-import { Download } from "@/components/icons";
+import { ExportRotations } from "@/components/transport/ExportRotations";
 import { Rotations } from "@/components/transport/Rotations";
 import { Controles, Synthese } from "@/components/transport/Synthese";
-import { Button, PageHeader } from "@/components/ui";
-import { apiDownload } from "@/lib/api-client";
+import { PageHeader } from "@/components/ui";
 
 export default function TransportAccueil() {
   return (
@@ -12,11 +11,7 @@ export default function TransportAccueil() {
       <PageHeader
         title="Transport pétrolier"
         subtitle="La rotation est la source unique : facturation, coûts par ensemble et par route, marge."
-        actions={
-          <Button onClick={() => apiDownload(`/transport/exports/rotations?format=xlsx`, "rotations.xlsx")}>
-            <Download className="h-4 w-4" /> Exporter les rotations
-          </Button>
-        }
+        actions={<ExportRotations />}
       />
       <Synthese />
       <Controles />
