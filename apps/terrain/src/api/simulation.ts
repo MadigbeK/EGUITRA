@@ -1,4 +1,4 @@
-import type { CheckTemplate, HsseqReferentials, MyRotation } from "../hsseq/types";
+import type { CheckTemplate, HsseqReferentials, LockEvaluation, LockReason, MyRotation, Nonconformity } from "../hsseq/types";
 import type { PublicUser, Referentials, SentRotation, SyncResult } from "./types";
 
 /**
@@ -9,7 +9,9 @@ import type { PublicUser, Referentials, SentRotation, SyncResult } from "./types
  * Connexion : tout identifiant, sauf le mot de passe « faux » (refusé) ; un identifiant commençant
  * par « code » demande la double authentification (code 123456) ; un identifiant commençant par
  * « conducteur » ouvre le profil conducteur (fiches HSSEQ seules). Une rotation de plus de 100 m³
- * est refusée, pour voir une saisie à corriger.
+ * est refusée, pour voir une saisie à corriger. Verrou : deux départs du jour ; le contrôle, un point
+ * critique non conforme et l'alcootest ouvrent ou lèvent V01, V02 et V03 ; la benne a une visite
+ * technique expirée (V05, dérogeable).
  */
 function utilisateur(login: string): PublicUser {
   const conducteur = login.startsWith("conducteur");
@@ -79,6 +81,54 @@ const GRILLES: CheckTemplate[] = [
 ];
 
 const envoyees: SentRotation[] = [];
+
+// Verrou simulé : saisies de terrain du jour, non-conformités, départs, dérogations.
+const controles = new Set<number>();
+const alcootests = new Map<number, { performed: boolean; result?: string }>();
+const nonConformites: Nonconformity[] = [];
+const enRoute = new Set<number>();
+const derogations = new Map<string, number>();
+const aujourdhui = () => new Date().toISOString().slice(0, 10);
+
+const DEPARTS = [
+  { id: 501, name: null, vehicle: { id: 2, name: "ER-02", vehicle_kind: "tanker" as const }, driver: { id: 2, name: "Chauffeur 2" }, route_name: "Conakry - Kindia" },
+  { id: 502, name: null, vehicle: { id: 4, name: "BN-04", vehicle_kind: "tipper" as const }, driver: { id: 1, name: "Chauffeur 1" }, route_name: "Kamsar - Sangarédi" },
+];
+
+const motif = (code: string, label: string, waivable: boolean, pending: boolean, resolution: string, detail: string | null = null): LockReason => ({
+  code, label, source: "HSSEQ", since: new Date().toISOString(), waivable, detail, resolution, severity: "block", pending, waiver_id: null,
+});
+
+function evaluer(id: number): LockEvaluation {
+  const d = DEPARTS.find((x) => x.id === id)!;
+  const reasons: LockReason[] = [];
+  if (!controles.has(d.vehicle.id)) reasons.push(motif("V01", "Contrôle avant départ non fait", false, true, "Le conducteur ou le chef de parc fait le contrôle"));
+  for (const nc of nonConformites.filter((n) => n.status === "open" && n.item.blocking && n.vehicle?.id === d.vehicle.id)) {
+    reasons.push(motif("V02", "Point critique du contrôle avant départ non conforme", true, false, "Chef de parc après correction, photo obligatoire", nc.item.label));
+  }
+  const alc = alcootests.get(d.driver.id);
+  if (!alc || !alc.performed || alc.result === "positive") {
+    reasons.push(motif("V03", "Alcootest du conducteur", false, !alc || !alc.performed, "Responsable HSSEQ"));
+  }
+  if (d.vehicle.vehicle_kind === "tipper") reasons.push(motif("V05", "Visite technique expirée", true, false, "Bureau : renouveler la visite technique", "Visite technique échue le 12/10"));
+  for (const r of reasons) r.waiver_id = derogations.get(`${id}:${r.code}`) ?? null;
+  const ouverts = reasons.filter((r) => !r.waiver_id);
+  return {
+    rotation_id: id, allowed: !ouverts.length, lock_active: true, reasons, warnings: [], active_waiver: null,
+    pending_checks_only: !!ouverts.length && ouverts.every((r) => r.pending), checked_at: new Date().toISOString(),
+  };
+}
+
+function departsDuJour(): MyRotation[] {
+  const conducteur = connecte.profiles.includes("conducteur");
+  return DEPARTS.filter((d) => !conducteur || d.driver.id === 2).map((d) => {
+    const ev = enRoute.has(d.id) ? null : evaluer(d.id);
+    return {
+      ...d, date_loading: aujourdhui(), state: enRoute.has(d.id) ? "en_route" : "draft", site: { id: 1, name: "Parc de simulation" },
+      lock: ev && { allowed: ev.allowed, pending_checks_only: ev.pending_checks_only, reasons: ev.reasons, warnings: ev.warnings, lock_active: ev.lock_active },
+    };
+  });
+}
 const recues = new Map<string, number>();
 let suivant = 100;
 
@@ -120,6 +170,23 @@ function recevoir(uuid: unknown, creer: (id: number) => unknown): unknown {
 }
 
 function repondre(path: string, body: Record<string, unknown>): [number, unknown] {
+  const depart = /^\/transport\/rotations\/(\d+)\/depart$/.exec(path);
+  if (depart) {
+    const id = Number(depart[1]);
+    if (!connecte.profiles.includes("exploitation")) return [403, { error: "forbidden", message: "Le départ en route est donné par un chef de parc (profil Exploitation transport)." }];
+    const ev = evaluer(id);
+    if (!ev.allowed) return [422, { error: "departure_blocked", message: "Départ bloqué.", blockers: ev.reasons.filter((r) => !r.waiver_id) }];
+    enRoute.add(id);
+    return [200, { id, state: "en_route" }];
+  }
+  const levee = /^\/hsseq\/checks\/(\d+)\/lift$/.exec(path);
+  if (levee) {
+    const nc = nonConformites.find((n) => n.id === Number(body.nonconformity_id));
+    if (!nc) return [404, { error: "not_found", message: "Non-conformité introuvable sur ce contrôle." }];
+    if (!(body.attachment_ids as unknown[] | undefined)?.length) return [422, { error: "photo_missing", message: "Photo de la correction obligatoire." }];
+    nc.status = "lifted";
+    return [200, { id: nc.check.id }];
+  }
   switch (path) {
     case "/auth/login":
       if (body.password === "faux") return [401, { error: "invalid_credentials", message: "Identifiant ou mot de passe incorrect." }];
@@ -147,15 +214,45 @@ function repondre(path: string, body: Record<string, unknown>): [number, unknown
     case "/hsseq/checks/templates":
       return [200, GRILLES];
     case "/hsseq/me/rotations":
-      return [200, [] as MyRotation[]];
+      return [200, { date: aujourdhui(), items: departsDuJour() }];
+    case "/hsseq/lock/evaluate":
+      return [200, evaluer(Number(body.rotation_id))];
+    case "/hsseq/checks/nonconformities": {
+      const ouvertes = nonConformites.filter((n) => n.status === "open");
+      return [200, { items: ouvertes, total_count: ouvertes.length, counts: { open: ouvertes.length, blocking_open: ouvertes.filter((n) => n.item.blocking).length } }];
+    }
+    case "/hsseq/waivers": {
+      const code = String(body.reason_code);
+      if (code === "V01" || code === "V03") return [422, { error: "not_waivable", message: "V01 et V03 ne se dérogent jamais." }];
+      const cle = `${Number(body.rotation_id)}:${code}`;
+      if (derogations.has(cle)) return [409, { error: "conflict", message: "Une demande est déjà en cours pour ce motif." }];
+      // Simulation : la seconde validation du Responsable HSSEQ est donnée aussitôt.
+      derogations.set(cle, (suivant += 1));
+      return [200, { id: suivant, status: "active" }];
+    }
     case "/hsseq/checks": {
       const reponses = (body.answers as Array<{ item_id: number; answer: string }>) ?? [];
-      return [200, recevoir(body.client_uuid, (id) => ({
-        id, nonconformities: reponses.filter((r) => r.answer === "not_ok").map((r, n) => ({ id: id * 10 + n, item: { id: r.item_id } })),
-      }))];
+      return [200, recevoir(body.client_uuid, (id) => {
+        const vehicule = HSSEQ().vehicles.find((v) => v.id === Number(body.vehicle_id));
+        controles.add(Number(body.vehicle_id));
+        const points = GRILLES.flatMap((g) => g.items);
+        const ncs = reponses.filter((r) => r.answer === "not_ok").map((r, n) => {
+          const item = points.find((i) => i.id === r.item_id);
+          const nc: Nonconformity = {
+            id: id * 10 + n, check: { id, reference: `CTL/${id}` }, item: { id: r.item_id, label: item?.label ?? "Point", blocking: item?.blocking ?? false },
+            vehicle: vehicule ? { id: vehicule.id, name: vehicule.name } : null, site: { id: 1, name: "Parc de simulation" },
+            found_at: new Date().toISOString(), comment: null, photos_missing: false, status: "open", rights: { can_close: true },
+          };
+          if (!nonConformites.some((x) => x.id === nc.id)) nonConformites.push(nc);
+          return nc;
+        });
+        return { id, nonconformities: ncs };
+      })];
     }
-    case "/hsseq/events":
     case "/hsseq/breath-tests":
+      alcootests.set(Number(body.driver_id), { performed: Boolean(body.performed), result: body.result as string | undefined });
+      return [200, recevoir(body.client_uuid, (id) => ({ id }))];
+    case "/hsseq/events":
       return [200, recevoir(body.client_uuid, (id) => ({ id }))];
     case "/hsseq/attachments":
       return [200, { id: (suivant += 1), is_photo: true }];

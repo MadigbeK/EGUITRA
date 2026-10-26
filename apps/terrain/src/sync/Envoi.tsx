@@ -9,6 +9,7 @@ import { appareil, supprimerPhoto } from "../hsseq/appareil";
 import { envoyerFiches } from "../hsseq/envoi";
 import { dernierEnvoi } from "../store/device";
 import type { Piece, QueuedItem, Store } from "../store/types";
+import { inscrireEnvoiArrierePlan, verrouEnvoi } from "./arrierePlan";
 import { envoyerRotations, type Bilan } from "./outbox";
 
 /** Qui demande l'envoi : l'enregistrement d'une saisie, le bouton « Envoyer maintenant », ou l'application. */
@@ -127,7 +128,13 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
         encore.current = true;
         return null;
       }
+      // Envoi en arrière-plan en cours (application tout juste rouverte) : nouvel essai dans 5 s.
+      if (verrouEnvoi.pris) {
+        setTimeout(() => void relance.current(), 5_000);
+        return null;
+      }
       busy.current = true;
+      verrouEnvoi.pris = true;
       encore.current = false;
       let bilan: Bilan | null = null;
       try {
@@ -163,6 +170,7 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
         setSyncing(false);
         await charger();
         busy.current = false;
+        verrouEnvoi.pris = false;
         if (encore.current) {
           encore.current = false;
           setTimeout(() => void relance.current(), 0);
@@ -178,6 +186,7 @@ export function EnvoiProvider({ store, api, userId, children }: { store: Store; 
       setLastSync(await dernierEnvoi.get(store));
       await charger();
       void sync();
+      void inscrireEnvoiArrierePlan();
     })();
     const etat = AppState.addEventListener("change", (s) => {
       if (s === "active") void sync();

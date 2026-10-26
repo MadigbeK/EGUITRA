@@ -98,17 +98,6 @@ export interface ResultatAlcootest {
   reading_mg_l?: number;
 }
 
-/** Rotation du jour (GET /hsseq/me/rotations), avec son verrou. */
-export interface MyRotation {
-  id: number;
-  name: string | null;
-  date_loading: string;
-  state: "draft" | "en_route";
-  vehicle: { id: number; name: string; vehicle_kind: VehicleKind };
-  site: { id: number; name: string } | null;
-  lock: { allowed: boolean; pending_checks_only: boolean; reasons: LockReason[] };
-}
-
 /** Motif du verrou de départ (§ 9). */
 export interface LockReason {
   code: string;
@@ -124,11 +113,48 @@ export interface LockReason {
   waiver_id: number | null;
 }
 
-/** POST /hsseq/lock/evaluate. */
+/** POST /hsseq/lock/evaluate (noyau : models/lock.py, _hsseq_evaluate). */
 export interface LockEvaluation {
   rotation_id: number;
   allowed: boolean;
+  /** Verrou en service : tant qu'il ne l'est pas, `allowed` vaut vrai. */
+  lock_active: boolean;
   reasons: LockReason[];
-  active_waiver: { id: number; expires: string | null } | null;
+  warnings: LockReason[];
+  active_waiver: { id: number; reason_code: string; expires: string | null } | null;
+  pending_checks_only: boolean;
   checked_at: string;
+}
+
+/** Rotation du jour (GET /hsseq/me/rotations) ; `lock` nul une fois la rotation en route. */
+export interface MyRotation {
+  id: number;
+  name: string | null;
+  date_loading: string;
+  state: "draft" | "en_route";
+  vehicle: { id: number; name: string; vehicle_kind: VehicleKind } | null;
+  site: { id: number; name: string } | null;
+  driver: { id: number; name: string } | null;
+  route_name: string | null;
+  lock: Pick<LockEvaluation, "allowed" | "pending_checks_only" | "reasons" | "warnings" | "lock_active"> | null;
+}
+
+/** Réponse de GET /hsseq/me/rotations. */
+export interface MyRotations {
+  date: string;
+  items: MyRotation[];
+}
+
+/** Non-conformité ouverte (GET /hsseq/checks/nonconformities, § 7). */
+export interface Nonconformity {
+  id: number;
+  check: { id: number; reference: string | null };
+  item: { id: number; label: string; blocking: boolean };
+  vehicle: { id: number; name: string } | null;
+  site: { id: number; name: string } | null;
+  found_at: string;
+  comment: string | null;
+  photos_missing: boolean;
+  status: "open" | "lifted";
+  rights: { can_close: boolean };
 }

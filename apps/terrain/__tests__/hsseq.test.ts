@@ -62,16 +62,18 @@ const photo = (uuid: string, parent: string, model: Piece["model"], item_id: num
 
 describe("modules de « Ma journée » selon le profil", () => {
   it("ouvre au conducteur les seules fiches HSSEQ, sans Rotations", () => {
-    expect(modulesOuverts(["conducteur"]).map((m) => m.cle)).toEqual(["controle", "alcootest", "declaration"]);
+    expect(modulesOuverts(["conducteur"]).map((m) => m.cle)).toEqual(["depart", "controle", "alcootest", "declaration"]);
+    expect(peutOuvrir(["conducteur"], "nonconformites")).toBe(false);
     expect(peutOuvrir(["conducteur"], "rotations")).toBe(false);
   });
 
   it("ouvre tout au chef de parc", () => {
-    expect(modulesOuverts(["exploitation"]).map((m) => m.cle)).toEqual(["rotations", "controle", "alcootest", "declaration"]);
+    expect(modulesOuverts(["exploitation"]).map((m) => m.cle)).toEqual(["rotations", "depart", "controle", "alcootest", "declaration", "nonconformites"]);
   });
 
   it("suit la matrice du contrat : l'administration ne contrôle pas, la direction déclare seulement", () => {
-    expect(modulesOuverts(["admin"]).map((m) => m.cle)).toEqual(["rotations", "declaration"]);
+    expect(modulesOuverts(["admin"]).map((m) => m.cle)).toEqual(["rotations", "depart", "declaration"]);
+    expect(modulesOuverts(["hsseq"]).map((m) => m.cle)).toEqual(["depart", "controle", "alcootest", "declaration", "nonconformites"]);
     expect(modulesOuverts(["direction"]).map((m) => m.cle)).toEqual(["declaration"]);
     expect(modulesOuverts(["finance", "achats"])).toEqual([]);
   });

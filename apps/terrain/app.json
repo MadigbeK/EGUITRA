@@ -31,7 +31,21 @@
       "expo-router",
       "expo-secure-store",
       "expo-sqlite",
-      "expo-font"
+      "expo-font",
+      "expo-background-task",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NIMOVA Terrain prend les photos des non-conformités et des déclarations. Elles restent dans l'application, jamais dans la galerie.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "NIMOVA Terrain relève la position d'une déclaration ou d'un contrôle, au moment de la saisie seulement."
+        }
+      ]
     ]
   }
 }

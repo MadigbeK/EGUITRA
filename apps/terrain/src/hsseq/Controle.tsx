@@ -21,15 +21,15 @@ import { grilleDe, NATURE_VEHICULE, useHsseq } from "./useHsseq";
 type Etape = "vehicule" | "critiques" | "autres" | "recap";
 
 /** Contrôle avant départ (système « terrain », § 3.3 à 3.5 ; contrat HSSEQ, § 7). Couleur : pétrole. */
-export function Controle({ user }: { user: Utilisateur }) {
+export function Controle({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial?: string }) {
   return (
     <Module nom="hsseq">
-      <Contenu user={user} />
+      <Contenu user={user} vehiculeInitial={vehiculeInitial} />
     </Module>
   );
 }
 
-function Contenu({ user }: { user: Utilisateur }) {
+function Contenu({ user, vehiculeInitial }: { user: Utilisateur; vehiculeInitial?: string }) {
   useKeepAwake();
   const router = useRouter();
   const envoi = useEnvoi();
@@ -38,7 +38,8 @@ function Contenu({ user }: { user: Utilisateur }) {
   const position = usePosition();
   const uuid = useRef(randomUUID());
   const [etape, setEtape] = useState<Etape>("vehicule");
-  const [vehiculeId, setVehiculeId] = useState("");
+  // Véhicule venu du verrou (motif V01), sinon celui du conducteur.
+  const [vehiculeId, setVehiculeId] = useState(vehiculeInitial ?? "");
   const [index, setIndex] = useState(0);
   const [reponses, setReponses] = useState<Record<number, Reponse>>({});
   const [photos, setPhotos] = useState<Record<number, Piece>>({});
