@@ -50,7 +50,7 @@ const ONGLETS: Record<Onglet, { label: string; statuts: ActionStatus[] | null }>
 };
 const ORDRE_ONGLETS = Object.keys(ONGLETS) as Onglet[];
 
-/** Tris acceptés par le noyau (paramètre `sort`). */
+/** Tris acceptés par le noyau (paramètre `sort`) ; « days_overdue », le retard calculé au jour. */
 const TRIS = ["reference", "due_date", "days_overdue", "status"] as const;
 
 const PAR_PAGE = 50;
@@ -181,7 +181,8 @@ export function PlanActions() {
               sort={tri}
               onSort={(t) => {
                 if (!(TRIS as readonly string[]).includes(t.key)) return;
-                setTri(t);
+                // Retard : le premier clic met les actions les plus en retard en tête.
+                setTri(t.key === "days_overdue" && tri.key !== "days_overdue" ? { key: t.key, dir: -1 } : t);
               }}
               onRowClick={(a) => ecrire({ action: a.id })}
               empty={filtresActifs(filtres) ? "Aucune action pour ces filtres." : "Aucune action dans cet onglet."}
