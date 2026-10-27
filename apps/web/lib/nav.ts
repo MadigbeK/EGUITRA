@@ -46,11 +46,23 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", profiles: VALIDATION, badge: "approvals" },
         { href: "/finance/demandes", label: "Mes demandes", icon: "BadgeCheck", profiles: ACHATS },
         { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"] },
-        // Bons de commande des métiers (leurs demandes) ; la finance et les achats les ouvrent depuis Achats et dépenses.
-        { href: "/finance/achats/commandes", label: "Bons de commande", icon: "ShoppingCart", profiles: ["exploitation", "chantiers", "immobilier"] },
         { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN, badge: "alerts" },
         { href: "/finance/guide", label: "Guide de la finance", icon: "Info", profiles: FIN },
         { href: "/finance/guide-achats", label: "Guide des achats", icon: "Info", profiles: ACHATS },
+      ],
+    },
+    {
+      // Achats et ventes (eguitra_commerce) : aussi en onglets de Ventes et d'Achats et dépenses ; rubrique propre
+      // pour qu'on les trouve. Profils des routes du module (lib/commerce-types.ts).
+      label: "Achats et ventes",
+      items: [
+        { href: "/finance/ventes/offres", label: "Offres", icon: "FileText", profiles: FIN },
+        { href: "/finance/ventes/commandes", label: "Commandes clients", icon: "ListChecks", profiles: FIN },
+        { href: "/finance/achats/commandes", label: "Bons de commande", icon: "ShoppingCart", profiles: [...FIN, "achats", "exploitation", "chantiers", "immobilier"] },
+        { href: "/finance/ventes/catalogue", label: "Catalogue", icon: "Boxes", profiles: FIN },
+        { href: "/finance/achats/catalogue", label: "Catalogue des achats", icon: "Boxes", profiles: ACHATS },
+        { href: "/finance/ventes/tableau", label: "Tableau des ventes", icon: "TrendingUp", profiles: FIN },
+        { href: "/finance/achats/tableau", label: "Tableau des achats", icon: "Gauge", profiles: [...FIN, "achats"] },
       ],
     },
     {

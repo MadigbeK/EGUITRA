@@ -54,6 +54,9 @@ COMPTES = [
     ("test.daf", "Test - Responsable financier", ["finance"], ["groupe", "cabinet"]),
     ("test.comptable", "Test - Comptable", ["finance"], ["groupe", "cabinet"]),
     ("test.achats", "Test - Acheteur", ["achats"], ["groupe", "cabinet"]),
+    # Achats et ventes réunis (offres, commandes, bons de commande, réceptions) : un seul compte pour parcourir
+    # le cahier 11 ; les scénarios à deux personnes gardent test.daf et test.achats (quatre yeux).
+    ("test.achatvente", "Test - Achats et ventes", ["finance", "achats"], ["groupe", "cabinet"]),
     ("test.exploitation", "Test - Responsable exploitation transport", ["exploitation"], ["groupe"]),
     ("test.parc", "Test - Agent de parc", ["exploitation"], ["groupe"]),
     ("test.chantiers", "Test - Conducteur de travaux", ["chantiers"], ["groupe"]),

@@ -37,7 +37,7 @@ compris les erreurs.
    Mot de passe : le mot de passe commun de la recette, remis par l'administrateur.
 2. Société. Les données de démonstration sont surtout celles d'EGUITRA GROUP SARLU : travaillez dans
    cette société (choix en haut de l'écran), sauf mention contraire. Les comptes test.daf,
-   test.comptable, test.dg, test.achats et test.admin sont ouverts aux deux sociétés.
+   test.comptable, test.dg, test.achats, test.achatvente et test.admin sont ouverts aux deux sociétés.
 3. Numéros. Les offres sont numérotées OF/EG/2026/… pour EGUITRA GROUP SARLU et OF/MBAX/2026/… pour
    MB AxisPro Consulting ; les bons de commande BC/EG/…, BC/MBAX/… ; les réceptions REC/EG/…. Notez les
    numéros créés : d'autres scénarios s'en servent.
@@ -61,6 +61,7 @@ compris les erreurs.
 | test.comptable | Finance | les deux sociétés | approbations, pièces d'achat |
 | test.dg | Direction | les deux sociétés | offres, approbations au-delà de 50 M, lecture |
 | test.achats | Achats | les deux sociétés | bons de commande, réceptions, pièces d'achat |
+| test.achatvente | Finance et achats | les deux sociétés | tout le cahier d'un seul compte, sauf les scénarios à deux personnes |
 | test.chantiers | BTP | EGUITRA GROUP SARLU | engagement et bon de commande du chantier, situations |
 | test.exploitation | Exploitation | EGUITRA GROUP SARLU | refus |
 | test.admin | Administration | les deux sociétés | réglages, consultation |
