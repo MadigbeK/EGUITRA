@@ -17,6 +17,45 @@ class TestCorrectionsCahier(HsseqCase):
         cls.auditor.write({"hsseq_audit_until": cls.day + timedelta(days=10),
                            "hsseq_audit_site_ids": [(6, 0, cls.site.ids)]})
 
+    def test_modification_par_le_responsable(self):
+        event = self.event()
+        due = self.day + timedelta(days=10)
+        action = self.env["eguitra.hsseq.action"].create({
+            "origin": "event", "event_id": event.id, "description": "Former les agents au balisage",
+            "owner_id": self.parc.id, "due_date": due})
+        path = f"/hsseq/actions/{action.id}"
+        status, detail = self.api("ibrahima", "GET", path)
+        self.assertEqual((status, detail["rights"]["can_edit"], detail["estimated_cost"]), (200, True, 0), detail)
+        # Formulaire complet : les champs réservés reviennent tels quels (coût vide, même responsable, même échéance).
+        status, updated = self.api("ibrahima", "PATCH", path, {
+            "description": "Former les agents au balisage de nuit", "control_level": "administrative",
+            "expected_evidence": "Feuille d'émargement", "estimated_cost": None, "owner_id": self.parc.id,
+            "due_date": str(due)})
+        self.assertEqual(status, 200, updated)
+        self.assertEqual((updated["description"], updated["control_level"], updated["expected_evidence"],
+                          updated["estimated_cost"], updated["owner"]["id"], updated["due_date"]),
+                         ("Former les agents au balisage de nuit", "administrative", "Feuille d'émargement", 0,
+                          self.parc.id, str(due)))
+        entries = self.env["eguitra.hsseq.journal"].search([("model", "=", "action"), ("res_id", "=", action.id),
+                                                             ("action", "=", "write")])
+        self.assertEqual(set(entries.mapped("field")), {"description", "control_level", "expected_evidence"},
+                         "Seuls les champs changés sont journalisés")
+        self.assertEqual(entries.mapped("user_id"), self.parc, "Au nom du responsable")
+        status, body = self.api("ibrahima", "PATCH", path, {"estimated_cost": 0, "description": "Former les agents"})
+        self.assertEqual(status, 200, f"Coût nul inchangé : accepté ({body})")
+        for change in ({"estimated_cost": 1_000_000}, {"due_date": str(due + timedelta(days=5))},
+                       {"owner_id": self.hsseq.id}):
+            status, body = self.api("ibrahima", "PATCH", path, change)
+            self.assertEqual((status, body["error"]), (403, "forbidden"), f"Responsable : {change} refusé")
+        for login in ("dg.hsseq", "admin.hsseq", "awa.auditrice"):
+            status, body = self.api(login, "PATCH", path, {"description": "x"})
+            self.assertEqual(status, 403, f"{login} ne modifie pas l'action : {body}")
+        status, _body = self.api("sekou.parc", "PATCH", path, {"description": "x"})
+        self.assertEqual(status, 404, "Action d'un autre site : introuvable")
+        later = str(due + timedelta(days=5))
+        status, changed = self.api("kadi.hsseq", "PATCH", path, {"estimated_cost": 1_000_000, "due_date": later})
+        self.assertEqual((status, changed["estimated_cost"], changed["due_date"]), (200, 1_000_000, later), changed)
+
     def test_tri_du_plan_d_actions_par_retard(self):
         event = self.event()
         Action = self.env["eguitra.hsseq.action"]

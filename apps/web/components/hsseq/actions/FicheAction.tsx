@@ -582,12 +582,17 @@ function FenetreMotif({ transition, a, onClose, envoyer }: { transition: "cancel
   );
 }
 
-/** Mise à jour (responsable ou Responsable HSSEQ) ; responsable et échéance réservés au Responsable HSSEQ. */
+/**
+ * Mise à jour (responsable ou Responsable HSSEQ) : seuls les champs changés partent. Le responsable,
+ * l'échéance et le coût estimé, réservés au Responsable HSSEQ, ne s'affichent en saisie qu'à lui ; le
+ * responsable de l'action les lit sous le formulaire.
+ */
 function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; hsseq: boolean; onClose: () => void; envoyer: (corps: Record<string, unknown>) => Promise<unknown> }) {
   const { data: ref } = useReferentiels();
   const [f, setF] = useState({
     description: a.description,
-    control_level: a.control_level ?? "administrative",
+    // Niveau non précisé : il le reste tant qu'on n'en choisit pas un.
+    control_level: (a.control_level ?? "") as ControlLevel | "",
     expected_evidence: a.expected_evidence ?? "",
     estimated_cost: a.estimated_cost ? String(a.estimated_cost) : "",
     owner_id: String(a.owner.id),
@@ -606,9 +611,10 @@ function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; h
   function corps(): Record<string, unknown> {
     const c: Record<string, unknown> = {};
     if (f.description.trim() !== a.description) c.description = f.description.trim();
-    if (f.control_level !== a.control_level) c.control_level = f.control_level;
+    if (f.control_level && f.control_level !== a.control_level) c.control_level = f.control_level;
     if (f.expected_evidence.trim() !== (a.expected_evidence ?? "")) c.expected_evidence = f.expected_evidence.trim();
-    if (cout !== a.estimated_cost) c.estimated_cost = cout;
+    // Coût vide et coût nul se valent (le noyau sert 0 pour une action non chiffrée).
+    if (hsseq && (cout ?? 0) !== (a.estimated_cost ?? 0)) c.estimated_cost = cout;
     if (hsseq && Number(f.owner_id) !== a.owner.id) c.owner_id = Number(f.owner_id);
     if (hsseq && f.due_date !== a.due_date) c.due_date = f.due_date;
     return c;
@@ -626,7 +632,7 @@ function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; h
           <Button
             variant="primary"
             loading={envoi}
-            disabled={!f.description.trim() || !f.expected_evidence.trim() || !coutValide || !f.due_date}
+            disabled={!f.description.trim() || !coutValide || !f.due_date}
             onClick={async () => {
               const c = corps();
               if (!Object.keys(c).length) return onClose();
@@ -652,11 +658,13 @@ function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; h
           <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
         </Field>
         <Field label="Niveau de maîtrise" hint="De la mesure la plus forte (élimination) à la plus faible (équipement de protection).">
-          <Select value={f.control_level} onChange={(e) => setF({ ...f, control_level: e.target.value as ControlLevel })} options={ORDRE_MAITRISE.map((n) => ({ value: n, label: NIVEAU_MAITRISE[n] }))} />
+          <Select value={f.control_level} onChange={(e) => setF({ ...f, control_level: e.target.value as ControlLevel | "" })} placeholder={a.control_level ? undefined : "Non précisé"} options={ORDRE_MAITRISE.map((n) => ({ value: n, label: NIVEAU_MAITRISE[n] }))} />
         </Field>
-        <Field label="Coût estimé (GNF)" hint={`Au-delà de ${fmtGNF(seuil)}, la direction valide l'action avant son démarrage.`} error={coutValide ? undefined : "Montant invalide."}>
-          <Input inputMode="numeric" value={f.estimated_cost} onChange={(e) => setF({ ...f, estimated_cost: e.target.value })} placeholder="Non chiffré" />
-        </Field>
+        {hsseq && (
+          <Field label="Coût estimé (GNF)" hint={`Au-delà de ${fmtGNF(seuil)}, la direction valide l'action avant son démarrage.`} error={coutValide ? undefined : "Montant invalide."}>
+            <Input inputMode="numeric" value={f.estimated_cost} onChange={(e) => setF({ ...f, estimated_cost: e.target.value })} placeholder="Non chiffré" />
+          </Field>
+        )}
         <Field label="Preuve attendue" className="md:col-span-2">
           <Textarea className="min-h-[60px]" value={f.expected_evidence} onChange={(e) => setF({ ...f, expected_evidence: e.target.value })} />
         </Field>
@@ -670,7 +678,9 @@ function FenetreModification({ a, hsseq, onClose, envoyer }: { a: HsseqAction; h
             </Field>
           </>
         ) : (
-          <p className="text-[12.5px] leading-snug text-muted md:col-span-2">Le responsable et l&apos;échéance se changent par le Responsable HSSEQ.</p>
+          <p className="text-[12.5px] leading-snug text-muted md:col-span-2">
+            {`Responsable : ${a.owner.name} ; échéance : ${fmtDate(a.due_date)} ; coût estimé : ${a.estimated_cost ? fmtGNF(a.estimated_cost) : "non chiffré"}. Ces trois champs se changent par le Responsable HSSEQ.`}
+          </p>
         )}
         <div className="md:col-span-2">
           <ErreurFenetre texte={erreur} />

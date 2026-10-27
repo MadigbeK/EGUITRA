@@ -2,8 +2,9 @@
 
 Lecture : administration, direction et hsseq ; chef de parc pour les actions de ses sites et les siennes ;
 tout compte interne pour les actions dont il est responsable (maintenance, qualité…). Création et
-vérification d'efficacité par hsseq ; mise à jour, démarrage et clôture par le responsable ou hsseq ;
-validation d'une action coûteuse par la direction. Tri par retard (days_overdue) calculé au jour."""
+vérification d'efficacité par hsseq ; mise à jour, démarrage et clôture par le responsable ou hsseq, le
+responsable, l'échéance et le coût estimé restant à hsseq (une valeur inchangée est ignorée) ; validation
+d'une action coûteuse par la direction. Tri par retard (days_overdue) calculé au jour."""
 
 from odoo import fields, http
 from odoo.http import request
@@ -42,6 +43,8 @@ SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "
          # Retard (days_overdue) : calculé au jour, il n'est pas stocké ; trié par overdue_search.
          "days_overdue": "due_date"}
 OPEN = ("todo", "in_progress")
+# Responsable, échéance et coût estimé : réservés au Responsable HSSEQ (une valeur inchangée est ignorée).
+RESERVED = ("owner_id", "due_date", "estimated_cost")
 # Origine d'une action -> (fiche de l'API, champ de l'action). Origine « audit » : l'action répond à un constat
 # de l'audit (origin_id : le constat).
 ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id"),
@@ -192,6 +195,19 @@ def get_action(action_id):
     if not can_read(action):
         raise ApiError(404, "not_found", "Action introuvable.")
     return action
+
+
+def unchanged(action, data, key):
+    """Champ réservé (responsable, échéance, coût estimé) renvoyé avec la valeur de l'action : un coût vide
+    vaut zéro, comme dans _values."""
+    action = action.sudo()
+    if key == "owner_id":
+        return int_or_none(data, "owner_id") == action.owner_id.id
+    if key == "due_date":
+        return date_value(data, "due_date") == action.due_date
+    cost = max(number(data, "estimated_cost"), 0.0)
+    return action.currency_id.compare_amounts(cost, action.estimated_cost or 0.0) == 0 if action.currency_id \
+        else cost == (action.estimated_cost or 0.0)
 
 
 def approval_pending_domain(comps):
@@ -350,7 +366,9 @@ class EguitraHsseqActions(http.Controller):
         if not rights(action)["can_edit"]:
             raise forbidden("Seuls le responsable de l'action et le Responsable HSSEQ la mettent à jour, tant "
                             "qu'elle n'est ni close ni annulée.")
-        if {"owner_id", "due_date", "estimated_cost"} & set(data) and not is_hsseq():
+        # Un formulaire complet renvoie aussi les champs réservés tels quels : une valeur inchangée est ignorée.
+        data = {key: value for key, value in data.items() if key not in RESERVED or not unchanged(action, data, key)}
+        if set(RESERVED) & set(data) and not is_hsseq():
             raise forbidden("Responsable, échéance et coût estimé d'une action : réservés au Responsable HSSEQ.")
         action.write(self._values(data, action))
         return action_detail(action)
