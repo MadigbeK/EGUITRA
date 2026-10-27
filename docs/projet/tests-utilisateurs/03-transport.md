@@ -2,9 +2,9 @@
 
 NIMOVA · Transport (au bureau) et NIMOVA · Rotations (au téléphone), pour EGUITRA GROUP SARLU.
 
-Rotations, fiche rotation, validation par un autre compte, départ en route, facturation, flotte et
-chauffeurs, routes et barème officiel, propriétaires, manquants, taxes ; saisie au parc hors
-réseau, correction et envoi.
+Rotations, fiche rotation, validation par un autre compte, départ en route, facturation et facture
+imprimée au modèle du transport, flotte et chauffeurs, routes et barème officiel, propriétaires,
+manquants, taxes ; saisie au parc hors réseau, correction et envoi.
 
 | Rubrique {28} | À remplir {72} |
 |---|---|
@@ -18,7 +18,7 @@ réseau, correction et envoi.
 | Société | EGUITRA GROUP SARLU |
 | Téléphone utilisé (Rotations) | ______ |
 
-Document préparé par E-VOLUTION XP le 26 octobre 2026, d'après les écrans de la plateforme à cette
+Document préparé par E-VOLUTION XP le 27 octobre 2026, d'après les écrans de la plateforme à cette
 date.
 
 <!-- saut de page -->
@@ -90,20 +90,22 @@ Objectif : vérifier la saisie d'une rotation et l'estimation de sa marge avant 
 Compte : test.exploitation.
 
 Données : ensemble DEMO-01 ; client « Démo - Distributeur pétrolier A » ; route « Conakry - Kankan
-(démo) » ; produit gasoil ; bon de livraison « BL-ESSAI-201 » ; volume chargé 33 ; volume livré
-32,95 ; carburant 3 200 000 ; péages 250 000 ; frais du chauffeur 600 000.
+(démo) » ; produit gasoil ; bon de livraison « BL-ESSAI-201 » ; N° de bon « BE-ESSAI-201 » ; volume
+chargé 33 ; volume livré 32,95 ; carburant 3 200 000 ; péages 250 000 ; frais du chauffeur 600 000.
 
 1. Ouvrez Exploitation > Rotations, puis « Nouvelle rotation ».
 2. Choisissez l'« Ensemble routier » : laissez « Chauffeur » vide (chauffeur habituel).
 3. Choisissez le « Produit », le « Client » et la « Route ». Laissez « Tarif (m³) » et « Distance
    parcourue (km) » vides.
-4. Saisissez les dates, le « Bon de livraison », les volumes et les frais.
+4. Saisissez les dates, le « Bon de livraison », le « N° de bon » (aide « Bon du dépôt, sur la
+   facture »), les volumes et les frais.
 5. Lisez « Montant estimé », « Coût standard de la route » et « Marge estimée », puis
    « Enregistrer ».
 
 Résultat attendu : le montant estimé suit le tarif de la route (450 000 GNF par m³). La rotation est
-créée à l'état saisi et figure dans le filtre « Saisies à valider ». En bas de la fenêtre, la mention
-« La validation revient à un autre compte que celui qui saisit. ».
+créée à l'état saisi et figure dans le filtre « Saisies à valider » ; sa fiche reprend le bon de
+livraison et le N° de bon. En bas de la fenêtre, la mention « La validation revient à un autre compte
+que celui qui saisit. ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -861,6 +863,64 @@ code ; la rotation reste à l'état saisi. À l'étape 3, elle est validée une 
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## F. Facture des rotations
+
+### TRA-37. Corriger le N° de bon d'une rotation
+
+Objectif : vérifier que le N° de bon, repris sur la facture du client, se corrige dans la fiche de la
+rotation tant qu'elle n'est pas facturée.
+
+Compte : test.exploitation.
+
+Données : une rotation à l'état saisi, sans N° de bon ; N° de bon « BE-ESSAI-202 » ; une rotation
+facturée (TRA-13).
+
+1. Exploitation > Rotations, ouvrez la fiche de la rotation saisie.
+2. Saisissez « BE-ESSAI-202 » dans « N° de bon », puis « Enregistrer ».
+3. Fermez la fiche et rouvrez-la.
+4. Ouvrez la fiche de la rotation facturée.
+
+Résultat attendu : le N° de bon, lettres et tirets compris, est accepté sans message « Nombre
+illisible » ; la fiche rouverte le garde. La fiche de la rotation facturée ne se modifie plus et
+indique « Une rotation facturée ne se modifie plus ; établissez un avoir si nécessaire. ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### TRA-38. Imprimer la facture des rotations
+
+Objectif : vérifier que la facture des rotations suit le modèle « Facture transport carburant » :
+tableau des rotations, puis les autres éléments facturés.
+
+Compte : test.daf.
+
+Données : la facture validée en TRA-13 ; si possible, l'une de ses rotations est celle de TRA-02
+(DEMO-01, « Conakry - Kankan (démo) », bon de livraison « BL-ESSAI-201 », N° de bon
+« BE-ESSAI-201 »).
+
+1. Ouvrez NIMOVA · Finance > Comptabilité > Ventes et la facture de TRA-13.
+2. Cliquez sur « PDF ».
+3. Lisez le tableau des rotations, puis les lignes qui le suivent et les totaux.
+
+Résultat attendu : sous le bloc « CLIENT », le tableau a les colonnes « N° », « N° de BL », « N° de
+bon », « N° camion », « Départ », « Destination », « Volume (litres) », « Péréquation selon distance
+(GNF/L) » et « Montant HT (GNF) », une ligne par rotation, dans l'ordre des dates de chargement. La
+rotation de TRA-02 porte BL-ESSAI-201, BE-ESSAI-201, les immatriculations du tracteur et de la citerne
+de DEMO-01 séparées par « / », Conakry, Kankan, le volume livré en litres sans arrondi (32,95 m³
+donnent 32 950), 450 (le tarif de 450 000 GNF par m³ ramené au litre) et son montant (volume livré
+en m³ multiplié par le tarif du m³). Le libellé de la ligne vu dans Ventes (« Transport … ») n'est pas
+repris : le tableau le remplace. Les taxes refacturées et la déduction du manquant, s'il y en a,
+suivent sous « Autres éléments facturés », avec leur désignation et leur montant. Viennent ensuite
+les totaux et la TVA, « Arrêtée la présente facture à la somme de : » avec le montant en toutes
+lettres, les conditions de règlement, le signataire et la raison sociale.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -870,7 +930,8 @@ code ; la rotation reste à l'état saisi. À l'étape 3, elle est validée une 
 | C. Parc : Rotations au téléphone | 7 | | | |
 | D. Refus attendus | 5 | | | |
 | E. Contrôles de saisie et de sécurité | 4 | | | |
-| Total | 36 | | | |
+| F. Facture des rotations | 2 | | | |
+| Total | 38 | | | |
 
 Réserves et anomalies relevées :
 
