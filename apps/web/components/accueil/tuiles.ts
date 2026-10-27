@@ -56,6 +56,9 @@ const COURT: Record<string, string> = {
   "/rh/simulateur": "Simulateur",
   "/rh/moi": "Mon espace",
   "/hsseq": "Cockpit HSSEQ",
+  "/agenda": "Agenda",
+  "/agenda/planning": "Planning d'équipe",
+  "/agenda/reglages": "Réglages de l'agenda",
 };
 
 /**

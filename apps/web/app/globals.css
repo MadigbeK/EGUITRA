@@ -215,6 +215,18 @@
   --accent-lueur: rgb(20 163 194 / 0.35);
 }
 
+/* Agenda : l'indigo du temps planifié (teinte 242°), libre entre l'azur d'AxisPro et la prune de la RH, et
+   qui ne dit aucun état. Accent 7,4:1 sur le blanc ; texte blanc sur --accent-haut 6,1:1 ; --accent-vif
+   sert au décor seulement. */
+[data-app="agenda"] {
+  --accent: #4340b8;
+  --accent-strong: #36339a;
+  --accent-haut: #4c49c6;
+  --accent-vif: #6d6af0;
+  --accent-doux: #ecebfd;
+  --accent-lueur: rgb(109 106 240 / 0.35);
+}
+
 /* Analyse : l'or bronze de la diagonale du logo, la lecture d'ensemble posée sur les métiers
    (choix du gérant, 22 octobre 2026). Accent 5,67:1 sur le blanc, 5,02 sur le fond ; texte blanc sur
    --accent-haut 4,88:1 ; --accent-vif sert au décor seulement (3,2:1). */
@@ -286,6 +298,30 @@
   --accent-doux: #13353d;
   --accent-ink: #06212a;
   --accent-lueur: rgb(92 196 220 / 0.4);
+}
+
+/* Mode nuit sous l'Agenda : l'indigo éclairci (accent 7,9:1 sur le panneau sombre). */
+[data-app="agenda"] [data-theme="sombre"],
+[data-app="agenda"][data-theme="sombre"] {
+  --accent: #a9a7ff;
+  --accent-strong: #918eff;
+  --accent-haut: #bcbaff;
+  --accent-vif: #c7c5ff;
+  --accent-doux: #25244a;
+  --accent-ink: #12113a;
+  --accent-lueur: rgb(169 167 255 / 0.4);
+}
+
+/* Agenda : rayures des occupations sans détail (« Occupé »), ligne de l'heure courante. */
+.ag-masque {
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(16 36 31 / 0.06) 6px 12px);
+}
+[data-theme="sombre"] .ag-masque {
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(255 255 255 / 0.06) 6px 12px);
+}
+.ag-maintenant {
+  background: var(--danger-vif);
+  box-shadow: 0 0 0 1px var(--panel);
 }
 
 /* Rotations : le corail du carburant et de la route. */

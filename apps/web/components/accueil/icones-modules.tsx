@@ -39,6 +39,9 @@ const JSF = "#c99200"; // jaune sécurité foncé
 const PL = "#a3b1b6"; // gris plomb
 const PLF = "#5d6d73"; // plomb foncé
 const B = "#ffffff";
+const I = "#4340b8"; // indigo (Agenda)
+const IC = "#c7c5ff"; // indigo clair
+const IV = "#6d6af0"; // indigo vif
 
 /** Rang dans la chorégraphie, et point fixe (en unités de la grille) pour les rotations. */
 const k = (n: number): CSSProperties => ({ "--k": n }) as CSSProperties;
@@ -755,6 +758,37 @@ const DESSINS: Record<string, ReactNode> = {
       </g>
     </>
   ),
+  /* Agenda : la page du mois, ses anneaux, le jour retenu et la petite horloge du rappel. */
+  agenda: (
+    <>
+      <rect className="a-pop" style={k(0)} x="4" y="8" width="34" height="34" rx="6" fill={I} />
+      <rect x="8" y="17" width="26" height="21" rx="2.5" fill={B} />
+      <rect className="a-pop" style={k(1)} x="11" y="4" width="3.4" height="9" rx="1.7" fill={IC} />
+      <rect className="a-pop" style={k(1)} x="27.6" y="4" width="3.4" height="9" rx="1.7" fill={IC} />
+      <rect className="a-pop" style={k(2)} x="11" y="21" width="5" height="4.5" rx="1.2" fill={IC} />
+      <rect className="a-pop" style={k(2)} x="18.5" y="21" width="5" height="4.5" rx="1.2" fill={IV} />
+      <rect className="a-pop" style={k(3)} x="26" y="21" width="5" height="4.5" rx="1.2" fill={IC} />
+      <rect className="a-pop" style={k(3)} x="11" y="29" width="5" height="4.5" rx="1.2" fill={IC} />
+      <rect className="a-pop" style={k(4)} x="18.5" y="29" width="5" height="4.5" rx="1.2" fill={IC} />
+      <g className="a-saute" style={k(5)}>
+        <circle cx="36.5" cy="35.5" r="8.5" fill={G} stroke={B} strokeWidth="2.5" />
+        <path d="M36.5 31v5l3 2" stroke={F} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </>
+  ),
+  /* Planning d'équipe : trois lignes de personnes et leurs plages occupées. */
+  "ag-planning": (
+    <>
+      <rect x="4" y="6" width="40" height="36" rx="6" fill={I} />
+      <circle className="a-pop" style={k(0)} cx="11" cy="14" r="3.5" fill={IC} />
+      <circle className="a-pop" style={k(1)} cx="11" cy="24" r="3.5" fill={IC} />
+      <circle className="a-pop" style={k(2)} cx="11" cy="34" r="3.5" fill={IC} />
+      <rect className="a-pousse-x" style={k(1)} x="18" y="11.5" width="14" height="5" rx="2.5" fill={IV} />
+      <rect className="a-pousse-x" style={k(2)} x="24" y="21.5" width="16" height="5" rx="2.5" fill={G} />
+      <rect className="a-pousse-x" style={k(3)} x="18" y="31.5" width="9" height="5" rx="2.5" fill={B} />
+      <rect className="a-pousse-x" style={k(4)} x="30" y="31.5" width="10" height="5" rx="2.5" fill={IV} />
+    </>
+  ),
   /* Cockpit : le cadran, ses trois zones et l'aiguille qui s'y pose. */
   "hs-cockpit": (
     <>
@@ -848,6 +882,11 @@ const PAR_ADRESSE: Record<string, string> = {
   analyse: "analyse",
   rh: "rh",
   hsseq: "hsseq",
+  agenda: "agenda",
+  "/agenda": "agenda",
+  "/agenda/planning": "ag-planning",
+  "/agenda/reglages": "parametres",
+  "/agenda/ressources": "societes",
   "/finance": "tableau",
   "/finance/pilotage": "budget",
   "/finance/rapport": "rapport",
