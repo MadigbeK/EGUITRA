@@ -14,9 +14,9 @@ pouvez tout essayer, y compris les erreurs.
 
 La connexion se fait toujours dans une application : celle de l'adresse ouverte. L'adresse de la
 recette, seule, ouvre la connexion à Finance, puis l'accueil NIMOVA, d'où l'on passe aux autres
-applications du compte. Un compte qui n'a pas Finance (cabinet, RH, salarié, porteur) ouvre l'adresse
-de son application ; sinon la connexion répond « Votre profil ne donne pas accès à cette
-application. ».
+applications du compte. Un compte interne qui n'a pas Finance (cabinet, RH, HSSEQ) entre directement
+dans sa propre application depuis cette adresse. Le porteur de projet passe toujours par l'adresse du
+portail ; ailleurs, la connexion lui répond « Votre profil ne donne pas accès à cette application. ».
 
 | Application {30} | Adresse à ouvrir {34} | Comptes de test {36} |
 |---|---|---|
@@ -24,6 +24,8 @@ application. ».
 | MB AxisPro Consulting (AxisPro Suite) | l'adresse de la recette suivie de /axispro | test.consultant, test.associe |
 | Analyse, pour le cabinet | l'adresse de la recette suivie de /analyse | test.consultant, test.associe |
 | RH et « Mon espace » | l'adresse de la recette suivie de /rh | test.rh, test.salarie |
+| HSSEQ (santé, sécurité, environnement, qualité) | l'adresse de la recette suivie de /hsseq | test.hsseq, test.auditeur, test.exploitation, test.parc, test.dg |
+| Agenda | l'adresse de la recette suivie de /agenda | tous les comptes internes (pas le porteur, ni le conducteur) |
 | Rotations, au téléphone | l'adresse de la recette suivie de /mobile | test.exploitation, test.parc |
 | Portail des porteurs de projets | l'adresse de la recette suivie de /portail | test.porteur, porteur.demo |
 
@@ -48,8 +50,13 @@ comptabilité, ses clients, ses factures. La plateforme les sert par application
 | NIMOVA · MB AxisPro Consulting | Direction, consultants du cabinet | MB AxisPro Consulting seulement |
 | NIMOVA · Analyse | Direction, finance, cabinet | Selon la société de travail |
 | NIMOVA · RH | Direction, ressources humaines ; « Mon espace » pour chaque salarié | Les deux, gestion commune |
+| NIMOVA · HSSEQ | Responsable HSSEQ, direction, exploitation ; auditeur en lecture seule | Les deux |
+| NIMOVA · Agenda | Tous les comptes internes : agenda personnel, partage, délégation, salles et véhicules | Un seul agenda par personne, quelles que soient ses sociétés |
 | NIMOVA · Rotations | Exploitation, agents de parc | EGUITRA GROUP SARLU seulement |
 | Portail des porteurs de projets | Clients du cabinet | MB AxisPro Consulting seulement |
+
+Les achats et les ventes (offres, commandes, bons de commande, réceptions) sont dans NIMOVA · Finance,
+sous Ventes et sous Achats et dépenses.
 
 Un compte ouvert à plusieurs applications passe de l'une à l'autre par le nom de l'espace, en haut à
 gauche (NIMOVA, puis le nom du module), ou par l'accueil NIMOVA. Les modules métier d'EGUITRA (BTP,
@@ -73,6 +80,11 @@ immobilier) n'apparaissent que lorsque la société de travail est EGUITRA GROUP
 | test.salarie | Salarié | RH, « Mon espace » seul | EGUITRA GROUP |
 | test.admin | Administrateur | Toutes | Les deux |
 | test.porteur | Porteur de projet (client du cabinet) | Portail | MB AxisPro Consulting |
+| test.hsseq | Responsable HSSEQ | HSSEQ | Les deux |
+| test.auditeur | Auditeur HSSEQ (lecture seule, un site, trente jours) | HSSEQ | EGUITRA GROUP |
+| test.conducteur | Conducteur | NIMOVA Terrain (application de téléphone, pas encore installable) | EGUITRA GROUP |
+
+Tous les comptes internes ouvrent aussi l'Agenda.
 
 Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend, même un détail.
 
@@ -97,6 +109,12 @@ Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend
   (bilan, compte de résultat au format SYSCOHADA, exports Excel), clôtures et contrôles.
 - Changer de société (nom de la société, en haut à droite) : vérifiez que les chiffres, les factures et les journaux
   d'EGUITRA GROUP et de MB AxisPro Consulting restent bien séparés.
+- Ventes > Offres : préparer une offre (validité, objet, lignes), l'imprimer, la passer en acceptée,
+  puis facturer un acompte et la facture finale ; une offre de travaux acceptée crée le chantier.
+  Achats et dépenses > Bons de commande : un bon issu d'un engagement approuvé, sa réception, puis la
+  facture du fournisseur rapprochée de la commande.
+- Finance > Administration > Factures et journaux : signataire, comptes bancaires affichés, dernier
+  numéro de l'ancien système ; puis une facture imprimée au modèle de la société.
 
 ### Exploitation transport (test.exploitation) et agent de parc (test.parc)
 
@@ -107,6 +125,19 @@ Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend
   valider (marge estimée à la saisie), rentabilité par camion, par route et par mois, flotte et
   chauffeurs, routes et tarifs. La facturation des rotations et les relevés des propriétaires
   reviennent à la finance.
+
+### Responsable HSSEQ (test.hsseq) et auditeur (test.auditeur)
+
+- HSSEQ : cockpit, déclaration d'un événement, enquête et actions, contrôles avant départ et verrou
+  de départ, habilitations et documents, audits, rapport mensuel du donneur d'ordre.
+- test.auditeur : tout se lit, rien ne se modifie, et seulement sur son site, jusqu'à sa date de fin.
+
+### Agenda (tous les comptes internes)
+
+- Créer un rendez-vous, une réunion récurrente, inviter un collègue et répondre à une invitation ;
+  « Trouver un créneau » ; réserver une salle.
+- Partager son agenda (disponibilités seules, détails, modification) ; test.daf gère l'agenda de
+  test.dg par délégation : vérifiez la mention « pour le compte de ».
 
 ### Chantiers (test.chantiers)
 

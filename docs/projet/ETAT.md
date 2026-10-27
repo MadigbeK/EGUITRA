@@ -201,6 +201,13 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 27 octobre 2026, 21 h 30 : Achats et ventes en production (version 20261027-2132)
+
+- En production : version 20261027-2132 (code 9903b18), sauvegarde prise avant (20261027T2132), carte blanche du gérant. Contenu : module eguitra_commerce (quinze modules ; sale et purchase d'Odoo installés, sans stock), eguitra_chantier 19.0.1.1.1 (déduction de l'avance de démarrage dans les situations). Offres OF/EG et OF/MBAX, commandes et acomptes, offre de travaux vers chantier, bons de commande BC, réceptions REC, rapprochement, comparaison de devis, tableaux de bord, dans Finance.
+- Vérifications : premier passage sur Odoo, deux défauts corrigés (avance de démarrage calculée sur un chantier sans situation facturée, import du catalogue avec une recherche par référence vide) ; 318 tests ciblés puis série complète de 928 tests sans erreur ; recette mise à jour (données de démonstration : catalogues, offres, acomptes, bons de commande, réception partielle et écart) ; offre PDF relue (gabarit de la facture, « Référence offre », « Validité offre », montant en lettres) ; droits vérifiés (achats et exploitation : bons de commande seuls ; RH et porteur refusés) ; répétition réussie ; après la mise en production, quinze modules, noyau, web et sauvegardes sains.
+- À régler à la mise en service : catalogue réel (import CSV ou XLSX), validité des offres, tolérance du rapprochement (2 % par défaut), règle des trois devis (désactivée), compte des acomptes (4191), séquences OF, BC et REC par société. Location de véhicules (dans Transport, avec les ressources de l'agenda) et stocks : reportés, à décider.
+- Cahiers de test : onze cahiers, 435 scénarios (10 Agenda, 11 Achats et ventes) ; guide des testeurs mis à jour (HSSEQ, agenda, achats et ventes, comptes test.hsseq, test.auditeur, test.conducteur, connexion de repli).
+
 ### 27 octobre 2026, 19 h 30 : Agenda en production (version 20261027-1926) ; Achats et ventes en tests
 
 - En production : version 20261027-1926 (code fc98ac8), sauvegarde prise avant (20261027T1926), carte blanche du gérant. Contenu : module eguitra_agenda (NIMOVA · Agenda, quatorze modules) : agendas personnels, d'équipe et de ressources, récurrence, invitations, partage en trois niveaux, délégation (« par … pour le compte de … »), heures de travail et recherche de créneau, planning d'équipe, absence du bureau, rappels et récapitulatif, échéances des modules bornées aux droits, abonnement iCal et import ICS, prise de rendez-vous (fermée par défaut).
