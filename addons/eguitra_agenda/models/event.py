@@ -608,6 +608,20 @@ class AgendaEvent(models.Model):
             raise UserError("Cette récurrence ne donne aucune occurrence : vérifiez sa date de fin.")
         return firsts[0], firsts[0] + (stop - start)
 
+    @api.model
+    def _internal_user_by_email(self, email):
+        """Compte interne actif dont l'adresse, mise en minuscules, est égale à celle saisie (déjà nettoyée et
+        en minuscules) : comparaison en égalité, sans motif (« % » et « _ » n'y sont que des caractères)."""
+        Users = self.env["res.users"].sudo()
+        Users.flush_model(["partner_id", "share", "active"])
+        self.env["res.partner"].sudo().flush_model(["email"])
+        self.env.cr.execute(
+            "SELECT u.id FROM res_users u JOIN res_partner p ON p.id = u.partner_id "
+            "WHERE lower(p.email) = %s AND u.share IS NOT TRUE AND u.active ORDER BY u.id LIMIT 1",
+            (email,))
+        row = self.env.cr.fetchone()
+        return Users.browse(row[0]) if row else Users
+
     def _attendee_commands(self, items, organizer):
         """Participants saisis -> commandes de la liste, en gardant les réponses déjà reçues. Rend
         (commandes, comptes ajoutés, lignes externes ajoutées, lignes retirées)."""
@@ -649,8 +663,11 @@ class AgendaEvent(models.Model):
                         "required": required}
             elif item.get("email"):
                 email = clean_email(item["email"])
-                internal = Users.search([("email", "=ilike", email), ("share", "=", False)], limit=1)
-                if internal and agenda_allowed(internal) and internal != organizer:
+                internal = self._internal_user_by_email(email)
+                # Un compte d'une société que ni l'invitant ni l'organisateur ne partagent est invité comme
+                # une adresse extérieure : la réponse ne dit pas si l'adresse appartient à un compte interne.
+                if internal and agenda_allowed(internal) and internal != organizer and (
+                        shares_company(me, internal) or shares_company(organizer, internal)):
                     key = ("user", internal.id)
                     vals = {"user_id": internal.id, "name": internal.name, "email": internal.email, "required": required}
                 else:
@@ -717,8 +734,12 @@ class AgendaEvent(models.Model):
                     raise UserError(f"{res.name} est déjà réservée {fmt_when(s, e, ev.allday, tz)}.{proposal}")
 
     def _people_conflicts(self, users):
-        """Occupations des personnes qui chevauchent l'événement (signalées, non bloquantes)."""
+        """Occupations des personnes qui chevauchent l'événement (signalées, non bloquantes). Seulement pour les
+        personnes dont le compte connecté lit les disponibilités, comme par /agenda/freebusy : une occupation,
+        une absence du bureau ou un congé n'est jamais révélé à qui ne le verrait pas."""
         self.ensure_one()
+        viewer = self.env.user
+        users = users.filtered(lambda u: self._freebusy_visible_to(u, viewer))
         ev = self.sudo()
         series = ev._series()
         occurrences = ev._first_occurrences(20)

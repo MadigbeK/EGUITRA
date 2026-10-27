@@ -136,3 +136,34 @@ class TestSecurite(AgendaCase):
         self.assertEqual(status, 200, body)
         self.assertIn("récurrence non prise en charge", body["warnings"][0], "Importé une fois, règle écartée")
         self.assertLess(time.monotonic() - debut, 15, "Refus rapides")
+
+    def test_adresse_d_un_compte_sans_societe_commune_invitee_comme_exterieure(self):
+        if not self.cabinet:
+            self.skipTest("Société du cabinet absente")
+        self.consultant.sudo().email = "consultant@cabinet.test"
+        body = self.create(self.bruno, "Visite", attendees=[{"email": "Consultant@Cabinet.test"}])
+        [line] = body["event"]["attendees"]
+        self.assertEqual((line["kind"], line["user_id"]), ("email", None),
+                         "Aucune société partagée : invité comme une adresse extérieure, sans rien révéler du compte")
+        self.assertEqual(line["name"], "consultant@cabinet.test")
+        self.assertFalse(self.env["eguitra.agenda.notification"].sudo().search_count(
+            [("user_id", "=", self.consultant.id)]), "Le compte du cabinet n'est pas notifié")
+        # Avec une société commune, l'adresse (en majuscules) devient le compte.
+        body = self.create(self.bruno, "Point", attendees=[{"email": "ALICE@EGUITRA.TEST"}])
+        self.assertEqual([a["user_id"] for a in body["event"]["attendees"]], [self.alice.id])
+
+    def test_conflits_seulement_pour_les_disponibilites_lisibles(self):
+        self.create(self.bruno, "Tournée du parc", hour=9, minutes=120)
+        self.ok("PATCH", "/agenda/preferences", self.bruno, {"freebusy_visible": False})
+        body = self.create(self.alice, "Point exploitation", hour=10, attendees=[{"user_id": self.bruno.id}])
+        self.assertEqual(body["conflicts"], [], "Disponibilités fermées : aucune occupation révélée")
+        self.ok("PATCH", "/agenda/preferences", self.bruno, {"freebusy_visible": True})
+        body = self.create(self.alice, "Point exploitation 2", hour=10, attendees=[{"user_id": self.bruno.id}])
+        self.assertEqual([c["user_id"] for c in body["conflicts"]], [self.bruno.id])
+
+    def test_recherche_par_adresse_en_egalite_sans_motif(self):
+        for motif in ("a_ice@eguitra.test", "%@eguitra.test", "alic%@eguitra.test"):
+            body = self.create(self.bruno, f"Motif {motif}", attendees=[{"email": motif}])
+            [line] = body["event"]["attendees"]
+            self.assertEqual((line["kind"], line["user_id"]), ("email", None), f"{motif} ne désigne aucun compte")
+        self.assertEqual(self.env["eguitra.agenda.event"]._internal_user_by_email("alice@eguitra.test"), self.alice)
