@@ -17,6 +17,43 @@ class TestCorrectionsCahier(HsseqCase):
         cls.auditor.write({"hsseq_audit_until": cls.day + timedelta(days=10),
                            "hsseq_audit_site_ids": [(6, 0, cls.site.ids)]})
 
+    def _planned_event(self, **values):
+        """Événement de criticité significative (8), enquête conclue : au statut « Actions »."""
+        event = self.event(**values)
+        event.action_classify({"potential_severity": 2, "probability": 4})
+        event.action_investigate()
+        event.root_cause = "Absence de balisage de la zone de recul"
+        event.action_plan()
+        return event
+
+    def test_action_creee_depuis_l_evenement(self):
+        event = self._planned_event()
+        self.assertEqual(event.status, "actions")
+        payload = {"origin": "event", "origin_id": event.id, "description": "Baliser la zone de recul du parc",
+                   "control_level": "engineering", "owner_id": self.parc.id,
+                   "due_date": str(self.day + timedelta(days=15)), "expected_evidence": "Photo du balisage"}
+        for login in ("ibrahima", "dg.hsseq", "admin.hsseq", "awa.auditrice"):
+            status, body = self.api(login, "POST", "/hsseq/actions", payload)
+            self.assertEqual(status, 403, f"{login} ne crée pas d'action : {body}")
+        status, action = self.api("kadi.hsseq", "POST", "/hsseq/actions", payload)
+        self.assertEqual(status, 200, action)
+        self.assertEqual((action["origin"], action["event"]["id"], action["status"], action["owner"]["id"]),
+                         ("event", event.id, "todo", self.parc.id))
+        self.assertTrue(action["origin_label"].startswith(event.reference), action["origin_label"])
+        self.assertTrue(action["verification_required"], "Criticité 8 : vérification d'efficacité à J+90")
+        status, detail = self.api("kadi.hsseq", "GET", f"/hsseq/events/{event.id}")
+        self.assertEqual(status, 200, detail)
+        self.assertEqual(([a["id"] for a in detail["actions"]], detail["open_actions"]), ([action["id"]], 1))
+        self.assertNotIn("close", detail["transitions"], "Une action ouverte retient la clôture de l'événement")
+        status, mine = self.api("ibrahima", "GET", f"/hsseq/actions?event_id={event.id}")
+        self.assertEqual((status, [a["id"] for a in mine["items"]]), (200, [action["id"]]), "Son responsable la lit")
+        # Événement clôturé : plus d'action tant qu'il n'est pas rouvert.
+        low = self.event(title="Flaque d'huile sous la citerne")
+        low.action_classify({"potential_severity": 1, "probability": 2})
+        low.action_close()
+        status, body = self.api("kadi.hsseq", "POST", "/hsseq/actions", dict(payload, origin_id=low.id))
+        self.assertEqual((status, body["error"]), (422, "invalid_transition"), body)
+
     def test_modification_par_le_responsable(self):
         event = self.event()
         due = self.day + timedelta(days=10)

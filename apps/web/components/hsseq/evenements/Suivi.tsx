@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * Suivi d'un événement : actions liées (lien vers le plan d'actions), notifications envoyées (dans
- * l'application et par courriel, pas de SMS au lot 1) et journal de la fiche (§11), en clair.
+ * Suivi d'un événement : actions liées (création d'une action par le Responsable HSSEQ, lien vers le
+ * plan d'actions), notifications envoyées (dans l'application et par courriel, pas de SMS au lot 1) et
+ * journal de la fiche (§11), en clair.
  */
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight } from "@/components/icons";
-import { Card, DataTable, Notice, classesBouton } from "@/components/ui";
+import { ArrowUpRight, Plus } from "@/components/icons";
+import { Button, Card, DataTable, Notice, classesBouton } from "@/components/ui";
 import { NIVEAU_MAITRISE, STATUT_ACTION, Tampon } from "@/components/hsseq/commun";
 import { CHAMP_EVENEMENT, OPERATION_EVENEMENT, operationLue, valeurLue } from "@/components/hsseq/journal";
 import { INSECABLE, fmtDate, fmtInt, pluriel } from "@/lib/format";
@@ -17,7 +18,11 @@ import { CANAL, fmtJourHeure } from "./commun";
 
 /* ─── Actions liées ───────────────────────────────────────────────────── */
 
-export function ActionsLiees({ e }: { e: Evenement }) {
+/**
+ * Actions de l'événement. `onNouvelle` (Responsable HSSEQ, fiche pas encore close : la règle du noyau)
+ * ouvre la création d'une action d'origine « événement ».
+ */
+export function ActionsLiees({ e, onNouvelle }: { e: Evenement; onNouvelle?: () => void }) {
   const router = useRouter();
   const ouvertes = e.actions.filter((a) => a.status !== "closed" && a.status !== "cancelled").length;
   return (
@@ -25,15 +30,25 @@ export function ActionsLiees({ e }: { e: Evenement }) {
       {e.status === "actions" && ouvertes > 0 && (
         <Notice tone="neutral">{`La clôture de l'événement attend la clôture ou l'annulation de ${pluriel(ouvertes, "action ouverte", "actions ouvertes")}.`}</Notice>
       )}
+      {e.status === "actions" && e.actions.length === 0 && onNouvelle && (
+        <Notice tone="neutral">Enquête conclue : créez ici les actions correctives et préventives, une par mesure, avec leur responsable et leur échéance.</Notice>
+      )}
       <Card
         title="Actions liées"
         padded={false}
         actions={
-          // Plan d'actions : fiche ouverte par ?action=, actions d'origine événement par ?origine=event ;
-          // ?evenement= (event_id du contrat) borne la liste à cet événement quand l'écran le lit.
-          <Link href={`/hsseq/actions?origine=event&evenement=${e.id}`} className={classesBouton("secondary", "sm")}>
-            Plan d'actions de l'événement <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          <span className="flex flex-wrap items-center gap-2">
+            {onNouvelle && (
+              <Button size="sm" variant={e.status === "actions" ? "primary" : "secondary"} onClick={onNouvelle}>
+                <Plus className="h-3.5 w-3.5" /> Nouvelle action
+              </Button>
+            )}
+            {/* Plan d'actions : fiche ouverte par ?action=, actions d'origine événement par ?origine=event ;
+                ?evenement= (event_id du contrat) borne la liste à cet événement. */}
+            <Link href={`/hsseq/actions?origine=event&evenement=${e.id}`} className={classesBouton("secondary", "sm")}>
+              Plan d'actions de l'événement <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </span>
         }
       >
         <DataTable
