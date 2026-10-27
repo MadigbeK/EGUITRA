@@ -115,30 +115,29 @@ class TestAuth(ApiCase):
         self.assertEqual(body["error"], "app_forbidden")
 
     def test_connexion_de_repli_vers_l_application_du_profil(self):
-        """Adresse commune (application par défaut : Finance) : un compte RH seule entre dans RH par le repli,
-        jamais sans le demander, ni vers le portail ou une application de téléphone."""
-        self._create_user("rh.seule", "rh")
-        status, body = self.call("POST", "/auth/login", {"login": "rh.seule", "password": PASSWORD, "app": "finance"})
+        """Adresse commune (application par défaut : Finance) : un compte qui ne l'ouvre pas (consultant du
+        cabinet ici ; RH seule en recette) entre dans sa première application web interne par le repli, jamais
+        sans le demander, ni vers le portail ou une application de téléphone."""
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        self._create_user("consultant.repli", "cabinet", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
+        credentials = {"login": "consultant.repli", "password": PASSWORD, "app": "finance"}
+        status, body = self.call("POST", "/auth/login", credentials)
         self.assertEqual((status, body["error"]), (403, "app_forbidden"), "Sans repli demandé : refus inchangé")
-        status, body = self.call("POST", "/auth/login", {"login": "rh.seule", "password": PASSWORD, "app": "finance",
-                                                         "fallback": True})
-        self.assertEqual((status, body.get("app")), (200, "rh"), body)
+        status, body = self.call("POST", "/auth/login", dict(credentials, fallback=True))
+        self.assertEqual((status, body.get("app")), (200, "axispro"), body)
         if body["status"] == "mfa_setup_required":
             status, body = self.call("POST", "/auth/mfa/setup", {"setup_token": body["setup_token"],
                                                                  "code": self.totp_code(body["secret"])})
-            self.assertEqual((status, body.get("app")), (200, "rh"), body)
+            self.assertEqual((status, body.get("app")), (200, "axispro"), body)
         status, me = self.call("GET", "/auth/me", token=body["access_token"])
-        self.assertEqual((status, me["session_app"]), (200, "rh"), me)
-        status, body = self.call("POST", "/auth/login", {"login": "rh.seule", "password": PASSWORD, "app": "finance",
-                                                         "fallback": "oui"})
+        self.assertEqual((status, me["session_app"]), (200, "axispro"), me)
+        status, body = self.call("POST", "/auth/login", dict(credentials, fallback="oui"))
         self.assertEqual(status, 403, "Repli seulement sur true")
-        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
         self._create_user("porteur.repli", "porteur", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
-        status, body = self.call("POST", "/auth/login", {"login": "porteur.repli", "password": PASSWORD, "app": "finance",
-                                                         "fallback": True})
+        status, body = self.call("POST", "/auth/login", {"login": "porteur.repli", "password": PASSWORD,
+                                                         "app": "finance", "fallback": True})
         self.assertEqual((status, body["error"]), (403, "app_forbidden"), "Le porteur n'entre que par le portail")
-        status, body = self.call("POST", "/auth/login", {"login": "rh.seule", "password": PASSWORD, "app": "portail",
-                                                         "fallback": True})
+        status, body = self.call("POST", "/auth/login", dict(credentials, app="portail", fallback=True))
         self.assertEqual(status, 403, "Pas de repli depuis le portail")
 
     def test_porteur_limite_au_portail(self):
