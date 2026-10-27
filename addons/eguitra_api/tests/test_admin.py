@@ -253,6 +253,23 @@ class TestAdmin(RefusParProfil, ApiCase):
         status, _b = self.call("GET", "/admin/companies", token=self.open_session("fatou")["access_token"])
         self.assertEqual(status, 403)
 
+    def test_slogan_des_societes(self):
+        """Slogan en tête des documents (factures) : texte simple, jamais du HTML ; administration seule."""
+        token = self.open_session("aissatou")["access_token"]
+        company = self.env.company
+        status, row = self.call("PATCH", f"/admin/companies/{company.id}",
+                                {"slogan": "Notre <b>slogan</b> & nos valeurs", "phone": "620 00 00 01 / 620 00 00 02"},
+                                token=token)
+        self.assertEqual(status, 200, row)
+        self.assertEqual((row["slogan"], row["phone"]), ("Notre <b>slogan</b> & nos valeurs", "620 00 00 01 / 620 00 00 02"))
+        self.env.invalidate_all()
+        self.assertNotIn("<b>", str(company.report_header), "Balises échappées avant d'entrer dans le noyau")
+        self.assertRefuseHors(("admin",), "PATCH", f"/admin/companies/{company.id}", {"slogan": "Refusé"})
+        status, rows = self.call("GET", "/admin/companies", token=token)
+        self.assertEqual(next(r for r in rows if r["id"] == company.id)["slogan"], "Notre <b>slogan</b> & nos valeurs")
+        status, row = self.call("PATCH", f"/admin/companies/{company.id}", {"slogan": ""}, token=token)
+        self.assertEqual((status, row["slogan"]), (200, None))
+
     def test_piste_d_audit_des_lignes_rattachees_a_leur_parent(self):
         """Audit du noyau, I-A6 : éléments de salaire et tarifs relèvent de la société de leur parent.
 

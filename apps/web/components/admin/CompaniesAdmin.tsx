@@ -21,6 +21,8 @@ interface CompanyRow {
   currency: string;
   country: string | null;
   logo: string | null;
+  /** Slogan, en tête des documents à côté du logo (« Votre partenaire global pour un avenir durable »). */
+  slogan: string | null;
 }
 
 const MAX_LOGO = 1024 * 1024;
@@ -32,7 +34,7 @@ export function CompaniesAdmin() {
     <div>
       <PageHeader
         title="Sociétés"
-        subtitle="Raison sociale, coordonnées, identifiants légaux et logo de chaque société : ils figurent en tête des factures, des quittances et des lettres de relance. Chaque société garde sa propre comptabilité."
+        subtitle="Raison sociale, slogan, coordonnées, identifiants légaux et logo de chaque société : ils figurent en tête des factures, des quittances et des lettres de relance. Comptes bancaires, signataires et numérotation des factures : Finance > Administration > Factures et journaux. Chaque société garde sa propre comptabilité."
       />
       {error && <ErrorBox error={error} />}
       {!data && !error && <Loading />}
@@ -47,7 +49,7 @@ function CompanyForm({ company, onSaved }: { company: CompanyRow; onSaved: () =>
   const [f, setF] = useState({
     name: company.name, street: company.street ?? "", street2: company.street2 ?? "", zip: company.zip ?? "",
     city: company.city ?? "", phone: company.phone ?? "", email: company.email ?? "", website: company.website ?? "",
-    vat: company.vat ?? "", company_registry: company.company_registry ?? "",
+    vat: company.vat ?? "", company_registry: company.company_registry ?? "", slogan: company.slogan ?? "",
   });
   const [logo, setLogo] = useState<string | null | undefined>(undefined); // undefined : inchangé
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
@@ -98,11 +100,12 @@ function CompanyForm({ company, onSaved }: { company: CompanyRow; onSaved: () =>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Raison sociale" className="md:col-span-2"><Input value={f.name} onChange={set("name")} /></Field>
+          <Field label="Slogan" hint="En tête des factures, à côté du logo" className="md:col-span-2"><Input value={f.slogan} maxLength={200} onChange={set("slogan")} /></Field>
           <Field label="Adresse"><Input value={f.street} onChange={set("street")} /></Field>
-          <Field label="Complément d'adresse"><Input value={f.street2} onChange={set("street2")} /></Field>
+          <Field label="Complément d'adresse (quartier, commune)"><Input value={f.street2} onChange={set("street2")} /></Field>
           <Field label="Boîte postale"><Input value={f.zip} onChange={set("zip")} /></Field>
-          <Field label="Ville"><Input value={f.city} onChange={set("city")} /></Field>
-          <Field label="Téléphone"><Input value={f.phone} onChange={set("phone")} /></Field>
+          <Field label="Ville" hint="« Conakry, le … » sur les factures"><Input value={f.city} onChange={set("city")} /></Field>
+          <Field label="Téléphones" hint="Plusieurs numéros : séparez-les par « / »"><Input value={f.phone} onChange={set("phone")} /></Field>
           <Field label="Courriel (expéditeur des relances)"><Input type="email" value={f.email} onChange={set("email")} /></Field>
           <Field label="NIF"><Input value={f.vat} onChange={set("vat")} /></Field>
           <Field label="RCCM"><Input value={f.company_registry} onChange={set("company_registry")} /></Field>

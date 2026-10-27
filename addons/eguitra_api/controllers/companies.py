@@ -11,11 +11,14 @@ from markupsafe import Markup, escape
 
 from odoo import http
 from odoo.http import request
+from odoo.tools import html2plaintext
 
 from .framework import ApiError, api_route, read_json, sudo_env
 
 ADMIN = ("admin",)
+# phone : un ou plusieurs numéros séparés par « / », tels que les factures les impriment.
 FIELDS = ("name", "street", "street2", "zip", "city", "phone", "email", "website", "vat", "company_registry")
+MAX_SLOGAN = 200
 MAX_LOGO = 1024 * 1024
 LOGO_TYPES = {"image/png": b"\x89PNG\r\n\x1a\n", "image/jpeg": b"\xff\xd8\xff"}
 
@@ -40,6 +43,8 @@ def _row(company):
     data.update({
         "id": company.id, "entity": company.eguitra_entity or None, "currency": company.currency_id.name,
         "country": company.country_id.name or None, "logo": _logo_url(company),
+        # Slogan (« Votre partenaire global pour un avenir durable ») : en tête des documents, à côté du logo.
+        "slogan": html2plaintext(company.report_header or "").strip() or None,
     })
     return data
 
@@ -93,6 +98,10 @@ class EguitraCompanies(http.Controller):
             raise ApiError(422, "business_rule", "La raison sociale est obligatoire.")
         if "logo" in data:
             values["logo"] = _decode_logo(data["logo"]) if data["logo"] else False
+        if "slogan" in data:
+            # Texte simple, jamais du HTML : il est échappé avant d'entrer dans le champ du noyau.
+            slogan = str(data["slogan"] or "").strip()[:MAX_SLOGAN]
+            values["report_header"] = escape(slogan) if slogan else False
         company.write(values)
         company.report_footer = _footer(company)
         return _row(company)
