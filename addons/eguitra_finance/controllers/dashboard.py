@@ -1,7 +1,5 @@
 """Tableau de bord du dirigeant, alertes, états SYSCOHADA et pilotage par axe analytique."""
 
-from dateutil.relativedelta import relativedelta
-
 from odoo import http
 from odoo.http import request
 
@@ -110,15 +108,12 @@ class EguitraFinanceDashboard(http.Controller):
     def income_statement(self, **kw):
         end = parse_date(kw, "date_to", today())
         start = parse_date(kw, "date_from", end.replace(month=1, day=1))
-        # Colonnes « Mois » (mois de la date d'arrêté) et « % du CA » en plus de l'exercice.
+        # Colonnes « Mois » (mois de la date d'arrêté) et « % du CA » en plus de l'exercice ; note annexe et
+        # signe de chaque rubrique (modèle du système normal).
         current = income_with_month(companies(kw), start, end)
         if kw.get("compare") == "previous_year":
-            previous = request.env["eguitra.syscohada"].sudo().income_statement(
-                companies(kw), start - relativedelta(years=1), end - relativedelta(years=1)
-            )
-            amounts = {line["code"]: line["amount"] for line in previous["lines"]}
-            for line in current["lines"]:
-                line["previous"] = amounts.get(line["code"], 0.0)
+            # Même période un an plus tôt, ou états importés de l'exercice précédent (premier exercice).
+            request.env["eguitra.syscohada"].sudo().add_previous_income(current, companies(kw), start, end)
         return current
 
     @api_route("/finance/management-report", profiles=FIN_READ)
@@ -148,12 +143,14 @@ class EguitraFinanceDashboard(http.Controller):
         start = parse_date(kw, "date_from", end.replace(month=1, day=1))
         if start > end:
             raise ApiError(400, "invalid_parameter", "La période est inversée.")
-        return request.env["eguitra.syscohada"].sudo().cash_flow(companies(kw), start, end)
+        # Lettres A à H, variation du BF, contrôle de ZH et colonne N-1.
+        return request.env["eguitra.syscohada"].sudo().cash_flow_compared(companies(kw), start, end)
 
     @api_route("/finance/statements/balance-sheet", profiles=FIN_READ)
     def balance_sheet(self, **kw):
+        """Bilan détaillé par poste (brut, amortissements et dépréciations, net), notes et colonne N-1."""
         end = parse_date(kw, "date", today())
-        return request.env["eguitra.syscohada"].sudo().balance_sheet(companies(kw), end)
+        return request.env["eguitra.syscohada"].sudo().balance_sheet_compared(companies(kw), end)
 
     @api_route("/finance/analytics", profiles=FIN_READ)
     def analytics(self, **kw):
