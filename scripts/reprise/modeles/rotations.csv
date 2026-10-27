@@ -1,2 +1,2 @@
-date_chargement;date_livraison;ensemble;chauffeur;client;route;produit;bl;volume_charge;volume_livre;tarif;carburant;peages;frais_chauffeur;entretien;taxes;autres;facturee;observations;date_retour;litres;km;pneus
-05/01/2026;07/01/2026;ER-01;Nom du chauffeur;Exemple Distribution SA;Conakry - Kankan;Gasoil;BL-0001;33;32,95;450 000;3 200 000;250 000;600 000;;;;oui;;08/01/2026;1 150;;
+date_chargement;date_livraison;ensemble;chauffeur;client;route;produit;bl;volume_charge;volume_livre;tarif;carburant;peages;frais_chauffeur;entretien;taxes;autres;facturee;observations;date_retour;litres;km;pneus;bon
+05/01/2026;07/01/2026;ER-01;Nom du chauffeur;Exemple Distribution SA;Conakry - Kankan;Gasoil;BL-0001;33;32,95;450 000;3 200 000;250 000;600 000;;;;oui;;08/01/2026;1 150;;;BE-0001

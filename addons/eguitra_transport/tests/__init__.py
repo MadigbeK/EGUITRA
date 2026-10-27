@@ -16,3 +16,4 @@ from . import test_releves_audit
 from . import test_verrous_rotation
 from . import test_saisies_audit
 from . import test_synchronisation
+from . import test_facture_transport

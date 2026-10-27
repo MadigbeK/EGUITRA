@@ -12,3 +12,4 @@ from . import analysis
 from . import alert
 from . import period_close
 from . import reprise
+from . import facture
