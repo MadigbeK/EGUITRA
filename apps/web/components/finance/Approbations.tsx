@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ApercuBon } from "@/components/commerce/ApercuBon";
 import { Check, X } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, Textarea, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
@@ -17,6 +18,8 @@ interface Req {
   id: number;
   name: string;
   document: string;
+  res_model?: string;
+  res_id?: number;
   amount: number;
   partner: string | null;
   company: string;
@@ -49,6 +52,7 @@ const PAGE = 100;
 /** Ce que produit la dernière approbation d'une demande, selon sa nature. */
 const EFFET_FINAL: Record<string, string> = {
   commitment: "L'engagement sera engagé : les pièces d'achat du fournisseur pourront le consommer.",
+  purchase_order: "Le bon de commande sera approuvé : il pourra être envoyé au fournisseur.",
   in_invoice: "La pièce sera comptabilisée.",
   payment_out: "Le règlement sera comptabilisé.",
   cash_out: "Le décaissement sera comptabilisé.",
@@ -209,6 +213,8 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
           {r.document_detail?.lines && (
             <DataTable dense rows={r.document_detail.lines} rowKey={(_l, i) => i} columns={[{ key: "name", label: "Libellé" }, { key: "account", label: "Compte" }, { key: "amount", label: "Montant", align: "right", render: (l) => fmtGNF(l.amount) }]} />
           )}
+          {/* Bon de commande fournisseur (eguitra_commerce) : le moteur n'en décrit pas les lignes, l'écran les lit. */}
+          {r.res_model === "purchase.order" && r.res_id && <ApercuBon id={r.res_id} />}
           <Card title="Circuit">
             <ol className="space-y-2">
               {r.steps?.map((s) => {
