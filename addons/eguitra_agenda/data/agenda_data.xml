@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Catégories communes à tous les comptes ; chacun peut ajouter les siennes. -->
+    <record id="category_meeting" model="eguitra.agenda.category">
+        <field name="name">Réunion</field>
+        <field name="color">#2d82dc</field>
+        <field name="sequence">1</field>
+    </record>
+    <record id="category_client" model="eguitra.agenda.category">
+        <field name="name">Rendez-vous client</field>
+        <field name="color">#12956a</field>
+        <field name="sequence">2</field>
+    </record>
+    <record id="category_committee" model="eguitra.agenda.category">
+        <field name="name">Comité</field>
+        <field name="color">#b8872e</field>
+        <field name="sequence">3</field>
+    </record>
+    <record id="category_travel" model="eguitra.agenda.category">
+        <field name="name">Déplacement</field>
+        <field name="color">#d9831f</field>
+        <field name="sequence">4</field>
+    </record>
+    <record id="category_training" model="eguitra.agenda.category">
+        <field name="name">Formation</field>
+        <field name="color">#7a5af8</field>
+        <field name="sequence">5</field>
+    </record>
+    <record id="category_personal" model="eguitra.agenda.category">
+        <field name="name">Personnel</field>
+        <field name="color">#c4417a</field>
+        <field name="sequence">6</field>
+    </record>
+
+    <!-- Prise de rendez-vous en ligne : fermée tant que l'administration ne l'ouvre pas (adresse publique du
+         site et serveur de courrier exigés). -->
+    <record id="param_booking_enabled" model="ir.config_parameter">
+        <field name="key">eguitra_agenda.booking_enabled</field>
+        <field name="value">0</field>
+    </record>
+</odoo>
