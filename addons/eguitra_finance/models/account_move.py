@@ -116,6 +116,13 @@ class AccountMove(models.Model):
                     Command.update(line.id, {"tax_ids": [Command.set(exempt + self._eguitra_withholdings(line.tax_ids.ids).ids)]})
                     for line in lines]})
 
+    def _eguitra_report_references(self):
+        """Facture imprimée (eguitra_base) : le contrat ou bon de commande suit la référence de l'offre."""
+        references = super()._eguitra_report_references()
+        if self.eguitra_contract_ref:
+            references.append(("Contrat ou bon de commande", self.eguitra_contract_ref))
+        return references
+
     def _eguitra_post_or_submit(self):
         """Validation demandée depuis les applications ; le moteur d'approbation la transforme
         en soumission quand un circuit s'applique."""

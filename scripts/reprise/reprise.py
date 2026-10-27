@@ -946,6 +946,9 @@ if data is not None:
             values["driver_id"] = refs["chauffeur"].id
         if r.get("date_livraison"):
             values["date_delivery"] = day(r["date_livraison"], where)
+        # Colonne facultative : N° de bon (bon de chargement du dépôt), imprimé sur la facture du client.
+        if r.get("bon"):
+            values["loading_voucher"] = r["bon"].strip()
         # Colonnes facultatives de la rentabilité : retour au dépôt, litres de carburant, kilométrage
         # (à défaut, l'aller-retour de la route).
         if r.get("date_retour"):

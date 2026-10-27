@@ -39,3 +39,4 @@ from . import test_api_assets_garde_fous
 from . import test_report_a_nouveau
 from . import test_cloture_exercice
 from . import test_etats_modele
+from . import test_api_factures

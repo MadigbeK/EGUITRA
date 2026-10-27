@@ -12,6 +12,11 @@
         <xpath expr="//img[hasclass('o_company_logo_small')]/.." position="attributes">
             <attribute name="style">margin-bottom: 6mm !important;</attribute>
         </xpath>
+        <!-- Facture au modèle des sociétés (report_invoice.xml) : elle porte elle-même l'identité de la
+             société (adresse, contacts, NIF, RCCM) ; l'en-tête garde le logo et le slogan. -->
+        <xpath expr="//div[@name='company_address']" position="attributes">
+            <attribute name="t-if">not eguitra_document_header</attribute>
+        </xpath>
         <!-- La classe de l'article est calculée (t-attf-class) : hasclass() ne la voit pas. -->
         <xpath expr="//div[contains(@t-attf-class, 'o_report_layout_standard')]" position="inside">
             <style t-if="company.primary_color">

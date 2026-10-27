@@ -18,3 +18,4 @@ from . import categories
 from . import chart
 from . import reprise
 from . import comparatives
+from . import invoicing

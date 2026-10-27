@@ -34,6 +34,8 @@ interface Rotation {
   product: string;
   product_label: string;
   delivery_note: string | null;
+  /** N° de bon du dépôt : colonne « N° de bon » de la facture du client. */
+  loading_voucher?: string | null;
   volume_loaded: number;
   volume_delivered: number;
   over_capacity: boolean;
@@ -268,6 +270,8 @@ export function Rotations() {
 
 const DATES = ["date_loading", "date_delivery", "date_return"] as const;
 const NOMBRES = ["volume_loaded", "volume_delivered", "rate", "distance_km"] as const;
+/** Champs texte de la fiche, envoyés tels quels (jamais lus comme des nombres). */
+const TEXTES: string[] = ["delivery_note", "loading_voucher", "note"];
 
 /** Valeurs de la fiche en texte, pour le formulaire ; un champ non renseigné reste vide. */
 function valeursFiche(r: RotationDetail, ref: Referentials | undefined): Record<string, string> {
@@ -275,6 +279,7 @@ function valeursFiche(r: RotationDetail, ref: Referentials | undefined): Record<
   const f: Record<string, string> = {
     driver_id: r.driver ? String(r.driver.id) : "",
     delivery_note: r.delivery_note ?? "",
+    loading_voucher: r.loading_voucher ?? "",
     note: r.note ?? "",
   };
   for (const k of DATES) f[k] = r[k] ?? "";
@@ -308,7 +313,7 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
 
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...(x ?? {}), [k]: e.target.value }));
   const changes = f ? Object.keys(f).filter((k) => f[k] !== init[k]) : [];
-  const illisible = changes.some((k) => !(DATES as readonly string[]).includes(k) && !["driver_id", "delivery_note", "note"].includes(k) && nombreIllisible(f?.[k]));
+  const illisible = changes.some((k) => !(DATES as readonly string[]).includes(k) && !["driver_id", ...TEXTES].includes(k) && nombreIllisible(f?.[k]));
 
   async function agir(appel: () => Promise<RotationDetail>) {
     setBusy(true);
@@ -331,7 +336,7 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
         if (f[k]) body[k] = f[k];
       } else if (k === "driver_id") {
         if (f[k]) body[k] = Number(f[k]);
-      } else if (k === "delivery_note" || k === "note") {
+      } else if (TEXTES.includes(k)) {
         body[k] = f[k];
       } else {
         body[k] = parseNumber(f[k] ?? "") ?? 0;
@@ -411,6 +416,7 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
                 <ChampNombre label="Volume chargé (m³)" value={f.volume_loaded} onChange={set("volume_loaded")} />
                 <ChampNombre label="Volume livré (m³)" value={f.volume_delivered} onChange={set("volume_delivered")} />
                 <Field label="Bon de livraison"><Input value={f.delivery_note} onChange={set("delivery_note")} /></Field>
+                <Field label="N° de bon" hint="Bon du dépôt, sur la facture"><Input value={f.loading_voucher} onChange={set("loading_voucher")} /></Field>
                 <ChampNombre label="Tarif (m³)" value={f.rate} onChange={set("rate")} />
                 <ChampNombre label="Distance parcourue (km)" value={f.distance_km} onChange={set("distance_km")} />
                 {(ref.measures ?? []).map((m) => (
@@ -518,6 +524,7 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
             <ChampNombre label="Volume chargé (m³)" value={f.volume_loaded} onChange={set("volume_loaded")} />
             <ChampNombre label="Volume livré (m³)" value={f.volume_delivered} onChange={set("volume_delivered")} />
             <Field label="Bon de livraison"><Input value={f.delivery_note ?? ""} onChange={set("delivery_note")} /></Field>
+            <Field label="N° de bon" hint="Bon du dépôt, sur la facture"><Input value={f.loading_voucher ?? ""} onChange={set("loading_voucher")} /></Field>
             <ChampNombre label="Tarif (m³)" hint="Vide : tarif du client ou de la route" value={f.rate} onChange={set("rate")} />
             <Field label="Retour au dépôt"><Input type="date" value={f.date_return ?? ""} onChange={set("date_return")} /></Field>
             <ChampNombre label="Distance parcourue (km)" hint="Vide : aller-retour de la route" value={f.distance_km} onChange={set("distance_km")} />

@@ -10,8 +10,14 @@ import { apiSend, useAchatsSeul, useApi, useSaisieLibre, ApiError } from "@/lib/
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
+/** Ligne chiffrée, rubrique (section numérotée I, II… avec son sous-total sur la facture imprimée) ou note. */
+type LineKind = "product" | "line_section" | "line_note";
+
 interface LineDraft {
+  kind: LineKind;
   name: string;
+  /** Unité de la ligne (vide : « Unité ») ; imprimée quand une ligne de la facture en a une autre. */
+  uom_id: string;
   quantity: string;
   price_unit: string;
   account_id: string;
@@ -25,21 +31,26 @@ interface LineDraft {
   original?: Record<string, number>;
 }
 
-const emptyLine = (): LineDraft => ({ name: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
+const emptyLine = (kind: LineKind = "product"): LineDraft => ({ kind, name: "", uom_id: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
 
 /** Champs d'une ligne dont la saisie n'est pas un nombre lisible (« 2.500.000 », « 2 x 3 »). */
 function nombresIllisibles(l: LineDraft): string[] {
+  if (l.kind !== "product") return [];
   return [nombreIllisible(l.quantity) && "quantité", nombreIllisible(l.price_unit) && "prix unitaire"].filter((c): c is string => Boolean(c));
 }
 
-/** Lignes d'un brouillon relu pour modification (TVA et retenue : taxes positive et négative de la ligne). */
+/** Lignes d'un brouillon relu pour modification (TVA et retenue : taxes positive et négative de la ligne),
+ * rubriques et notes comprises : la modification renvoie toutes les lignes. */
 function linesOf(move: MoveDetail): LineDraft[] {
   return move.lines
-    .filter((l) => !l.display_type || l.display_type === "product")
+    .filter((l) => !l.display_type || ["product", "line_section", "line_note"].includes(l.display_type))
     .map((l) => {
+      if (l.display_type === "line_section" || l.display_type === "line_note") return { ...emptyLine(l.display_type), name: l.name };
       const vat = l.taxes.find((t) => t.amount >= 0);
       const withholding = l.taxes.find((t) => t.amount < 0);
       return {
+        kind: "product" as const,
+        uom_id: l.uom ? String(l.uom.id) : "",
         name: l.name,
         quantity: enSaisie(l.quantity),
         price_unit: enSaisie(l.price_unit),
@@ -98,6 +109,9 @@ export function MoveForm({
   const [narration, setNarration] = useState(move?.narration ?? "");
   const [currencyId, setCurrencyId] = useState("");
   const [contractRef, setContractRef] = useState(move?.contract_ref ?? "");
+  // « Commentaire ou indication » de la facture imprimée (objet : location de véhicule, travaux…).
+  const [invoiceObject, setInvoiceObject] = useState(move?.invoice_object ?? "");
+  const { data: uoms } = useApi<Array<{ id: number; name: string }>>(open && sale ? "/finance/uoms" : null);
   const [commitmentId, setCommitmentId] = useState(move?.commitment ? String(move.commitment.id) : "");
   const { data: commitments } = useApi<Array<{ id: number; name: string; object: string; remaining: number }>>(
     open && moveType === "in_invoice" && partner ? `/finance/commitments/for-bill?partner_id=${partner.id}` : null);
@@ -136,15 +150,16 @@ export function MoveForm({
 
   // Quantités et prix lus à la française (« 2,5 », « 750 000 ») : une saisie illisible n'entre pas dans
   // les totaux, elle est signalée sous la ligne et bloque l'enregistrement.
-  const montantLigne = (l: LineDraft) => (lireNombre(l.quantity) ?? 0) * (lireNombre(l.price_unit) ?? 0);
+  const montantLigne = (l: LineDraft) => (l.kind === "product" ? (lireNombre(l.quantity) ?? 0) * (lireNombre(l.price_unit) ?? 0) : 0);
+  const chiffrees = lines.filter((l) => l.kind === "product");
   const totals = { ht: 0, tva: 0, retenues: 0, ttc: 0 };
-  for (const l of lines) {
+  for (const l of chiffrees) {
     const amount = montantLigne(l);
     const tax = taxes?.find((t) => String(t.id) === effectiveTax(l));
     totals.ht += amount;
     totals.tva += tax ? (amount * tax.amount) / 100 : 0;
   }
-  for (const l of lines) {
+  for (const l of chiffrees) {
     const amount = montantLigne(l);
     totals.retenues += lineWithholdings(l).reduce((sum, t) => sum + (amount * t.amount) / 100, 0);
   }
@@ -153,7 +168,7 @@ export function MoveForm({
 
   /** Catégories qui font de la dépense une opération diverse (salaires, cotisations, impôts). */
   const entryCategories = lines.map(categoryOf).filter((c): c is ExpenseCategory => Boolean(c?.entry));
-  const mixed = entryCategories.length > 0 && (entryCategories.length !== lines.length || new Set(entryCategories.map((c) => c.partner_account?.id)).size > 1);
+  const mixed = entryCategories.length > 0 && (entryCategories.length !== chiffrees.length || new Set(entryCategories.map((c) => c.partner_account?.id)).size > 1);
 
   function update(i: number, patch: Partial<LineDraft>) {
     setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -175,9 +190,11 @@ export function MoveForm({
   /** Lignes envoyées au noyau (création comme modification). */
   const payloadLines = () =>
     lines.map((l) => {
+      if (l.kind !== "product") return { display_type: l.kind, name: l.name };
       const tax = effectiveTax(l);
       return {
         name: l.name,
+        uom_id: sale && l.uom_id ? Number(l.uom_id) : undefined,
         // Contrôlés avant l'envoi (submit) : jamais une quantité illisible remplacée par 1.
         quantity: lireNombre(l.quantity),
         price_unit: lireNombre(l.price_unit),
@@ -199,6 +216,7 @@ export function MoveForm({
       ref: reference || null,
       narration: narration || null,
       contract_ref: contractRef.trim() || null,
+      ...(sale ? { invoice_object: invoiceObject.trim() || null } : {}),
       ...(moveType === "in_invoice" ? { commitment_id: commitmentId ? Number(commitmentId) : null } : {}),
       lines: payloadLines(),
     });
@@ -214,14 +232,15 @@ export function MoveForm({
     const illisibles = lines.flatMap((l, i) => nombresIllisibles(l).map((champ) => `${champ} de la ligne ${i + 1}`));
     // « Nombre illisible (quantité de la ligne 2) : écrivez par exemple 750 000 ou 2,5. »
     if (illisibles.length) return setError(AIDE_NOMBRE.replace(" :", ` (${illisibles.join(", ")}) :`));
+    if (!chiffrees.length) return setError("Ajoutez au moins une ligne chiffrée : une rubrique ou une note n'a pas de montant.");
     const sansLibelle = lines.findIndex((l) => !l.name.trim());
     if (sansLibelle >= 0) return setError(`Ligne ${sansLibelle + 1} : indiquez le libellé.`);
-    const sansQuantite = lines.findIndex((l) => !lireNombre(l.quantity));
+    const sansQuantite = lines.findIndex((l) => l.kind === "product" && !lireNombre(l.quantity));
     if (sansQuantite >= 0) return setError(`Ligne ${sansQuantite + 1} : indiquez une quantité non nulle.`);
-    const sansPrix = lines.findIndex((l) => !lireNombre(l.price_unit));
+    const sansPrix = lines.findIndex((l) => l.kind === "product" && !lireNombre(l.price_unit));
     if (sansPrix >= 0) return setError(`Ligne ${sansPrix + 1} : indiquez un prix unitaire non nul.`);
     if (mixed) return setError("Séparez la pièce : une dépense passée en opération diverse ne se mêle pas aux achats.");
-    if (!sale && !libre && lines.some((l) => !l.category_id)) return setError("Choisissez la catégorie de dépense de chaque ligne : le compte en découle.");
+    if (!sale && !libre && chiffrees.some((l) => !l.category_id)) return setError("Choisissez la catégorie de dépense de chaque ligne : le compte en découle.");
     if (dispute && !disputeReason.trim()) return setError("Indiquez le motif du litige.");
     setBusy(true);
     try {
@@ -238,6 +257,7 @@ export function MoveForm({
         narration: narration || undefined,
         currency_id: currencyId ? Number(currencyId) : undefined,
         contract_ref: contractRef.trim() || undefined,
+        invoice_object: sale ? invoiceObject.trim() || undefined : undefined,
         commitment_id: commitmentId ? Number(commitmentId) : undefined,
         dispute: dispute || undefined,
         dispute_reason: dispute ? disputeReason.trim() : undefined,
@@ -250,6 +270,7 @@ export function MoveForm({
       setReference("");
       setNarration("");
       setContractRef("");
+      setInvoiceObject("");
       setDispute(false);
       setDisputeReason("");
     } catch (e) {
@@ -263,7 +284,8 @@ export function MoveForm({
     ? `Modifier ${move.move_type.endsWith("_refund") ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
     : { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle pièce d'achat", in_refund: "Nouvel avoir fournisseur" }[moveType];
   const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || taux(t.amount) }))];
-  const columns = (sale ? 6 : 7) + (withholdings.length > 0 ? 1 : 0);
+  // Vente : colonne Unité ; achat : colonne Catégorie.
+  const columns = 7 + (withholdings.length > 0 ? 1 : 0);
 
   return (
     <Modal
@@ -306,14 +328,23 @@ export function MoveForm({
           <Field label="Échéance" hint="Vide : selon les conditions du tiers">
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </Field>
-          {!sale && (
+          {sale ? (
+            <Field label={moveType === "out_refund" ? "Référence" : "Référence de l'offre"} hint="Imprimée à droite du bloc du client">
+              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder={moveType === "out_refund" ? "" : "N° du devis ou de l'offre"} />
+            </Field>
+          ) : (
             <Field label="Référence du fournisseur">
               <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="N° de facture du fournisseur" />
             </Field>
           )}
-          <Field label="Contrat ou bon de commande" className={sale ? "md:col-span-2" : undefined}>
+          <Field label="Contrat ou bon de commande">
             <Input value={contractRef} onChange={(e) => setContractRef(e.target.value)} />
           </Field>
+          {sale && (
+            <Field label="Objet de la facture" hint="« Commentaire ou indication » imprimé sous le bloc du client" className="md:col-span-2">
+              <Input value={invoiceObject} maxLength={250} onChange={(e) => setInvoiceObject(e.target.value)} placeholder="Location de véhicule, travaux de crépissage…" />
+            </Field>
+          )}
           {moveType === "in_invoice" && (commitments?.length ?? 0) > 0 && (
             <Field label="Engagement de dépense" hint="Dans la limite du reste à engager, la pièce ne repasse pas par le circuit d'approbation.">
               <Select value={commitmentId} onChange={(e) => setCommitmentId(e.target.value)} placeholder="Aucun" options={(commitments ?? []).map((c) => ({ value: c.id, label: `${c.name} · ${c.object} (reste ${fmtGNF(c.remaining)})` }))} />
@@ -347,7 +378,7 @@ export function MoveForm({
             <thead className="bg-panel-2 text-[12.5px] font-medium text-muted">
               <tr>
                 <th scope="col" className="px-2 py-2 text-left">Libellé</th>
-                {!sale && <th scope="col" className="w-48 px-2 py-2 text-left">Catégorie</th>}
+                {sale ? <th scope="col" className="w-32 px-2 py-2 text-left">Unité</th> : <th scope="col" className="w-48 px-2 py-2 text-left">Catégorie</th>}
                 <th scope="col" className="w-20 px-2 py-2 text-right">Qté</th>
                 <th scope="col" className="w-36 px-2 py-2 text-right">Prix unitaire HT</th>
                 <th scope="col" className="w-56 px-2 py-2 text-left">Compte</th>
@@ -359,13 +390,38 @@ export function MoveForm({
               </tr>
             </thead>
             <tbody>
-              {lines.map((l, i) => (
+              {lines.map((l, i) =>
+                l.kind !== "product" ? (
+                  // Rubrique (numérotée I, II… avec son sous-total sur la facture imprimée) ou note : libellé seul.
+                  <tr key={i} className="border-t border-line bg-panel-2">
+                    <td colSpan={columns - 1} className="px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-16 shrink-0 text-[12px] font-semibold text-muted">{l.kind === "line_section" ? "Rubrique" : "Note"}</span>
+                        <Input
+                          value={l.name}
+                          onChange={(e) => update(i, { name: e.target.value })}
+                          placeholder={l.kind === "line_section" ? "Charpente et couverture" : "Précision imprimée sur la facture"}
+                          aria-label={`${l.kind === "line_section" ? "Rubrique" : "Note"}, ligne ${i + 1}`}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <button type="button" className="text-muted hover:text-danger" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label={`Supprimer la ligne ${i + 1}`}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
                 <Fragment key={i}>
                   <tr className="border-t border-line">
                     <td className="px-2 pt-1.5">
                       <Input value={l.name} onChange={(e) => update(i, { name: e.target.value })} placeholder={sale ? "Transport Conakry - Siguiri, 40 000 L" : "Désignation"} aria-label={`Libellé, ligne ${i + 1}`} />
                     </td>
-                    {!sale && (
+                    {sale ? (
+                      <td className="px-2 pt-1.5">
+                        <Select value={l.uom_id} onChange={(e) => update(i, { uom_id: e.target.value })} placeholder="Unité" options={(uoms ?? []).map((u) => ({ value: u.id, label: u.name }))} aria-label={`Unité, ligne ${i + 1}`} />
+                      </td>
+                    ) : (
                       <td className="px-2 pt-1.5">
                         <Select value={l.category_id} onChange={(e) => update(i, { category_id: e.target.value, tax_id: "" })} placeholder="Choisir…" options={(categories ?? []).map((c) => ({ value: c.id, label: c.name }))} aria-label={`Catégorie, ligne ${i + 1}`} />
                       </td>
@@ -438,14 +494,27 @@ export function MoveForm({
                     </td>
                   </tr>
                 </Fragment>
-              ))}
+                ),
+              )}
             </tbody>
           </table>
         </div>
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <Button variant="ghost" onClick={() => setLines((ls) => [...ls, { ...emptyLine(), axes: { ...(ls[ls.length - 1]?.axes ?? {}) } }])}>
-            <Plus className="h-4 w-4" /> Ajouter une ligne
-          </Button>
+          <div className="flex flex-wrap gap-1">
+            <Button variant="ghost" onClick={() => setLines((ls) => [...ls, { ...emptyLine(), axes: { ...([...ls].reverse().find((x) => x.kind === "product")?.axes ?? {}) } }])}>
+              <Plus className="h-4 w-4" /> Ajouter une ligne
+            </Button>
+            {sale && (
+              <>
+                <Button variant="ghost" onClick={() => setLines((ls) => [...ls, emptyLine("line_section")])}>
+                  <Plus className="h-4 w-4" /> Ajouter une rubrique
+                </Button>
+                <Button variant="ghost" onClick={() => setLines((ls) => [...ls, emptyLine("line_note")])}>
+                  <Plus className="h-4 w-4" /> Ajouter une note
+                </Button>
+              </>
+            )}
+          </div>
           <dl className="tabular grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
             <dt className="text-muted">Total HT</dt>
             <dd className="text-right font-mono">{montantDevise(totals.ht, devise)}</dd>

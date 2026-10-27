@@ -35,7 +35,7 @@ MAX_DOCUMENT = 15 * 1024 * 1024
 ROTATION_FIELDS = (
     "date_loading", "date_delivery", "date_return", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note",
     "temperature_loaded", "temperature_delivered", "density_15", "vcf_loaded", "vcf_delivered",
-    "fuel_liters", "distance_km", "weigh_ticket", "weight_gross", "weight_tare",
+    "fuel_liters", "distance_km", "weigh_ticket", "weight_gross", "weight_tare", "loading_voucher",
     # « specific_taxes » (saisies de l'application mobile, reprise) vaut forfait hors barème.
     *[c for c, _l in COSTS], "specific_taxes_manual",
 )
@@ -101,6 +101,7 @@ def _rotation_row(rot, detail=False, official=None):
         "vehicle": _ref(rot.vehicle_id), "driver": _ref(rot.driver_id), "client": _ref(rot.partner_id),
         "route": _ref(rot.route_id), "product": rot.product, "product_id": rot.product_id.id,
         "product_label": rot.product_id.name, "delivery_note": rot.delivery_note or None,
+        "loading_voucher": rot.loading_voucher or None,
         "volume_loaded": rot.volume_loaded, "volume_delivered": rot.volume_delivered,
         "capacity_liters": rot.vehicle_id.capacity_liters, "over_capacity": rot.over_capacity,
         "volume_correction": rot.volume_correction, "temperature_loaded": rot.temperature_loaded or None,
@@ -234,7 +235,7 @@ def _rotation_values(data):
         value = data[key]
         if key.startswith("date"):
             values[key] = parse_date(data, key)
-        elif key in ("delivery_note", "note", "weigh_ticket"):
+        elif key in ("delivery_note", "note", "weigh_ticket", "loading_voucher"):
             values[key] = value or False
         else:
             values[key] = as_float(value or 0, key)
