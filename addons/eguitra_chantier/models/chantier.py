@@ -263,7 +263,7 @@ class EguitraChantierSituation(models.Model):
             sit.progress_pct = sit.cumulative_amount / contract * 100 if contract else 0.0
             if sit.state == "invoiced" and sit.invoice_id:
                 # Facturée : la période et la retenue sont celles des pièces comptabilisées, et ne bougent plus.
-                period = abs(sit.invoice_id.sudo().amount_untaxed_signed)
+                period = sit._invoiced_period()
                 sit.amount_period = period
                 sit.previous_amount = sit.cumulative_amount - period
                 sit.retention_amount = sum(sit.retention_move_id.sudo().line_ids.mapped("debit"))
@@ -272,6 +272,19 @@ class EguitraChantierSituation(models.Model):
             sit.previous_amount = previous
             sit.amount_period = sit.cumulative_amount - previous
             sit.retention_amount = sit._retention_of(sit.amount_period)
+
+    def _invoiced_period(self):
+        """Travaux de la période d'une situation facturée, lus sur sa facture : le montant hors taxes. Point
+        d'extension : un module qui ajoute des lignes à la facture (déduction de l'avance de démarrage,
+        eguitra_commerce) les remet ici, pour que la période reste celle des travaux."""
+        self.ensure_one()
+        return abs(self.invoice_id.sudo().amount_untaxed_signed)
+
+    def _invoice_extra_lines(self, period, company):
+        """Lignes ajoutées à la facture de la situation, après celle des travaux de la période (valeurs de
+        ligne de facture). Aucune ici ; point d'extension (avance de démarrage, eguitra_commerce)."""
+        self.ensure_one()
+        return []
 
     def action_invoice(self):
         """Facture des travaux de la période, puis transfert de la retenue en 4117. Les situations se
@@ -312,7 +325,8 @@ class EguitraChantierSituation(models.Model):
                 "partner_id": chantier.partner_id.id,
                 "invoice_date": sit.date,
                 "invoice_origin": f"{chantier.name} - situation {sit.number}",
-                "invoice_line_ids": [Command.create(line)],
+                "invoice_line_ids": [Command.create(line)]
+                + [Command.create(extra) for extra in sit._invoice_extra_lines(period, company)],
             })
             invoice.action_post()
             retention_move = self.env["account.move"]
