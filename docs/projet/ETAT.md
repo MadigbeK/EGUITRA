@@ -200,6 +200,16 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 27 octobre 2026, 1 h : RH habilitations et profil associé en production (version 20261027-0104)
+
+- En production : version 20261027-0104 (code 2b90161), sauvegarde prise avant (20261027T0104), accord explicite du gérant. Contenu : branche RH « habilitations » (habilitations des conducteurs, aptitude en statut seul, équipements de protection, import Excel, interface pour HSSEQ ; eguitra_rh 19.0.1.2.0, 98 tests en base isolée) ; profil « Associé du cabinet » (eguitra_base 19.0.1.9.0) : sceller une revue, forcer un gate et rouvrir une révision sont réservés à l'associé ou à la direction du cabinet sans profil administration, deux personnes toujours exigées (décision du gérant par délégation) ; porteur créé en recette avec le mot de passe saisi ; test.consultant responsable d'un dossier de démonstration (cloche du cabinet).
+- Vérifications : série complète de 668 tests puis 235 tests ciblés (un test corrigé : 2b90161) ; recette mise à jour ; répétition sur une copie de la production réussie ; après la mise en production, versions, groupe associé, adresses publiques, supervision et sauvegardes contrôlés ; aucun compte de test en production.
+- Recette : données de démonstration RH rechargées (12 salariés) après correction de donnees_demo_rh.py (17aee2a6).
+- En production, à faire par le gérant : donner le profil « Associé du cabinet » aux associés réels de MB AxisPro Consulting (Administration > Utilisateurs) avant le premier comité, sinon seule la direction du cabinet peut sceller.
+- Cahiers de test des utilisateurs : 253 scénarios, guide des testeurs corrigé, envoyés au gérant le 26/10.
+- Application mobile NIMOVA Terrain : construction de l'APK reportée par le gérant (« nous le ferons en temps voulu ») ; version de démonstration prête sur claude/nimova-terrain (profil preview, bureau simulé) ; le jour venu : connexion du gérant à son compte Expo, puis eas build -p android --profile preview depuis apps/terrain.
+- Suite : verrou rendu à OTHER pour HSSEQ en recette (avec les écrans de DESIGN) ; puis entrée native de la session Mobile App (/api/natif) en recette. HSSEQ et l'application mobile : production avec l'accord du gérant (avenant).
+
 ### 26 octobre 2026, soir : audit en production (version 20261026-1845)
 
 - En production : version 20261026-1845 (code 323817d), mise en service à 18 h 46, sauvegarde de base prise juste avant (20261026T1845). Douze modules : base 19.0.1.8.0, api 19.0.1.3.0, finance 19.0.1.9.0, approval 19.0.1.3.0, transport 19.0.1.6.0, chantier 19.0.1.1.0, immobilier 19.0.1.2.0, axispro 19.0.1.5.0, analytics 19.0.1.0.0, portail 19.0.1.3.0, rh 19.0.1.1.0, chat 19.0.1.0.0 (nouveau, chat interne). Images rafraîchies (Odoo 19.0 du 17/10, PostgreSQL 16 du 21/10) : mise à jour mensuelle consignée dans logs/maj-securite/2026-10.md. Double authentification toujours suspendue (décision du gérant).
