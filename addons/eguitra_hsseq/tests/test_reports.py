@@ -132,7 +132,9 @@ class TestReports(HsseqCase):
         if self.day.day < 5:
             return  # le mois précédent se fige le 5
         self.env["eguitra.hsseq.report.month"]._cron_freeze()
+        # Modèle sans société : il sert les deux, un mois figé par société ; celui de la société du test.
         record = self.env["eguitra.hsseq.report.month"].search([("template_id", "=", template["id"]),
+                                                                ("company_id", "=", self.company.id),
                                                                 ("month", "=", previous)])
         self.assertTrue(record.frozen_on, "Figé le 5 du mois suivant")
         self.event(event_type="road_accident", occurred_at=previous + timedelta(days=4, hours=10))

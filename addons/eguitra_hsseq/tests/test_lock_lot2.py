@@ -71,7 +71,7 @@ class TestLockLot2(HsseqCase):
         rot = self._ready(self._rotation(vehicle_id=self.tipper.id))
         rot.write({"weigh_ticket": "TP-1", "weight_gross": 50.0, "weight_tare": 15.0})
         [v07] = [r for r in rot._hsseq_evaluate()["reasons"] if r["code"] == "V07"]
-        self.assertIn("délester de 5.00 t", v07["detail"])
+        self.assertIn("délester de 5,00 t", v07["detail"])
         with self.assertRaises(RotationBlocked):
             rot.with_user(self.parc).action_depart()
         path = f"/hsseq/rotations/{rot.id}/reweigh"
