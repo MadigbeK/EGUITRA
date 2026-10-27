@@ -40,11 +40,11 @@ compris les erreurs.
 3. Dates. Les données de démonstration sont datées par rapport au jour de leur chargement (« il y a
    douze jours », « dans dix jours ») : une échéance lue peut différer de quelques jours de celle
    annoncée ici.
-4. Verrou de départ. La partie B met le verrou en service sur la recette (HSE-11), puis le remet en
-   l'état (HSE-19). Pendant ce temps, une rotation chargée ce jour-là ne se valide qu'après son départ
+4. Verrou de départ. La partie B met le verrou en service sur la recette (HSE-13), puis le remet en
+   l'état (HSE-21). Pendant ce temps, une rotation chargée ce jour-là ne se valide qu'après son départ
    en route : jouez la partie B d'une traite, après avoir prévenu les testeurs du cahier Transport. Le
    contrôle avant départ et l'alcootest se saisissent au téléphone, sur NIMOVA Terrain, qui n'est pas
-   encore installable : HSE-17 écarte ces deux motifs pour le seul site de démonstration, le temps du
+   encore installable : HSE-19 écarte ces deux motifs pour le seul site de démonstration, le temps du
    test.
 5. Jouer un scénario. Suivez les étapes dans l'ordre, avec les données indiquées. Un scénario à deux
    comptes se joue dans deux navigateurs (Chrome et Edge) ou sur deux postes. Notez les références
@@ -54,7 +54,7 @@ compris les erreurs.
 7. Signaler une anomalie. Menu du compte (rond à vos initiales, en haut à droite) > « Mes demandes »
    > « Nouvelle demande », type « Remarque de recette », application NIMOVA · HSSEQ (ou NIMOVA ·
    Transport pour les départs), la gravité ; titre commençant par le numéro du scénario (par exemple
-   « HSE-14 : dérogation non proposée ») ; description ; « Déposer la demande ». Reportez le numéro
+   « HSE-16 : dérogation non proposée ») ; description ; « Déposer la demande ». Reportez le numéro
    reçu (DEM-…) dans les remarques.
 
 ## Comptes de test
@@ -170,13 +170,16 @@ Données : l'événement de HSE-02 ; gravité réelle 1 ; case gravité 4, proba
 2. Choisissez la « Gravité réelle », puis cliquez sur la case de la matrice. Lisez « Criticité : » et
    l'encadré qui suit.
 3. Cliquez sur « Classer l'événement ».
-4. Ouvrez les onglets « Résumé » (carte « Échéances ») et « Notifications ».
+4. Ouvrez les onglets « Résumé » (carte « Échéances »), « Notifications » et « Journal ».
 5. test.parc : rouvrez la fiche.
 
 Résultat attendu : la criticité est « Significative · 12 » (gravité potentielle multipliée par la
 probabilité). Le statut passe à « Classé », l'échéance de l'enquête tombe sept jours après la
 déclaration et « Notifications » liste « Criticité significative : Citerne garée sur le passage
-piéton (essai) ». Chez test.parc, « Corriger la déclaration » n'est plus proposé et l'onglet
+piéton (essai) ». La colonne « Opération » du journal est en français (« Déclaration »,
+« Classement : Criticité 12, niveau Significative », « Notification : criticité significative : … »),
+comme la colonne « Détail » (« Statut : Déclaré → Classé ») ; aucun mot anglais (create, write,
+classify) n'y figure. Chez test.parc, « Corriger la déclaration » n'est plus proposé et l'onglet
 « Classement » montre la « Criticité retenue » en lecture.
 
 | Résultat {22} | Remarques {78} |
@@ -203,15 +206,49 @@ pourquoi au choix ; cause racine « Pas de rangement prévu pour les rallonges (
 
 Résultat attendu : à l'étape 2, le passage est refusé : « Renseignez la cause racine avant de passer
 aux actions. ». À l'étape 4, « Passer aux actions » est grisé (« Enregistrez d'abord l'enquête. »),
-puis « Enquête enregistrée. » s'affiche. À l'étape 5, le statut passe à « Actions en cours » et
-l'enquête ne se modifie plus.
+puis « Enquête enregistrée. » s'affiche. À l'étape 5, la fenêtre annonce que les actions se créent
+dans l'onglet « Actions » de la fiche, par « Nouvelle action » ; le statut passe à « Actions en
+cours », l'enquête ne se modifie plus et la fiche ouvre l'onglet « Actions », qui invite à créer les
+actions.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-06. Clôturer sans enquête un événement de criticité faible, puis le rouvrir
+### HSE-06. Créer une action depuis l'événement
+
+Objectif : vérifier que le Responsable HSSEQ crée les actions d'un événement depuis sa fiche, et que
+le chef de parc ne le peut pas.
+
+Compte : test.hsseq, puis test.parc.
+
+Données : l'événement « Câble électrique arraché près des pompes (démo) », aux actions après HSE-05 ;
+action « Poser un enrouleur de câble fixé au mur de l'aire de chargement (essai) » ; responsable Test -
+Responsable exploitation transport ; échéance dans quinze jours ; niveau de maîtrise « Ingénierie » ;
+preuve attendue « Photo de l'enrouleur posé (essai) ».
+
+1. test.hsseq : ouvrez la fiche, onglet « Actions ». Lisez l'invitation, puis cliquez sur « Nouvelle
+   action ».
+2. Dans la fenêtre « Nouvelle action pour EVT/… », lisez le rappel (titre et cause racine). Regardez
+   « Créer l'action » tant que « Responsable » est vide.
+3. Remplissez « Action », « Responsable », « Échéance », « Niveau de maîtrise » et « Preuve attendue »,
+   puis « Créer l'action ».
+4. Cliquez sur la référence de l'action dans le message, puis revenez à la fiche de l'événement.
+5. test.parc : ouvrez la même fiche, onglet « Actions ».
+
+Résultat attendu : « Créer l'action » reste grisé sans responsable. Ensuite, « Action ACT/… ajoutée au
+plan d'actions. » ; l'onglet « Actions » liste l'action, « À faire », avec l'efficacité à J+90 « À
+programmer » (criticité 12). Le lien ouvre l'action dans le plan d'actions, origine « Événement EVT/… ».
+« Clôturer » n'est pas proposé tant que l'action est ouverte. Chez test.parc, ni « Nouvelle action »
+dans l'en-tête ni dans l'onglet « Actions ». Notez la référence ACT/….
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-07. Clôturer sans enquête un événement de criticité faible, puis le rouvrir
 
 Objectif : vérifier la clôture directe d'un événement faible et la réouverture motivée.
 
@@ -236,7 +273,7 @@ revient à « Classé ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-07. Immobiliser un véhicule après un événement de criticité élevée
+### HSE-08. Immobiliser un véhicule après un événement de criticité élevée
 
 Objectif : vérifier l'immobilisation d'un ensemble le temps de l'enquête, puis sa remise en service
 motivée.
@@ -266,7 +303,37 @@ service ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-08. Enregistrer le coût d'un événement
+### HSE-09. Noter l'information du donneur d'ordre
+
+Objectif : vérifier que le Responsable HSSEQ note quand le donneur d'ordre a été informé d'un
+événement de criticité élevée, avec la date, l'heure et son nom, et que le chef de parc ne le peut
+pas.
+
+Compte : test.hsseq, puis test.parc.
+
+Données : l'événement « Sortie de route à Kindia (démo) », de criticité élevée, déclaré il y a douze
+jours ; information du donneur d'ordre : demain à 10 h, puis hier à 10 h.
+
+1. test.hsseq : ouvrez la fiche, onglet « Résumé ». Lisez la ligne « Donneur d'ordre » de la carte
+   « Échéances ».
+2. Cliquez sur « Noter l'information ». Lisez la fenêtre « Information du donneur d'ordre, EVT/… ».
+3. Dans « Informé le », saisissez demain à 10 h ; regardez le message et « Enregistrer ». Saisissez
+   ensuite hier à 10 h, puis « Enregistrer ».
+4. Ouvrez l'onglet « Journal ».
+5. test.parc : ouvrez la même fiche, onglet « Résumé ».
+
+Résultat attendu : à l'étape 1, « À informer au plus tard le … » en rouge, avec « Échéance dépassée »
+(vingt-quatre heures après la déclaration). Demain est refusé (« Date dans le futur. », « Enregistrer »
+grisé). Ensuite, la ligne devient « Informé le … à 10:00, noté par Test - Responsable HSSEQ » et le
+bouton « Corriger l'information » ; le journal porte « Modification » avec « Donneur d'ordre informé
+le : vide → … ». Chez test.parc, la ligne se lit sans aucun bouton.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-10. Enregistrer le coût d'un événement
 
 Objectif : vérifier la saisie des coûts d'un événement et leur total.
 
@@ -291,7 +358,7 @@ Résultat attendu : le coût apparaît dans « Coûts enregistrés » ; la tuile
 
 ## B. Contrôles avant départ et verrou de départ
 
-### HSE-09. Lire un contrôle avant départ et sa non-conformité bloquante
+### HSE-11. Lire un contrôle avant départ et sa non-conformité bloquante
 
 Objectif : vérifier la lecture d'un contrôle saisi au parc et du point critique qui bloque le départ.
 
@@ -315,7 +382,7 @@ manquantes ». La non-conformité est ouverte, avec « Départ bloqué » sous l
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-10. Lire les alcootests selon le profil
+### HSE-12. Lire les alcootests selon le profil
 
 Objectif : vérifier que le résultat chiffré d'un alcootest n'est lu que par le Responsable HSSEQ.
 
@@ -337,14 +404,14 @@ appareil, ni heure. Le détail est réservé au Responsable HSSEQ. » : la colon
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-11. Mettre le verrou de départ en service
+### HSE-13. Mettre le verrou de départ en service
 
 Objectif : vérifier qu'avant sa mise en service le verrou informe sans bloquer, et qu'ensuite il
 bloque le départ.
 
 Compte : test.exploitation, test.parc, puis test.hsseq.
 
-Données : une rotation du jour sur l'ensemble noté en HSE-09 : chauffeur « Alpha Diallo (démo) » ;
+Données : une rotation du jour sur l'ensemble noté en HSE-11 : chauffeur « Alpha Diallo (démo) » ;
 client « Démo - Distributeur pétrolier A » ; route « Conakry - Kankan (démo) » ; gasoil ; date de
 chargement : aujourd'hui ; bon de livraison « BL-HSE-001 » ; volume chargé 33.
 
@@ -368,14 +435,14 @@ l'étape 4, la ligne passe à « Bloqué » et le chiffre « Bloqués » compte 
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-12. Lire le détail d'un départ bloqué
+### HSE-14. Lire le détail d'un départ bloqué
 
 Objectif : vérifier que le chef de parc voit chaque motif, qui le lève et s'il se déroge, que
 Transport refuse la validation avant le départ et que la direction ne fait que lire.
 
 Compte : test.parc, puis test.dg.
 
-Données : la rotation de HSE-11.
+Données : la rotation de HSE-13.
 
 1. Dans « Départs du jour », cliquez sur la ligne. La fenêtre « Départ de … » s'ouvre.
 2. Cliquez sur « Vérifier à nouveau ». Lisez le bandeau, puis chaque motif (« Source », « Depuis »,
@@ -399,13 +466,13 @@ rotation ; vous lisez l'état du départ. ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-13. Faire partir malgré un motif bloquant
+### HSE-15. Faire partir malgré un motif bloquant
 
 Objectif : vérifier que le serveur refuse un départ tant qu'un motif bloquant reste ouvert.
 
 Compte : test.parc.
 
-Données : la rotation de HSE-11.
+Données : la rotation de HSE-13.
 
 1. Dans la fenêtre « Départ de … », cliquez sur « Faire partir ».
 2. Lisez la fenêtre « Faire partir … ? », puis confirmez par « Faire partir ».
@@ -419,14 +486,14 @@ dérogeable » ; « Faire partir » est grisé. La rotation reste en saisie.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-14. Demander une dérogation
+### HSE-16. Demander une dérogation
 
 Objectif : vérifier qu'un chef de parc demande une dérogation sur un seul motif dérogeable, avec un
 motif écrit.
 
 Compte : test.parc.
 
-Données : la rotation de HSE-11 ; motif écrit court « Plaque à venir » ; puis « Plaque de danger
+Données : la rotation de HSE-13 ; motif écrit court « Plaque à venir » ; puis « Plaque de danger
 commandée, pose provisoire faite et vérifiée par le chef de parc (essai) ».
 
 1. Dans la fenêtre « Départ de … », cliquez sur « Demander une dérogation ».
@@ -446,13 +513,13 @@ V02 passe « Attente Responsable HSSEQ ». Dans HSSEQ, la demande figure avec «
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-15. Refuser une dérogation avec un motif
+### HSE-17. Refuser une dérogation avec un motif
 
 Objectif : vérifier le refus motivé d'une dérogation par le Responsable HSSEQ.
 
 Compte : test.hsseq, puis test.parc.
 
-Données : la demande de HSE-14 ; motif du refus « Plaque provisoire non conforme à l'affichage exigé
+Données : la demande de HSE-16 ; motif du refus « Plaque provisoire non conforme à l'affichage exigé
 (essai) ».
 
 1. test.hsseq : Dérogations, onglet « À valider », ouvrez la demande. Lisez « Première validation »,
@@ -472,14 +539,14 @@ lit le motif du refus. » et la demande passe dans « Refusées ». Chez test.pa
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-16. Accorder une dérogation par une seconde personne
+### HSE-18. Accorder une dérogation par une seconde personne
 
 Objectif : vérifier qu'une dérogation devient active après la seconde validation, pour ce seul motif
 et cette seule rotation.
 
 Compte : test.parc, puis test.hsseq.
 
-Données : la rotation de HSE-11 ; motif écrit « Plaque de danger réglementaire posée, photo jointe au
+Données : la rotation de HSE-13 ; motif écrit « Plaque de danger réglementaire posée, photo jointe au
 contrôle complémentaire (essai) ».
 
 1. test.parc : nouvelle demande de dérogation sur V02, puis « Valider ma demande ».
@@ -498,14 +565,14 @@ jusqu'à la fin prévue de la rotation. V01 et V03 restent ouverts.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-17. Faire partir une rotation dont les motifs sont levés ou couverts
+### HSE-19. Faire partir une rotation dont les motifs sont levés ou couverts
 
 Objectif : vérifier le départ en route une fois chaque motif bloquant levé ou couvert, et le réglage
 d'un motif par site.
 
 Compte : test.hsseq, puis test.parc.
 
-Données : la rotation de HSE-16 ; site « Parc de Matoto (démo) ».
+Données : la rotation de HSE-18 ; site « Parc de Matoto (démo) ».
 
 1. test.hsseq : Paramètres, onglet « Motifs du verrou ». Sur V01, « Par site » : dans « Sites du
    motif V01 », décochez « Parc de Matoto (démo) », puis « Enregistrer ». Faites de même pour V03.
@@ -525,13 +592,13 @@ apparaît (habilitation, document du véhicule), notez-le : il se lève ou se d�
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-18. Lever une non-conformité avec la photo de la correction
+### HSE-20. Lever une non-conformité avec la photo de la correction
 
 Objectif : vérifier que la levée d'un point critique exige la photo de la correction.
 
 Compte : test.parc.
 
-Données : la non-conformité de HSE-09 ; une photo JPEG ; correction « Plaque de danger réglementaire
+Données : la non-conformité de HSE-11 ; une photo JPEG ; correction « Plaque de danger réglementaire
 reposée (essai) ».
 
 1. Ouvrez NIMOVA · HSSEQ, Contrôles, onglet « Non-conformités », puis « Lever » sur la
@@ -550,19 +617,19 @@ non-conformité passe dans « Levées » ; la fiche du contrôle n'annonce plus 
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-19. Rétablir les motifs et remettre le verrou hors service
+### HSE-21. Rétablir les motifs et remettre le verrou hors service
 
 Objectif : vérifier qu'un motif s'applique de nouveau à tous les sites et que le verrou se remet hors
 service, pour rendre la recette aux autres testeurs.
 
 Compte : test.hsseq.
 
-Données : la date notée en HSE-11 (vide si le verrou n'était pas en service).
+Données : la date notée en HSE-13 (vide si le verrou n'était pas en service).
 
 1. Paramètres, onglet « Motifs du verrou ». Sur V01, « Par site » : recochez « Parc de Matoto
    (démo) », puis « Enregistrer ». Faites de même pour V03.
 2. Onglet « Réglages », « Société » EGUITRA GROUP SARLU : remettez « Verrou de départ en service à
-   partir du » à sa valeur notée en HSE-11, puis « Enregistrer les réglages ».
+   partir du » à sa valeur notée en HSE-13, puis « Enregistrer les réglages ».
 
 Résultat attendu : « Motif V01 appliqué sur tous les sites. », puis de même pour V03 ; la colonne
 « Sites » indique « Tous les sites ». Avec la date vidée, la carte « Mise en service » indique
@@ -576,7 +643,7 @@ motifs s'affichent pour information. ».
 
 ## C. Plan d'actions
 
-### HSE-20. Lire et filtrer le plan d'actions
+### HSE-22. Lire et filtrer le plan d'actions
 
 Objectif : vérifier le registre unique des actions, ses onglets, ses filtres et le retard.
 
@@ -589,20 +656,23 @@ Données : les deux actions de démonstration de « Sortie de route à Kindia (d
 2. Activez la bascule « En retard », puis retirez-la.
 3. Dans « Origine », choisissez « Événement » ; dans « Responsable », choisissez Test - Responsable
    exploitation transport.
-4. Cliquez sur une action : sa fiche s'ouvre à côté de la liste.
+4. Cliquez sur l'en-tête de la colonne « Retard », puis une seconde fois.
+5. Cliquez sur une action : sa fiche s'ouvre à côté de la liste. Dépliez son « Historique ».
 
 Résultat attendu : « Recyclage conduite défensive des conducteurs de la ligne Kindia (démo) » est en
 retard (colonne « Retard » en jours) ; « Consigne de vitesse par temps de pluie, signée par les
-conducteurs (démo) » ne l'est pas. Chaque ligne cite son origine et son responsable. La page rappelle
-les relances à J-7, le jour de l'échéance puis chaque semaine, et l'escalade au Directeur général
-au-delà de 30 jours de retard.
+conducteurs (démo) » ne l'est pas. Chaque ligne cite son origine et son responsable. Au premier clic
+sur « Retard », la liste se trie sans message d'erreur, les actions les plus en retard en tête ; au
+second, l'ordre s'inverse. L'historique est en français (« Création », « Modification »…). La page
+rappelle les relances à J-7, le jour de l'échéance puis chaque semaine, et l'escalade au Directeur
+général au-delà de 30 jours de retard.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-21. Démarrer et clore une action avec sa preuve
+### HSE-23. Démarrer et clore une action avec sa preuve
 
 Objectif : vérifier qu'une action ne se clôt qu'avec sa preuve et passe en vérification d'efficacité
 quand son origine est grave.
@@ -629,7 +699,36 @@ réalisée : vérification d'efficacité dans 90 jours. » ; l'action passe dans
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-22. Faire valider une action coûteuse par la direction
+### HSE-24. Modifier une action dont on est responsable
+
+Objectif : vérifier que le responsable d'une action en modifie la description, le niveau de maîtrise
+et la preuve attendue, sans pouvoir changer le responsable, l'échéance ni le coût estimé.
+
+Compte : test.exploitation (responsable de l'action), puis test.hsseq.
+
+Données : l'action « Consigne de vitesse par temps de pluie, signée par les conducteurs (démo) », sans
+coût estimé ; nouvelle preuve attendue « Feuille d'émargement et photo de l'affichage (essai) ».
+
+1. test.exploitation : ouvrez Plan d'actions, puis la fiche de l'action. Cliquez sur « Modifier ».
+2. Lisez la fenêtre « Modifier l'action … » : ses champs et la phrase sous le formulaire.
+3. Remplacez « Preuve attendue », puis « Enregistrer ».
+4. Dépliez l'« Historique » de la fiche.
+5. test.hsseq : ouvrez la même fiche, puis « Modifier ». Regardez les champs proposés, puis
+   « Annuler ».
+
+Résultat attendu : chez test.exploitation, la fenêtre propose « Description », « Niveau de maîtrise »
+et « Preuve attendue », sans « Coût estimé (GNF) », « Responsable » ni « Échéance » ; la phrase indique
+le responsable, l'échéance et « coût estimé : non chiffré », « Ces trois champs se changent par le
+Responsable HSSEQ. ». « Action mise à jour. » s'affiche, sans refus, et la preuve attendue est la
+nouvelle ; l'historique porte « Modification (preuve attendue) » au nom du responsable. Chez
+test.hsseq, la fenêtre propose aussi le coût estimé, le responsable et l'échéance.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-25. Faire valider une action coûteuse par la direction
 
 Objectif : vérifier qu'une action au-delà du seuil de coût ne démarre qu'après la validation de la
 direction.
@@ -657,13 +756,13 @@ validée par la direction : son responsable peut la démarrer. ». À l'étape 4
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-23. Annuler une action, puis la rouvrir avec un motif
+### HSE-26. Annuler une action, puis la rouvrir avec un motif
 
 Objectif : vérifier que l'annulation et la réouverture d'une action exigent un motif.
 
 Compte : test.hsseq.
 
-Données : l'action de HSE-22 ; motifs « Remplacée par une consigne commune (essai) », puis « Consigne
+Données : l'action de HSE-25 ; motifs « Remplacée par une consigne commune (essai) », puis « Consigne
 commune abandonnée (essai) ».
 
 1. Ouvrez la fiche, puis « Annuler l'action ». Saisissez trois lettres dans « Motif (obligatoire) »,
@@ -681,7 +780,7 @@ dans « Annulées ». Rouverte : « Action rouverte : elle revient en cours. »,
 
 ## D. Habilitations, documents et urgences
 
-### HSE-24. Lire la matrice des habilitations
+### HSE-27. Lire la matrice des habilitations
 
 Objectif : vérifier que HSSEQ lit les habilitations tenues par RH et le départ qui en découle, sans
 rien y modifier.
@@ -708,7 +807,7 @@ habilitation.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-25. Suivre les échéances des habilitations
+### HSE-28. Suivre les échéances des habilitations
 
 Objectif : vérifier les alertes d'échéance et la matrice réduite du chef de parc.
 
@@ -731,7 +830,7 @@ avec le motif du verrou ouvert le jour de l'échéance ; à défaut, « Aucune a
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-26. Accuser lecture d'une procédure
+### HSE-29. Accuser lecture d'une procédure
 
 Objectif : vérifier qu'un compte visé lit une procédure en vigueur et en accuse lecture.
 
@@ -753,7 +852,7 @@ pas ; la procédure porte ensuite « Lecture accusée le … ». Chez test.hsseq
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-27. Publier une nouvelle version d'une procédure
+### HSE-30. Publier une nouvelle version d'une procédure
 
 Objectif : vérifier qu'une version ne se publie qu'avec son document et redemande la lecture aux
 comptes visés.
@@ -780,7 +879,7 @@ remplacées ». Chez test.parc, la procédure revient à lire.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-28. Diffuser une alerte flash anonymisée
+### HSE-31. Diffuser une alerte flash anonymisée
 
 Objectif : vérifier que la diffusion est refusée tant que le texte désigne un véhicule ou une
 personne.
@@ -808,7 +907,7 @@ personne ni aucune immatriculation relevés … », puis « Alerte flash diffus�
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-29. Déclarer réalisé un exercice d'urgence et en tirer une action
+### HSE-32. Déclarer réalisé un exercice d'urgence et en tirer une action
 
 Objectif : vérifier le bilan d'un exercice, l'action qui en découle et l'annuaire de crise.
 
@@ -838,7 +937,7 @@ contacts par ordre d'appel, « Tous les sites » puis le site de démonstration.
 
 ## E. Audits, conformité et environnement
 
-### HSE-30. Couvrir un écart majeur par une action, puis clore l'audit
+### HSE-33. Couvrir un écart majeur par une action, puis clore l'audit
 
 Objectif : vérifier qu'un audit ne se clôt qu'une fois chaque écart majeur couvert par une action.
 
@@ -864,7 +963,7 @@ plus, puis « Audit clos. » et le statut « Clos ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-31. Planifier un audit, le déclarer réalisé et y ajouter un constat
+### HSE-34. Planifier un audit, le déclarer réalisé et y ajouter un constat
 
 Objectif : vérifier le programme d'audits et le classement des constats.
 
@@ -890,7 +989,7 @@ référence en -C01, statut « Ouvert » tant qu'aucune action ne le solde.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-32. Revoir la conformité d'une exigence
+### HSE-35. Revoir la conformité d'une exigence
 
 Objectif : vérifier la revue d'une exigence du registre et sa preuve.
 
@@ -913,7 +1012,7 @@ plus tard.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-33. Déclarer un déversement, puis le clore
+### HSE-36. Déclarer un déversement, puis le clore
 
 Objectif : vérifier la déclaration d'un déversement par le chef de parc et sa clôture par le
 Responsable HSSEQ.
@@ -943,7 +1042,7 @@ Responsable HSSEQ ne clôt pas le déversement sans eux. ». Ensuite, « Dévers
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-34. Enregistrer l'enlèvement d'un déchet avec son bordereau
+### HSE-37. Enregistrer l'enlèvement d'un déchet avec son bordereau
 
 Objectif : vérifier qu'un enlèvement ne s'enregistre qu'avec son prestataire, son numéro et son
 bordereau joint.
@@ -968,7 +1067,7 @@ Résultat attendu : sans bordereau joint, « Enregistrer l'enlèvement » est gr
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-35. Saisir une mesure de poussières au-dessus du seuil
+### HSE-38. Saisir une mesure de poussières au-dessus du seuil
 
 Objectif : vérifier le calcul du dépassement d'une mesure de poussières.
 
@@ -992,7 +1091,7 @@ pas celui à 6,5, « Sous le seuil ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-36. Répondre à une réclamation client et la clore
+### HSE-39. Répondre à une réclamation client et la clore
 
 Objectif : vérifier le délai de réponse d'une réclamation et sa clôture.
 
@@ -1020,7 +1119,7 @@ tard par défaut. « Réponse au client enregistrée. », statut « Répondue »
 
 ## F. Rapport mensuel du donneur d'ordre
 
-### HSE-37. Lire le rapport du mois en cours, avant le gel du 5
+### HSE-40. Lire le rapport du mois en cours, avant le gel du 5
 
 Objectif : vérifier qu'un mois en cours se saisit au fil du mois mais ne se valide qu'après le gel de
 ses valeurs calculées, le 5 du mois suivant.
@@ -1047,7 +1146,7 @@ libellé et n'a pas de case de saisie ; P-1 a une case « À saisir ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-38. Ajuster le modèle du donneur d'ordre
+### HSE-41. Ajuster le modèle du donneur d'ordre
 
 Objectif : vérifier la modification d'un modèle : premier mois, nouvel indicateur saisi, numéro
 unique.
@@ -1078,7 +1177,7 @@ précédent et P-5 apparaît dans « 1. Indicateurs proactifs ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-39. Saisir les valeurs et les commentaires d'un mois clos
+### HSE-42. Saisir les valeurs et les commentaires d'un mois clos
 
 Objectif : vérifier la saisie des valeurs du mois, l'état de chaque indicateur et l'historique.
 
@@ -1094,25 +1193,29 @@ accident de la route (essai) » ; commentaire du mois « Mois sans accident ; co
    « Faits marquants, explications des écarts, décisions ». Lisez le bandeau « Saisies non
    enregistrées » et regardez « Valider le mois ».
 4. Cliquez sur « Enregistrer ». Dépliez « Historique du mois ».
+5. Lisez « Période analysée » sous le titre du rapport, puis les colonnes « Cumul » et « Cible
+   cumulée » de P-1, P-4 et P-5.
 
 Résultat attendu : le mois porte « À valider » ; « Mois clos : complétez les valeurs saisies et les
 commentaires, puis validez le rapport. ». Avant l'enregistrement, « Valider le mois » est grisé
 (« Enregistrez d'abord vos saisies. »). Ensuite, « Saisies enregistrées. » ; chaque ligne porte son
 état (« Conforme », « Sous surveillance », « Non conforme » ou « Sans donnée ») et l'historique une
-ligne « saisie de … » par valeur.
+ligne « saisie de … » par valeur. La période analysée part du premier mois du modèle, pas de janvier
+(le seul mois précédent, si HSE-41 l'a fixé comme premier mois) : la cible cumulée ne compte que les
+mois de la période (1 pour P-1 et P-4, 2 pour P-5 sur un mois), et ces trois lignes sont « Conforme ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-40. Valider le mois
+### HSE-43. Valider le mois
 
 Objectif : vérifier la validation du rapport du mois et le gel de ses valeurs calculées.
 
 Compte : test.hsseq.
 
-Données : le mois de HSE-39.
+Données : le mois de HSE-42.
 
 1. Cliquez sur « Valider le mois ». Lisez la fenêtre « Valider le rapport de … », puis confirmez par
    « Valider le mois ».
@@ -1129,14 +1232,14 @@ Plus aucune case de saisie.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-41. Rouvrir un mois validé avec un motif
+### HSE-44. Rouvrir un mois validé avec un motif
 
 Objectif : vérifier que la réouverture exige un motif, l'inscrit au journal et garde les valeurs
 calculées figées.
 
 Compte : test.hsseq.
 
-Données : le mois validé de HSE-40 ; motif « Err », puis « Correction de la valeur de P-1 (essai) » ;
+Données : le mois validé de HSE-43 ; motif « Err », puis « Correction de la valeur de P-1 (essai) » ;
 P-1 corrigé à 2.
 
 1. Cliquez sur « Rouvrir le mois ». Dans « Rouvrir le rapport de … », saisissez « Err » dans « Motif
@@ -1155,13 +1258,13 @@ saisie corrigée et les deux validations.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-42. Exporter le rapport en Excel et en PDF
+### HSE-45. Exporter le rapport en Excel et en PDF
 
 Objectif : vérifier les exports au format du donneur d'ordre.
 
 Compte : test.hsseq, puis test.dg.
 
-Données : le mois validé de HSE-41.
+Données : le mois validé de HSE-44.
 
 1. test.hsseq : sur le mois, cliquez sur « Excel » et ouvrez le classeur.
 2. Cliquez sur « PDF » et ouvrez le document.
@@ -1181,7 +1284,7 @@ saisir.
 
 ## G. Risques, revue de direction et télématique
 
-### HSE-43. Inscrire un risque au registre et le mettre en vigueur
+### HSE-46. Inscrire un risque au registre et le mettre en vigueur
 
 Objectif : vérifier la cotation d'un risque avant et après mesures, sa mise en vigueur et sa revue
 par son propriétaire.
@@ -1215,7 +1318,7 @@ enregistrée : prochaine revue le … ».
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-44. Tenir et clore une revue de direction
+### HSE-47. Tenir et clore une revue de direction
 
 Objectif : vérifier que la direction tient la revue, y inscrit ses décisions et la clôt.
 
@@ -1245,7 +1348,7 @@ rendu définitif se télécharge en PDF. » ; le PDF reprend les douze rubriques
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-45. Lire les violations de conduite et contrôler un fichier d'import
+### HSE-48. Lire les violations de conduite et contrôler un fichier d'import
 
 Objectif : vérifier la lecture des violations relevées par les boîtiers et le refus d'un fichier au
 mauvais format.
@@ -1273,7 +1376,7 @@ rien n'est importé.
 
 ## H. Refus attendus
 
-### HSE-46. L'auditeur lit sans rien modifier
+### HSE-49. L'auditeur lit sans rien modifier
 
 Objectif : vérifier que l'auditeur externe lit HSSEQ en lecture seule, sans les noms des personnes ni
 les alcootests.
@@ -1284,22 +1387,26 @@ Données : l'événement « Sortie de route à Kindia (démo) ».
 
 1. Ouvrez l'adresse de la recette suivie de /hsseq et connectez-vous. Parcourez le menu.
 2. Ouvrez Contrôles, puis le Cockpit (bloc « Départs du jour »).
-3. Ouvrez la fiche de l'événement.
-4. Événements, « Déclarer un événement » : remplissez le type, le titre, la date et la description,
+3. Ouvrez Événements et regardez les boutons de l'en-tête ; ouvrez la fiche de l'événement, puis son
+   onglet « Enquête ».
+4. Ouvrez Plan d'actions et regardez la ligne des filtres.
+5. Événements, « Déclarer un événement » : remplissez le type, le titre, la date et la description,
    puis « Déclarer l'événement ».
 
 Résultat attendu : le menu ne propose ni « Rapport mensuel », ni « Habilitations », ni
 « Paramètres ». Contrôles n'a pas d'onglet « Alcootests » ; le cockpit indique « Le détail des départs
-bloqués, qui nomme les conducteurs, n'est pas servi à votre profil. ». La fiche ne propose ni
-« Clôturer », ni « Immobiliser … », ni « Corriger la déclaration », et ne nomme ni le déclarant ni
-les personnes en cause. La déclaration est refusée : « Profil auditeur : lecture seule. ».
+bloqués, qui nomme les conducteurs, n'est pas servi à votre profil. ». Événements ne propose pas
+« Exporter le registre ». La fiche ne propose ni « Clôturer », ni « Immobiliser … », ni « Corriger la
+déclaration », ni « Nouvelle action », ni « Rapport d'enquête (PDF) » (pas plus dans l'onglet
+« Enquête »), et ne nomme ni le déclarant ni les personnes en cause. Le plan d'actions se lit, sans
+« Exporter ». La déclaration est refusée : « Profil auditeur : lecture seule. ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-47. L'auditeur ne lit que ses sites
+### HSE-50. L'auditeur ne lit que ses sites
 
 Objectif : vérifier qu'un objet hors du périmètre de l'auditeur lui reste invisible.
 
@@ -1322,7 +1429,7 @@ sans rien afficher.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-48. L'auditeur n'entre plus après sa date de fin d'accès
+### HSE-51. L'auditeur n'entre plus après sa date de fin d'accès
 
 Objectif : vérifier que l'accès de l'auditeur cesse à sa date de fin, puis reprend une fois
 prolongé.
@@ -1348,7 +1455,7 @@ prolongation, la connexion aboutit.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-49. Le chef de parc n'ouvre ni le rapport mensuel ni les paramètres et ne classe pas
+### HSE-52. Le chef de parc n'ouvre ni le rapport mensuel ni les paramètres et ne classe pas
 
 Objectif : vérifier ce qui reste fermé au chef de parc dans HSSEQ.
 
@@ -1375,19 +1482,19 @@ Dérogations : « Vous suivez ici les dérogations de vos sites. Une demande se 
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-50. La direction lit sans décider à la place du Responsable HSSEQ
+### HSE-53. La direction lit sans décider à la place du Responsable HSSEQ
 
 Objectif : vérifier que la direction consulte HSSEQ sans valider une dérogation, un rapport ou un
 classement à la place du Responsable HSSEQ.
 
 Compte : test.dg.
 
-Données : les dérogations de HSE-15 et HSE-16 ; le rapport mensuel du mois en cours ; l'événement de
-HSE-47, déclaré.
+Données : les dérogations de HSE-17 et HSE-18 ; le rapport mensuel du mois en cours ; l'événement de
+HSE-50, déclaré.
 
 1. Ouvrez Dérogations (onglet « Actives » ou « Refusées »), puis une dérogation.
 2. Ouvrez Rapport mensuel, mois en cours.
-3. Ouvrez la fiche de l'événement de HSE-47.
+3. Ouvrez la fiche de l'événement de HSE-50.
 4. Remplacez la fin de l'adresse par /hsseq/parametres.
 
 Résultat attendu : Dérogations : « Lecture seule. Vous êtes informé de chaque dérogation à son
@@ -1401,7 +1508,7 @@ ramènent au cockpit.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-51. Le conducteur n'ouvre pas les écrans du bureau
+### HSE-54. Le conducteur n'ouvre pas les écrans du bureau
 
 Objectif : vérifier qu'un compte conducteur, réservé au téléphone, n'entre dans aucune application du
 bureau.
@@ -1423,7 +1530,7 @@ application. ». Aucune donnée n'est affichée.
 
 ## I. Contrôles de saisie et de sécurité
 
-### HSE-52. Déclaration incomplète, datée dans le futur ou avec une pièce refusée
+### HSE-55. Déclaration incomplète, datée dans le futur ou avec une pièce refusée
 
 Objectif : vérifier les contrôles de la déclaration d'un événement.
 
@@ -1447,7 +1554,7 @@ accepté (JPEG, PNG ou PDF) ». Rien n'est déclaré.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-53. Nombres et saisies non enregistrées dans le rapport mensuel
+### HSE-56. Nombres et saisies non enregistrées dans le rapport mensuel
 
 Objectif : vérifier qu'un nombre illisible est refusé et qu'une saisie non enregistrée n'est pas
 perdue sans prévenir.
@@ -1473,7 +1580,7 @@ change de mois.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-54. Un double clic ne déclare qu'un événement
+### HSE-57. Un double clic ne déclare qu'un événement
 
 Objectif : vérifier qu'un double clic n'enregistre qu'une fois.
 
@@ -1493,7 +1600,7 @@ Résultat attendu : un seul événement porte ce titre.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### HSE-55. Message clair en cas de coupure du réseau
+### HSE-58. Message clair en cas de coupure du réseau
 
 Objectif : vérifier qu'une coupure pendant un enregistrement est annoncée en français, sans perdre la
 saisie.
@@ -1519,16 +1626,16 @@ enregistrées. » ; l'historique du mois ne porte la saisie qu'une fois.
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
 |---|---|---|---|---|
-| A. Cockpit et événements | 8 | | | |
+| A. Cockpit et événements | 10 | | | |
 | B. Contrôles avant départ et verrou de départ | 11 | | | |
-| C. Plan d'actions | 4 | | | |
+| C. Plan d'actions | 5 | | | |
 | D. Habilitations, documents et urgences | 6 | | | |
 | E. Audits, conformité et environnement | 7 | | | |
 | F. Rapport mensuel du donneur d'ordre | 6 | | | |
 | G. Risques, revue de direction et télématique | 3 | | | |
 | H. Refus attendus | 6 | | | |
 | I. Contrôles de saisie et de sécurité | 4 | | | |
-| Total | 55 | | | |
+| Total | 58 | | | |
 
 Réserves et anomalies relevées :
 
