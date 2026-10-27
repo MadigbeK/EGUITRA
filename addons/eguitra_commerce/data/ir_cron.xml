@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Créées à l'installation, jamais rechargées ensuite : une tâche suspendue le reste après une mise à jour. -->
+    <data noupdate="1">
+        <!-- Offres ouvertes dont la validité est passée : expirées chaque nuit, pour les deux sociétés. -->
+        <record id="cron_offer_expire" model="ir.cron">
+            <field name="name">EGUITRA : expiration des offres commerciales</field>
+            <field name="model_id" ref="sale.model_sale_order"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_eguitra_expire()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <!-- Chaque nuit à 00 h 30 (heure de Conakry, UTC). -->
+            <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 00:30:00')"/>
+            <field name="active" eval="True"/>
+        </record>
+        <!-- Auteur d'une offre envoyée qui expire bientôt : relancé par courriel, une fois, si un serveur existe. -->
+        <record id="cron_offer_remind" model="ir.cron">
+            <field name="name">EGUITRA : relance des offres avant expiration</field>
+            <field name="model_id" ref="sale.model_sale_order"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_eguitra_remind()</field>
+            <field name="user_id" ref="base.user_root"/>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <!-- Chaque matin à 06 h 30. -->
+            <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 06:30:00')"/>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>

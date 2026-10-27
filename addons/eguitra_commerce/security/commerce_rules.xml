@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Comptabilités séparées : chaque société ne voit que ses réceptions et les devis de ses engagements. -->
+    <record id="rule_receipt_company" model="ir.rule">
+        <field name="name">Réceptions : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_commerce_receipt"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_receipt_line_company" model="ir.rule">
+        <field name="name">Lignes de réception : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_commerce_receipt_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_supplier_quote_company" model="ir.rule">
+        <field name="name">Devis fournisseurs : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_commerce_supplier_quote"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>

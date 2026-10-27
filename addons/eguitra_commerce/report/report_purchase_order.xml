@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Bon de commande fournisseur (« BON DE COMMANDE »), au gabarit de la société, avec les approbateurs. -->
+    <record id="action_report_purchase_order" model="ir.actions.report">
+        <field name="name">Bon de commande</field>
+        <field name="model">purchase.order</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_commerce.report_purchase_order</field>
+        <field name="report_file">eguitra_commerce.report_purchase_order</field>
+        <field name="print_report_name">'Bon de commande %s' % (object.name or '').replace('/', '-')</field>
+    </record>
+
+    <template id="report_purchase_order">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <t t-set="eguitra_document_header" t-value="True"/>
+                    <t t-set="d" t-value="o._eguitra_report_values()"/>
+                    <t t-call="eguitra_commerce.document_body"/>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

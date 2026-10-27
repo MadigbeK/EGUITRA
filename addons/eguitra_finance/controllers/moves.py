@@ -202,7 +202,11 @@ def _invoice_lines(data, move_type, partner=None, kept=None):
         dist = distribution(line.get("analytic_distribution"), company)
         category = category_of(line.get("category_id"), company) if not sale else request.env["eguitra.expense.category"]
         account = chosen_account(line.get("account_id"), company, f"Ligne {i} : compte", allowed=category.account_id)
-        if not sale and not (category or account or line.get("product_id")) and not free_accounts():
+        # Ligne d'origine qui garde son article et son compte (ligne d'une commande fournisseur, eguitra_commerce) :
+        # elle n'a pas besoin de catégorie.
+        kept_line = kept.get(as_int(line["source_line_id"], "source_line_id"), {}) if kept and line.get("source_line_id") else {}
+        exempt = category or account or line.get("product_id") or kept_line.get("account_id")
+        if not sale and not exempt and not free_accounts():
             raise ApiError(422, "business_rule", f"Ligne {i} : choisissez la catégorie de dépense, dont la ligne prend "
                                                  "le compte.")
         if category:
