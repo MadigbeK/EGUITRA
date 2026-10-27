@@ -1,0 +1,15 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_agenda_calendar_user,eguitra.agenda.calendar comptes internes (lecture),model_eguitra_agenda_calendar,base.group_user,1,0,0,0
+access_agenda_share_user,eguitra.agenda.share comptes internes (lecture),model_eguitra_agenda_share,base.group_user,1,0,0,0
+access_agenda_delegation_user,eguitra.agenda.delegation comptes internes (lecture),model_eguitra_agenda_delegation,base.group_user,1,0,0,0
+access_agenda_category_user,eguitra.agenda.category comptes internes (lecture),model_eguitra_agenda_category,base.group_user,1,0,0,0
+access_agenda_preference_user,eguitra.agenda.preference comptes internes (lecture),model_eguitra_agenda_preference,base.group_user,1,0,0,0
+access_agenda_event_user,eguitra.agenda.event comptes internes (lecture),model_eguitra_agenda_event,base.group_user,1,0,0,0
+access_agenda_attendee_user,eguitra.agenda.attendee comptes internes (lecture),model_eguitra_agenda_attendee,base.group_user,1,0,0,0
+access_agenda_notification_user,eguitra.agenda.notification comptes internes (lecture),model_eguitra_agenda_notification,base.group_user,1,0,0,0
+access_agenda_journal_user,eguitra.agenda.journal comptes internes (lecture),model_eguitra_agenda_journal,base.group_user,1,0,0,0
+access_agenda_reminder_log_user,eguitra.agenda.reminder.log comptes internes (lecture),model_eguitra_agenda_reminder_log,base.group_user,1,0,0,0
+access_agenda_subscription_user,eguitra.agenda.subscription comptes internes (lecture),model_eguitra_agenda_subscription,base.group_user,1,0,0,0
+access_agenda_booking_type_user,eguitra.agenda.booking.type comptes internes (lecture),model_eguitra_agenda_booking_type,base.group_user,1,0,0,0
+access_agenda_booking_user,eguitra.agenda.booking comptes internes (lecture),model_eguitra_agenda_booking,base.group_user,1,0,0,0
+access_agenda_booking_attempt_system,eguitra.agenda.booking.attempt administrateurs du noyau (lecture),model_eguitra_agenda_booking_attempt,base.group_system,1,0,0,0

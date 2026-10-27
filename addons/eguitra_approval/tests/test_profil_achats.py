@@ -55,12 +55,15 @@ class TestProfilAchats(FinanceDataMixin, ApiCase):
 
     def test_profil_et_applications(self):
         self.assertEqual(self.acheteuse._eguitra_profiles(), ["achats"])
-        self.assertEqual(self.acheteuse._eguitra_apps(), ["finance"], "Finance seule : ni Analyse, ni AxisPro, ni Rotations")
+        # NIMOVA · Agenda, ouvert à tout compte interne, là où son module est installé.
+        agenda = ["agenda"] if "eguitra.agenda.calendar" in self.env else []
+        self.assertEqual(self.acheteuse._eguitra_apps(), ["finance", *agenda],
+                         "Finance seule (et l'agenda) : ni Analyse, ni AxisPro, ni Rotations")
         self.assertTrue(self.acheteuse.has_group("account.group_account_invoice"), "Facturation : pièces en brouillon")
         self.assertFalse(self.acheteuse.has_group("eguitra_finance.group_free_accounts"), "Ni saisie libre des comptes")
         status, me = self._get("/auth/me")
         self.assertEqual(status, 200, me)
-        self.assertEqual((me["profiles"], me["apps"]), (["achats"], ["finance"]))
+        self.assertEqual((me["profiles"], me["apps"]), (["achats"], ["finance", *agenda]))
         self.assertEqual(me["rights"], {"free_accounts": False}, "Pas de saisie libre des comptes")
         status, body = self.call("POST", "/auth/login", {"login": "achats.test", "password": PASSWORD, "app": "analyse"})
         self.assertEqual((status, body.get("error")), (403, "app_forbidden"), body)

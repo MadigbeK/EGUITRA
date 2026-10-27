@@ -16,6 +16,7 @@ Le département finance tient leurs deux comptabilités, séparément, dans la m
   groupe sous /analyse/groupe/, celles du cabinet sous /analyse/cabinet/.
 - HSSEQ (NIMOVA · HSSEQ) sert les deux sociétés ; ses formulaires de terrain passent par l'application
   native NIMOVA Terrain, qui ne sert qu'EGUITRA GROUP (le transport) et n'a aucun écran web.
+- Agenda (NIMOVA · Agenda) sert les deux sociétés : un seul agenda par compte.
 
 Un compte reçoit des profils (eguitra_base, PROFILE_GROUPS) et des sociétés ; ses applications en
 découlent : un profil peut tout ouvrir (administration, direction) ou une seule application.
@@ -50,6 +51,11 @@ APPS = {
     # alcootest, déclaration), sans écran web ; seule application du profil conducteur.
     "terrain": {"profiles": {"admin", "hsseq", "exploitation", "conducteur"}, "entity": "groupe",
                 "model": "eguitra.hsseq.event"},
+    # Agenda (NIMOVA · Agenda) : tous les comptes internes, pour les deux sociétés (un compte ouvert aux deux
+    # a un seul agenda) ; ni le porteur, ni le conducteur, ni l'auditeur, ni le salarié sans profil, comme
+    # pour la discussion. Pendant : eguitra_agenda/models/common.py (AGENDA_PROFILES).
+    "agenda": {"profiles": {"admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier",
+                            "cabinet", "associe", "rh", "hsseq"}, "entity": None, "model": "eguitra.agenda.calendar"},
 }
 
 # Préfixe des routes de l'API -> société servie par le module : ses routes refusent de travailler

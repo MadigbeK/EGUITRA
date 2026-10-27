@@ -95,6 +95,10 @@ const DESCRIPTIONS: Record<string, string> = {
   "/hsseq/evenements": "Déclaration, classement, enquête et clôture",
   "/hsseq/actions": "Actions correctives et préventives, preuves, efficacité",
   "/hsseq/controles": "Grilles pré-départ, alcootests et non-conformités",
+  "/agenda": "Jour, semaine, mois, liste ; invitations et échéances",
+  "/agenda/planning": "Disponibilités des collègues et des ressources",
+  "/agenda/reglages": "Heures, rappels, absence, partages, délégations",
+  "/agenda/ressources": "Salles, véhicules et équipements réservables",
 };
 
 const SENS_PASTILLE: Record<NavBadge, [string, string]> = { approvals: [" en attente", " en attente"], controls: [" contrôle en anomalie", " contrôles en anomalie"], alerts: [" alerte", " alertes"] };

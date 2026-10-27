@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Tâches de l'agenda, sans effet si elles passent deux fois (journal des rappels, date du dernier
+         récapitulatif, état des demandes). -->
+    <record id="cron_reminders" model="ir.cron">
+        <field name="name">Agenda : rappels des événements (application et courriel)</field>
+        <field name="model_id" ref="model_eguitra_agenda_event"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_reminders()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+    </record>
+    <record id="cron_digest" model="ir.cron">
+        <field name="name">Agenda : récapitulatif du matin (à l'heure choisie par chacun)</field>
+        <field name="model_id" ref="model_eguitra_agenda_event"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_digest()</field>
+        <field name="interval_number">30</field>
+        <field name="interval_type">minutes</field>
+    </record>
+    <record id="cron_booking_expire" model="ir.cron">
+        <field name="name">Agenda : rendez-vous en ligne non confirmés, compteurs de débit</field>
+        <field name="model_id" ref="model_eguitra_agenda_booking"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_expire()</field>
+        <field name="interval_number">15</field>
+        <field name="interval_type">minutes</field>
+    </record>
+    <record id="cron_purge_notifications" model="ir.cron">
+        <field name="name">Agenda : purge des notifications lues et des rappels envoyés anciens</field>
+        <field name="model_id" ref="model_eguitra_agenda_notification"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_purge()
+env["eguitra.agenda.reminder.log"]._cron_purge()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque nuit à 03 h 10 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:10:00')"/>
+    </record>
+</odoo>

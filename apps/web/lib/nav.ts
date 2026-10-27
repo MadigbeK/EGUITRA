@@ -259,6 +259,13 @@ export const NAV: Record<AppCode, NavSection[]> = {
       items: [{ href: "/hsseq/parametres", label: "Paramètres", icon: "SlidersHorizontal", profiles: ["admin", "hsseq"] }],
     },
   ],
+  // Agenda : ouvert à tout compte interne ; l'administration gère les ressources (salles, véhicules).
+  agenda: [
+    { label: "Agenda", items: [{ href: "/agenda", label: "Mon agenda", icon: "Calendar" }] },
+    { label: "Équipe", items: [{ href: "/agenda/planning", label: "Planning d'équipe", icon: "Users" }] },
+    { label: "Réglages", items: [{ href: "/agenda/reglages", label: "Réglages de l'agenda", icon: "SlidersHorizontal" }] },
+    { label: "Administration", items: [{ href: "/agenda/ressources", label: "Ressources", icon: "Building2", profiles: ["admin"] }] },
+  ],
 };
 
 /**

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Agenda : un compte ne lit que ce qui est à lui, ce qui lui est partagé en lecture ou en modification,
+        ce qu'il gère par délégation, et les événements auxquels il est invité. Règles globales (aucun groupe) :
+        elles valent pour tous les comptes, l'administration et les administrateurs du noyau compris ; seul le
+        superutilisateur, qui n'est le compte de personne, y échappe. Les comptes n'ont que la lecture
+        (ir.model.access.csv) : les écritures passent par les méthodes des modèles, qui contrôlent sous
+        l'identité du compte. Un partage des disponibilités seules ne donne aucun accès aux événements : les
+        occupations se calculent par les méthodes, sans titre. Un événement privé n'est lu que de son
+        organisateur, du propriétaire de l'agenda, de ses participants et du délégué qui a reçu le droit de
+        voir les événements privés.
+    -->
+    <record id="rule_agenda_calendar" model="ir.rule">
+        <field name="name">Agenda : agendas à soi, partagés, délégués, ressources</field>
+        <field name="model_id" ref="model_eguitra_agenda_calendar"/>
+        <field name="domain_force">['|', '|', '|', ('kind', '=', 'resource'), ('owner_id', '=', user.id), ('share_ids.user_id', '=', user.id), ('owner_id.agenda_delegation_ids.delegate_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_share" model="ir.rule">
+        <field name="name">Agenda : partages de ses agendas, ou reçus</field>
+        <field name="model_id" ref="model_eguitra_agenda_share"/>
+        <field name="domain_force">['|', '|', ('user_id', '=', user.id), ('calendar_id.owner_id', '=', user.id), ('calendar_id.owner_id.agenda_delegation_ids.delegate_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_delegation" model="ir.rule">
+        <field name="name">Agenda : délégations accordées, reçues ou posées</field>
+        <field name="model_id" ref="model_eguitra_agenda_delegation"/>
+        <field name="domain_force">['|', '|', ('owner_id', '=', user.id), ('delegate_id', '=', user.id), ('granted_by_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_category" model="ir.rule">
+        <field name="name">Agenda : catégories communes et les siennes</field>
+        <field name="model_id" ref="model_eguitra_agenda_category"/>
+        <field name="domain_force">['|', ('owner_id', '=', False), ('owner_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_preference" model="ir.rule">
+        <field name="name">Agenda : ses propres réglages</field>
+        <field name="model_id" ref="model_eguitra_agenda_preference"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_event_access" model="ir.rule">
+        <field name="name">Agenda : événements de ses agendas, délégués, partagés en lecture, ou invitations</field>
+        <field name="model_id" ref="model_eguitra_agenda_event"/>
+        <field name="domain_force">['|', '|', '|', '|', ('organizer_id', '=', user.id), ('calendar_id.owner_id', '=', user.id), ('attendee_ids.user_id', '=', user.id), ('calendar_id.owner_id.agenda_delegation_ids.delegate_id', '=', user.id), ('calendar_id.share_ids.read_user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_event_private" model="ir.rule">
+        <field name="name">Agenda : événements privés à leurs seuls organisateur, propriétaire, participants et délégué autorisé</field>
+        <field name="model_id" ref="model_eguitra_agenda_event"/>
+        <field name="domain_force">['|', '|', '|', '|', ('privacy', '!=', 'private'), ('organizer_id', '=', user.id), ('calendar_id.owner_id', '=', user.id), ('attendee_ids.user_id', '=', user.id), ('calendar_id.owner_id.agenda_delegation_ids.private_user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_attendee_access" model="ir.rule">
+        <field name="name">Agenda : participants des événements que l'on lit</field>
+        <field name="model_id" ref="model_eguitra_agenda_attendee"/>
+        <field name="domain_force">['|', '|', '|', '|', '|', ('user_id', '=', user.id), ('event_id.organizer_id', '=', user.id), ('event_id.calendar_id.owner_id', '=', user.id), ('event_id.attendee_ids.user_id', '=', user.id), ('event_id.calendar_id.owner_id.agenda_delegation_ids.delegate_id', '=', user.id), ('event_id.calendar_id.share_ids.read_user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_attendee_private" model="ir.rule">
+        <field name="name">Agenda : participants d'un événement privé, à ceux qui le lisent</field>
+        <field name="model_id" ref="model_eguitra_agenda_attendee"/>
+        <field name="domain_force">['|', '|', '|', '|', ('event_id.privacy', '!=', 'private'), ('event_id.organizer_id', '=', user.id), ('event_id.calendar_id.owner_id', '=', user.id), ('event_id.attendee_ids.user_id', '=', user.id), ('event_id.calendar_id.owner_id.agenda_delegation_ids.private_user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_notification" model="ir.rule">
+        <field name="name">Agenda : ses propres notifications</field>
+        <field name="model_id" ref="model_eguitra_agenda_notification"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_journal" model="ir.rule">
+        <field name="name">Agenda : journal de ses agendas et de ceux qu'on lui délègue</field>
+        <field name="model_id" ref="model_eguitra_agenda_journal"/>
+        <field name="domain_force">['|', ('calendar_id.owner_id', '=', user.id), ('calendar_id.owner_id.agenda_delegation_ids.delegate_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_reminder_log" model="ir.rule">
+        <field name="name">Agenda : ses propres rappels envoyés</field>
+        <field name="model_id" ref="model_eguitra_agenda_reminder_log"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_subscription" model="ir.rule">
+        <field name="name">Agenda : son propre lien d'abonnement</field>
+        <field name="model_id" ref="model_eguitra_agenda_subscription"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_booking_type" model="ir.rule">
+        <field name="name">Agenda : ses propres types de rendez-vous</field>
+        <field name="model_id" ref="model_eguitra_agenda_booking_type"/>
+        <field name="domain_force">[('owner_id', '=', user.id)]</field>
+    </record>
+    <record id="rule_agenda_booking" model="ir.rule">
+        <field name="name">Agenda : rendez-vous pris en ligne avec soi</field>
+        <field name="model_id" ref="model_eguitra_agenda_booking"/>
+        <field name="domain_force">[('type_id.owner_id', '=', user.id)]</field>
+    </record>
+</odoo>

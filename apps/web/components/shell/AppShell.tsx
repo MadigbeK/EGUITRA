@@ -17,6 +17,7 @@ import { Lanceur } from "@/components/shell/Lanceur";
 import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/VeilleInactivite";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
 import { Discussions } from "@/components/discussions/Discussions";
+import { AgendaEnTete } from "@/components/agenda/AgendaEnTete";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -31,7 +32,7 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";
 }
 
-const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a", hsseq: "#14a3c2" };
+const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a", hsseq: "#14a3c2", agenda: "#6d6af0" };
 
 /**
  * Accueil d'une application pour ce compte. Finance s'ouvre sur le premier écran que ses profils
@@ -256,6 +257,7 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
             <EquilibreExercice data={enTete} />
             {actions}
             <SocieteEnTete app={app} me={me} onCompany={switchCompany} />
+            <AgendaEnTete app={app} me={me} />
             <Discussions app={app} me={me} />
             <CompteMenu app={app} me={me} onLogout={logout} />
           </div>

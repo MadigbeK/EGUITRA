@@ -46,6 +46,12 @@ AUDIT_EXCLUDED_MODELS = [
     # Conversations et membres, eux, sont suivis.
     "eguitra.chat.message",
     "eguitra.chat.read",
+    # Agenda (eguitra_agenda) : les notifications recopient les titres des événements, que l'administration ne
+    # lit pas ; le journal des rappels envoyés et les compteurs de débit des pages publiques sont techniques.
+    # Agendas, partages, délégations, événements (sans leur contenu) et réponses, eux, sont suivis.
+    "eguitra.agenda.notification",
+    "eguitra.agenda.reminder.log",
+    "eguitra.agenda.booking.attempt",
 ]
 PLATFORM_PREFIXES = ("eguitra.", "axispro.", "portail.")
 
