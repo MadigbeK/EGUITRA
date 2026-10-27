@@ -255,8 +255,11 @@ class EguitraCommerceCatalogue(http.Controller):
             rows = workbook_rows(content)
         else:
             text_ = content.decode("utf-8-sig", errors="replace")
-            dialect = csv.Sniffer().sniff(text_[:4096], delimiters=";,\t") if text_.strip() else csv.excel
-            rows = list(csv.reader(io.StringIO(text_), dialect))
+            try:
+                delimiter = csv.Sniffer().sniff(text_[:4096], delimiters=";,\t").delimiter
+            except csv.Error:
+                delimiter = ";"  # séparateur des tableurs en français
+            rows = list(csv.reader(io.StringIO(text_), delimiter=delimiter))
         rows = [[str(c or "").strip() for c in row] for row in rows if any(str(c or "").strip() for c in row)]
         if len(rows) < 2:
             raise ApiError(422, "business_rule", "Le fichier ne contient aucun article sous la ligne d'en-tête.")

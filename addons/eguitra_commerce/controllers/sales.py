@@ -30,7 +30,7 @@ VIEWS = {
     "orders": [("eguitra_status", "=", "accepted")],
     "closed": [("eguitra_status", "in", ("refused", "expired", "cancelled", "replaced"))],
 }
-OFFER_REPORT = "eguitra_commerce.report_offer"
+OFFER_REPORT = "eguitra_commerce.action_report_offer"
 
 
 def _order(order_id):

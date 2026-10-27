@@ -37,7 +37,7 @@ VIEWS = {
     "to_bill": [("state", "=", "purchase"), ("eguitra_status", "in", ("partial", "received"))],
     "done": [("eguitra_status", "in", ("invoiced", "cancelled"))],
 }
-PO_REPORT = "eguitra_commerce.report_purchase_order"
+PO_REPORT = "eguitra_commerce.action_report_purchase_order"
 MAX_FILE = 15 * 1024 * 1024
 
 
