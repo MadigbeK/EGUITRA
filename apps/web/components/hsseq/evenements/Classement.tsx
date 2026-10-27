@@ -192,7 +192,7 @@ function Formulaire({ e, referentiels, premier, onMaj }: { e: Evenement; referen
               <Input inputMode="numeric" value={jours} onChange={(ev) => setJours(ev.target.value.replace(/\D/g, ""))} />
             </Field>
           )}
-          <p className="text-[12px] text-muted">Immobilisation du véhicule pour l&apos;enquête : au lot 2, avec le motif V09 du verrou ; elle ne se saisit pas encore.</p>
+          <p className="text-[12px] text-muted">Immobilisation du véhicule pour l&apos;enquête (motif V09 du verrou) : classé en criticité élevée, l&apos;événement propose la commande « Immobiliser … » en tête de la fiche ; la remise en service se fait dans Immobilisations.</p>
         </fieldset>
 
         {refus && <Notice tone="danger">{refus}</Notice>}
