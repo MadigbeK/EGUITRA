@@ -5,12 +5,13 @@ import { useEffect, useState } from "react";
 import { Download, Search, X } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Etat, Field, Input, Notice, Select, Tabs, type Tri } from "@/components/ui";
 import { ORIGINE_ACTION, STATUT_ACTION, Tampon } from "@/components/hsseq/commun";
+import { PROFILS_EXPORT } from "@/components/hsseq/evenements/commun";
 import { apiDownload, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDate, pluriel } from "@/lib/format";
 import type { ActionCounts, ActionLine, ActionOrigin, ActionStatus, Page } from "@/lib/hsseq-types";
 import { Origine, Retard, origineLue } from "./elements";
 import { FicheAction } from "./FicheAction";
-import { AvecFiche, Bascule, ChampSite, Pages, aujourdhui, joursEntre, messageErreur, requete, useAdresse, useReferentiels } from "./outils";
+import { AvecFiche, Bascule, ChampSite, Pages, aProfil, aujourdhui, joursEntre, messageErreur, requete, useAdresse, useReferentiels } from "./outils";
 
 /**
  * Fiche d'origine d'où l'on vient : son paramètre dans l'adresse, la clé du noyau qui filtre ses actions
@@ -50,7 +51,7 @@ const ONGLETS: Record<Onglet, { label: string; statuts: ActionStatus[] | null }>
 };
 const ORDRE_ONGLETS = Object.keys(ONGLETS) as Onglet[];
 
-/** Tris acceptés par le noyau (paramètre `sort`). */
+/** Tris acceptés par le noyau (paramètre `sort`) ; « days_overdue », le retard calculé au jour. */
 const TRIS = ["reference", "due_date", "days_overdue", "status"] as const;
 
 const PAR_PAGE = 50;
@@ -139,21 +140,24 @@ export function PlanActions() {
             À valider par la direction
           </Bascule>
         )}
-        <Button
-          className="ml-auto"
-          loading={export_ === "en_cours"}
-          onClick={async () => {
-            setExport("en_cours");
-            try {
-              await apiDownload(`/hsseq/actions/export.xlsx?${requete({ ...filtres, status: statuts?.join(",") ?? null })}`, `plan_actions_${aujourdhui()}.xlsx`);
-              setExport(null);
-            } catch (e) {
-              setExport(messageErreur(e, "Export impossible."));
-            }
-          }}
-        >
-          <Download className="h-4 w-4" /> Exporter
-        </Button>
+        {/* Export du plan : profils du cockpit ; l'auditeur lit sans exporter (refusé par le noyau). */}
+        {aProfil(ref, ...PROFILS_EXPORT) && (
+          <Button
+            className="ml-auto"
+            loading={export_ === "en_cours"}
+            onClick={async () => {
+              setExport("en_cours");
+              try {
+                await apiDownload(`/hsseq/actions/export.xlsx?${requete({ ...filtres, status: statuts?.join(",") ?? null })}`, `plan_actions_${aujourdhui()}.xlsx`);
+                setExport(null);
+              } catch (e) {
+                setExport(messageErreur(e, "Export impossible."));
+              }
+            }}
+          >
+            <Download className="h-4 w-4" /> Exporter
+          </Button>
+        )}
       </div>
       {export_ && export_ !== "en_cours" && <Notice tone="danger">{export_}</Notice>}
       {venue?.id && <Bandeau source={venue.source} id={venue.id} actions={data?.items} onTout={() => ecrire({ ...SANS_SOURCE, origine: null, statut: null })} />}
@@ -181,7 +185,8 @@ export function PlanActions() {
               sort={tri}
               onSort={(t) => {
                 if (!(TRIS as readonly string[]).includes(t.key)) return;
-                setTri(t);
+                // Retard : le premier clic met les actions les plus en retard en tête.
+                setTri(t.key === "days_overdue" && tri.key !== "days_overdue" ? { key: t.key, dir: -1 } : t);
               }}
               onRowClick={(a) => ecrire({ action: a.id })}
               empty={filtresActifs(filtres) ? "Aucune action pour ces filtres." : "Aucune action dans cet onglet."}

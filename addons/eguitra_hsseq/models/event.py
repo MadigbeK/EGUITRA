@@ -93,7 +93,9 @@ class EguitraHsseqEvent(models.Model):
     classified_by = fields.Many2one("res.users", "Classé par", readonly=True)
     investigation_due = fields.Datetime("Échéance de l'enquête", index=True)
     client_notice_due = fields.Datetime("Information du donneur d'ordre avant le")
+    # Information du donneur d'ordre (criticité élevée, sous 24 heures) : notée par le Responsable HSSEQ.
     client_notified_at = fields.Datetime("Donneur d'ordre informé le")
+    client_notified_by = fields.Many2one("res.users", "Information notée par", readonly=True)
 
     # ─── Enquête ──────────────────────────────────────────────────────────
     investigation_method = fields.Selection(METHODS, "Méthode d'enquête")

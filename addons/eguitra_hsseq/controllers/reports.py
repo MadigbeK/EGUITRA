@@ -239,6 +239,8 @@ def month_payload(template, company, month):
     Month = request.env["eguitra.hsseq.report.month"]
     record = Month._get(template, company, month, create=False)
     report = template._report(company, month)
+    # Période : du premier mois du rapport (janvier, ou le premier mois du modèle) au mois.
+    first = template._first_month(month)
     state = record.state if record else "draft"
     hsseq = is_hsseq()
     freeze = Month._freeze_date(month)
@@ -253,8 +255,8 @@ def month_payload(template, company, month):
                      "vehicle_kind": template.vehicle_kind or None,
                      "start_month": template.start_month.strftime("%Y-%m")},
         "company": company_ref(company), "month": month.strftime("%Y-%m"), "label": month_label(month),
-        "period_label": f"{MONTHS_FR[0].capitalize()} à {MONTHS_FR[month.month - 1]} {month.year}"
-        if month.month > 1 else month_label(month).capitalize(),
+        "period_label": f"{MONTHS_FR[first.month - 1].capitalize()} à {MONTHS_FR[month.month - 1]} {month.year}"
+        if first < month else month_label(month).capitalize(),
         "state": state, "frozen": frozen, "frozen_on": (record.frozen_on or None) if record else None,
         "freeze_date": freeze, "validated_at": (record.validated_at or None) if record else None,
         "validated_by": {"id": record.validated_by.id, "name": record.validated_by.name}
@@ -279,7 +281,8 @@ def fmt_value(value, unit):
 
 def workbook(payload):
     """Classeur au format d'un donneur d'ordre : synthèse du comité, puis plan contre réalisé par mois
-    depuis janvier, cumul de l'année, cible cumulée et état de chaque indicateur."""
+    depuis le premier mois de la période (janvier, ou le premier mois du modèle), cumul, cible cumulée et état
+    de chaque indicateur."""
     import xlsxwriter
 
     out = io.BytesIO()
@@ -366,8 +369,10 @@ def workbook(payload):
             r += 1
             xlsx_row(sheet, r, [row["code"], row["label"], row["unit"] or ""], cell)
             xlsx_row(sheet, r, [row["annual_target"]], plan, col=3)
+            # Douze colonnes de janvier à décembre : la série commence au premier mois de la période.
+            points = {p["month"]: p for p in row["series"]}
             for m in range(12):
-                point = row["series"][m] if m < len(row["series"]) else None
+                point = points.get(f"{payload['month'][:4]}-{m + 1:02d}")
                 xlsx_row(sheet, r, [point["target"] if point else None], plan, col=4 + 2 * m)
                 xlsx_row(sheet, r, [point["value"] if point else None], number, col=5 + 2 * m)
             xlsx_row(sheet, r, [row["ytd"], row["ytd_target"]], number, col=28)

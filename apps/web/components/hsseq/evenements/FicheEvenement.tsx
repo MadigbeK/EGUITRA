@@ -3,19 +3,22 @@
 /**
  * Fiche d'un événement de NIMOVA · HSSEQ (GET /hsseq/events/{id}, §5) : en-tête (référence, type,
  * criticité, statut), frise du cycle déclaré, classé, enquête, actions, clôturé, commandes, onglets.
- * Les commandes ne s'affichent que selon `rights` et `transitions` renvoyés par la fiche ; le noyau
- * refuse le reste, et ses refus s'écrivent en clair sous l'en-tête.
+ * Les commandes ne s'affichent que selon `rights` et `transitions` renvoyés par la fiche et les
+ * profils du compte (création d'une action : Responsable HSSEQ, fiche pas encore close ; rapport
+ * d'enquête : profils du cockpit, jamais l'auditeur) ; le noyau refuse le reste, et ses refus
+ * s'écrivent en clair sous l'en-tête.
  */
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { Check, ChevronLeft, FileText, Lock, MapPin, Pencil, RotateCcw, ShieldCheck } from "@/components/icons";
+import { useState, type ReactNode } from "react";
+import { Check, ChevronLeft, FileText, Lock, MapPin, Pencil, Plus, RotateCcw, ShieldCheck } from "@/components/icons";
 import { Button, ErrorBox, FEUILLE, Field, Loading, Modal, Notice, Tabs, Tag, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { CYCLE_EVENEMENT, Criticite, DOMAINE, STATUT_EVENEMENT, TYPE_EVENEMENT, Tampon, nomRotation, nomVehicule } from "@/components/hsseq/commun";
+import { FenetreAction } from "@/components/hsseq/conformite/fenetres";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { Event as Evenement, EventStatus, EventTransition } from "@/lib/hsseq-types";
-import { SOURCE, fmtJourHeure, messageRefus, useReferentiels } from "./commun";
+import { SOURCE, estResponsableHsseq, fmtJourHeure, messageRefus, peutExporter, useReferentiels } from "./commun";
 import { Declaration } from "./Declaration";
 import { Classement } from "./Classement";
 import { Couts } from "./Couts";
@@ -39,11 +42,13 @@ export function FicheEvenement({ id }: { id: string }) {
   const { data: e, error, mutate } = useApi<Evenement>(/^\d+$/.test(id) ? `/hsseq/events/${id}` : null);
   const { data: referentiels } = useReferentiels();
   const [refus, setRefus] = useState<string | null>(null);
+  const [reussite, setReussite] = useState<ReactNode | null>(null);
   const [envoi, setEnvoi] = useState<EventTransition | null>(null);
   const [corriger, setCorriger] = useState(false);
   const [ouvrirEnquete, setOuvrirEnquete] = useState(false);
   const [rouvrir, setRouvrir] = useState(false);
   const [rapport, setRapport] = useState(false);
+  const [nouvelleAction, setNouvelleAction] = useState(false);
 
   const demande = sp.get("onglet");
   const onglet: Onglet = demande && (ONGLETS as readonly string[]).includes(demande) ? (demande as Onglet) : "resume";
@@ -63,11 +68,13 @@ export function FicheEvenement({ id }: { id: string }) {
   /** Fiche à jour renvoyée par une écriture : elle remplace la fiche affichée, sans relecture. */
   function maj(suivant: Evenement) {
     setRefus(null);
+    setReussite(null);
     void mutate(suivant, { revalidate: false });
   }
 
   async function transition(t: EventTransition, corps?: unknown): Promise<boolean> {
     setRefus(null);
+    setReussite(null);
     setEnvoi(t);
     try {
       maj(await apiSend<Evenement>("POST", `/hsseq/events/${ev.id}/${t}`, corps ?? {}));
@@ -81,7 +88,8 @@ export function FicheEvenement({ id }: { id: string }) {
   }
 
   async function planifier() {
-    if (await demanderConfirmation("Conclure l'enquête et passer aux actions ? L'enquête ne se modifie plus ensuite ; les actions se créent dans le plan d'actions.", { action: "Passer aux actions" })) await transition("plan");
+    if (!(await demanderConfirmation("Conclure l'enquête et passer aux actions ? L'enquête ne se modifie plus ensuite ; les actions se créent dans l'onglet « Actions » de la fiche, par « Nouvelle action ».", { action: "Passer aux actions" }))) return;
+    if (await transition("plan")) changerOnglet("actions");
   }
 
   async function cloturer() {
@@ -101,7 +109,11 @@ export function FicheEvenement({ id }: { id: string }) {
   }
 
   const peut = (t: EventTransition) => ev.transitions.includes(t);
-  const commandes = ev.rights.can_edit || ev.transitions.length > 0 || enqueteOuverte(ev);
+  // Création d'une action d'origine « événement » (POST /hsseq/actions) : Responsable HSSEQ, fiche pas
+  // encore close ; le rapport d'enquête : profils du cockpit (refusé à l'auditeur).
+  const creerAction = estResponsableHsseq(referentiels) && ev.status !== "closed";
+  const rapportPermis = peutExporter(referentiels) && enqueteOuverte(ev);
+  const commandes = ev.rights.can_edit || ev.transitions.length > 0 || creerAction || rapportPermis;
 
   return (
     <div>
@@ -162,6 +174,11 @@ export function FicheEvenement({ id }: { id: string }) {
                 Passer aux actions
               </Button>
             )}
+            {creerAction && (
+              <Button variant={ev.status === "actions" ? "primary" : "secondary"} onClick={() => setNouvelleAction(true)}>
+                <Plus className="h-4 w-4" /> Nouvelle action
+              </Button>
+            )}
             {peut("close") && (
               <Button variant={peut("investigate") ? "secondary" : "primary"} loading={envoi === "close"} onClick={cloturer}>
                 <Lock className="h-4 w-4" /> Clôturer
@@ -179,7 +196,7 @@ export function FicheEvenement({ id }: { id: string }) {
                 <Pencil className="h-4 w-4" /> Corriger la déclaration
               </Button>
             )}
-            {enqueteOuverte(ev) && (
+            {rapportPermis && (
               <Button variant="ghost" loading={rapport} onClick={pdf}>
                 <FileText className="h-4 w-4" /> Rapport d'enquête (PDF)
               </Button>
@@ -189,6 +206,11 @@ export function FicheEvenement({ id }: { id: string }) {
         {refus && (
           <div className="mt-4">
             <Notice tone="danger">{refus}</Notice>
+          </div>
+        )}
+        {reussite && !refus && (
+          <div className="mt-4">
+            <Notice tone="ok">{reussite}</Notice>
           </div>
         )}
         {(ev.immobilization || ev.immobilization_proposed) && (
@@ -212,10 +234,10 @@ export function FicheEvenement({ id }: { id: string }) {
         onChange={changerOnglet}
       />
 
-      {onglet === "resume" && <Resume e={ev} onRecharger={() => void mutate()} />}
+      {onglet === "resume" && <Resume e={ev} onRecharger={() => void mutate()} onMaj={maj} />}
       {onglet === "classement" && <Classement e={ev} referentiels={referentiels} onMaj={maj} />}
-      {onglet === "enquete" && <Enquete e={ev} referentiels={referentiels} onMaj={maj} onOuvrir={() => setOuvrirEnquete(true)} onPlanifier={planifier} envoiPlan={envoi === "plan"} onRapport={pdf} rapport={rapport} />}
-      {onglet === "actions" && <ActionsLiees e={ev} />}
+      {onglet === "enquete" && <Enquete e={ev} referentiels={referentiels} onMaj={maj} onOuvrir={() => setOuvrirEnquete(true)} onPlanifier={planifier} envoiPlan={envoi === "plan"} onRapport={rapportPermis ? pdf : undefined} rapport={rapport} />}
+      {onglet === "actions" && <ActionsLiees e={ev} onNouvelle={creerAction ? () => setNouvelleAction(true) : undefined} />}
       {onglet === "couts" && <Couts e={ev} referentiels={referentiels} onMaj={maj} />}
       {onglet === "notifications" && <Notifications e={ev} />}
       {onglet === "journal" && <Journal e={ev} />}
@@ -244,6 +266,38 @@ export function FicheEvenement({ id }: { id: string }) {
         refus={refus}
       />
       <Reouverture open={rouvrir} e={ev} onClose={() => setRouvrir(false)} onMaj={(s) => { setRouvrir(false); maj(s); }} />
+      {nouvelleAction && (
+        <FenetreAction
+          titre={`Nouvelle action pour ${ev.reference}`}
+          origine={{ origin: "event", origin_id: ev.id }}
+          rappel={
+            <>
+              <span className="font-semibold text-ink">{ev.title}</span>
+              {ev.investigation.root_cause ? (
+                <span className="block">
+                  <span className="text-muted">Cause racine : </span>
+                  {ev.investigation.root_cause}
+                </span>
+              ) : null}
+            </>
+          }
+          onClose={() => setNouvelleAction(false)}
+          onCreee={(a) => {
+            setRefus(null);
+            setReussite(
+              <>
+                Action{" "}
+                <Link href={`/hsseq/actions?action=${a.id}`} className="font-semibold text-accent underline-offset-2 hover:underline">
+                  {a.reference}
+                </Link>{" "}
+                ajoutée au plan d&apos;actions.
+              </>,
+            );
+            void mutate();
+            changerOnglet("actions");
+          }}
+        />
+      )}
     </div>
   );
 }

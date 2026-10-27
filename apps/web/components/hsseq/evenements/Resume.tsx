@@ -2,19 +2,20 @@
 
 /**
  * Résumé d'un événement : la déclaration, les personnes en cause, les conséquences, les échéances du
- * niveau (§9.1) et les photos et pièces (POST, DELETE /hsseq/attachments). Confidentialité (§9.4) :
- * aucune donnée médicale ni résultat d'alcootest n'est tenu ni affiché ici.
+ * niveau (§9.1), dont l'information du donneur d'ordre que note le Responsable HSSEQ (PATCH
+ * client_notified_at), et les photos et pièces (POST, DELETE /hsseq/attachments). Confidentialité
+ * (§9.4) : aucune donnée médicale ni résultat d'alcootest n'est tenu ni affiché ici.
  */
 
 import { useState, type ReactNode } from "react";
-import { Download, FileText, Trash2 } from "@/components/icons";
-import { Button, Card, FileButton, Notice, Tag, demanderConfirmation } from "@/components/ui";
+import { Download, FileText, Pencil, Trash2 } from "@/components/icons";
+import { Button, Card, Field, FileButton, Input, Modal, Notice, Tag, demanderConfirmation } from "@/components/ui";
 import { ROLE_PERSONNE, nomRotation, nomVehicule } from "@/components/hsseq/commun";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtGNF, fmtInt, pluriel } from "@/lib/format";
 import type { Attachment, Event as Evenement } from "@/lib/hsseq-types";
 import type { Me } from "@/lib/types";
-import { EcheanceEnquete, NATURE_PERSONNE, SOURCE, estResponsableHsseq, fmtJourHeure, messageRefus, urlPiece, useReferentiels } from "./commun";
+import { EcheanceEnquete, NATURE_PERSONNE, SOURCE, estResponsableHsseq, fmtJourHeure, isoDepuisLocal, localDepuisIso, messageRefus, urlPiece, useReferentiels } from "./commun";
 
 const FORMATS = ["image/jpeg", "image/png", "application/pdf"];
 const TAILLE_MAX = 8 * 1024 * 1024;
@@ -28,7 +29,7 @@ function Ligne({ terme, children }: { terme: string; children: ReactNode }) {
   );
 }
 
-export function Resume({ e, onRecharger }: { e: Evenement; onRecharger: () => void }) {
+export function Resume({ e, onRecharger, onMaj }: { e: Evenement; onRecharger: () => void; onMaj: (e: Evenement) => void }) {
   const gps = e.latitude !== null && e.longitude !== null;
   const ecartSynchro = e.source === "terrain" && e.synced_at && e.reported_at && Math.abs(Date.parse(e.synced_at) - Date.parse(e.reported_at)) > 5 * 60_000;
   return (
@@ -75,13 +76,7 @@ export function Resume({ e, onRecharger }: { e: Evenement; onRecharger: () => vo
                 <EcheanceEnquete date={e.deadlines.investigation_due} enRetard={e.investigation_overdue} />
               </Ligne>
               <Ligne terme="Donneur d'ordre">
-                {e.deadlines.client_notified_at ? (
-                  <>Informé le {fmtJourHeure(e.deadlines.client_notified_at)}</>
-                ) : e.deadlines.client_notice_due ? (
-                  <>À informer au plus tard le {new Date(`${e.deadlines.client_notice_due.slice(0, 10)}T00:00:00`).toLocaleDateString("fr-FR")}</>
-                ) : (
-                  <span className="text-muted">Sans objet</span>
-                )}
+                <InformationDonneur e={e} onMaj={onMaj} />
               </Ligne>
               {e.classified_at && <Ligne terme="Classé le">{`${fmtJourHeure(e.classified_at)}${e.classified_by ? `, par ${e.classified_by.name}` : ""}`}</Ligne>}
               {e.closed_at && <Ligne terme="Clôturé le">{`${fmtJourHeure(e.closed_at)}${e.closed_by ? `, par ${e.closed_by.name}` : ""}`}</Ligne>}
@@ -118,6 +113,115 @@ export function Resume({ e, onRecharger }: { e: Evenement; onRecharger: () => vo
 
       <Pieces e={e} onRecharger={onRecharger} />
     </div>
+  );
+}
+
+/* ─── Information du donneur d'ordre ──────────────────────────────────── */
+
+/**
+ * Information du donneur d'ordre (§9.1 : criticité élevée, sous 24 heures par défaut) : l'échéance, en
+ * alerte une fois dépassée, puis l'information notée (date, heure et auteur). Le Responsable HSSEQ la
+ * note, la corrige ou la retire tant que la fiche n'est pas close ; chaque écriture est journalisée.
+ */
+function InformationDonneur({ e, onMaj }: { e: Evenement; onMaj: (e: Evenement) => void }) {
+  const { data: referentiels } = useReferentiels();
+  const [ouverte, setOuverte] = useState(false);
+  const { client_notice_due: echeance, client_notified_at: informe, client_notified_by: auteur } = e.deadlines;
+  const noter = estResponsableHsseq(referentiels) && e.status !== "closed";
+  const depassee = !informe && echeance !== null && Date.parse(echeance) < Date.now();
+  return (
+    <span className="flex flex-col items-start gap-1.5">
+      {informe ? (
+        <span>
+          Informé le {fmtJourHeure(informe)}
+          {auteur && <span className="text-muted">{`, noté par ${auteur.name}`}</span>}
+        </span>
+      ) : echeance ? (
+        <span className={depassee ? "font-semibold text-danger" : undefined}>
+          À informer au plus tard le {fmtJourHeure(echeance)}
+          {depassee && <span className="block text-[12px]">Échéance dépassée</span>}
+        </span>
+      ) : (
+        <span className="text-muted">Sans objet</span>
+      )}
+      {noter && (
+        <Button size="sm" variant={echeance && !informe ? "secondary" : "ghost"} className={echeance && !informe ? undefined : "-ml-2.5"} onClick={() => setOuverte(true)}>
+          <Pencil className="h-3.5 w-3.5" /> {informe ? "Corriger l'information" : "Noter l'information"}
+        </Button>
+      )}
+      {ouverte && (
+        <FenetreInformation
+          e={e}
+          onClose={() => setOuverte(false)}
+          onMaj={(suivant) => {
+            setOuverte(false);
+            onMaj(suivant);
+          }}
+        />
+      )}
+    </span>
+  );
+}
+
+/** Date et heure de l'information du donneur d'ordre : ni dans le futur, ni avant l'événement. */
+function FenetreInformation({ e, onClose, onMaj }: { e: Evenement; onClose: () => void; onMaj: (e: Evenement) => void }) {
+  const informe = e.deadlines.client_notified_at;
+  const [valeur, setValeur] = useState(() => localDepuisIso(informe));
+  const [envoi, setEnvoi] = useState(false);
+  const [refus, setRefus] = useState<string | null>(null);
+  const iso = isoDepuisLocal(valeur);
+  const futur = iso !== null && Date.parse(iso) > Date.now() + 5 * 60_000;
+  const avant = iso !== null && Date.parse(iso) < Date.parse(e.occurred_at);
+  const erreur = !iso ? "Indiquez la date et l'heure." : futur ? "Date dans le futur." : avant ? "Antérieure à l'événement." : undefined;
+
+  async function envoyer(corps: { client_notified_at: string | null }) {
+    setEnvoi(true);
+    setRefus(null);
+    try {
+      onMaj(await apiSend<Evenement>("PATCH", `/hsseq/events/${e.id}`, corps));
+    } catch (err) {
+      setRefus(messageRefus(err, "L'information n'a pas été enregistrée."));
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  async function retirer() {
+    if (await demanderConfirmation("Retirer l'information du donneur d'ordre ? La fiche reviendra « À informer » ; le retrait est journalisé.", { action: "Retirer", danger: true })) await envoyer({ client_notified_at: null });
+  }
+
+  return (
+    <Modal
+      open
+      title={`Information du donneur d'ordre, ${e.reference}`}
+      onClose={onClose}
+      footer={
+        <>
+          {informe && (
+            <Button variant="ghost" className="mr-auto" disabled={envoi} onClick={() => void retirer()}>
+              Retirer l&apos;information
+            </Button>
+          )}
+          <Button onClick={onClose}>Annuler</Button>
+          <Button variant="primary" loading={envoi} disabled={erreur !== undefined} onClick={() => void envoyer({ client_notified_at: iso })}>
+            Enregistrer
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <p className="text-[13.5px] leading-relaxed text-ink-2">
+          {e.deadlines.client_notice_due
+            ? `Criticité élevée : le donneur d'ordre est informé au plus tard le ${fmtJourHeure(e.deadlines.client_notice_due)}.`
+            : "Notez quand le donneur d'ordre a été informé de l'événement."}{" "}
+          La date, l&apos;heure et votre nom sont repris dans la fiche et au journal.
+        </p>
+        <Field label="Informé le" error={valeur ? erreur : undefined}>
+          <Input type="datetime-local" required max={localDepuisIso(null)} value={valeur} onChange={(ev) => setValeur(ev.target.value)} />
+        </Field>
+        {refus && <Notice tone="danger">{refus}</Notice>}
+      </div>
+    </Modal>
   );
 }
 

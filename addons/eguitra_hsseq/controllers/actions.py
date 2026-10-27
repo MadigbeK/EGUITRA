@@ -2,8 +2,9 @@
 
 Lecture : administration, direction et hsseq ; chef de parc pour les actions de ses sites et les siennes ;
 tout compte interne pour les actions dont il est responsable (maintenance, qualité…). Création et
-vérification d'efficacité par hsseq ; mise à jour, démarrage et clôture par le responsable ou hsseq ;
-validation d'une action coûteuse par la direction."""
+vérification d'efficacité par hsseq ; mise à jour, démarrage et clôture par le responsable ou hsseq, le
+responsable, l'échéance et le coût estimé restant à hsseq (une valeur inchangée est ignorée) ; validation
+d'une action coûteuse par la direction. Tri par retard (days_overdue) calculé au jour."""
 
 from odoo import fields, http
 from odoo.http import request
@@ -38,7 +39,12 @@ from .common import (
     yard_domain,
 )
 
-SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "created_at": "create_date"}
+SORTS = {"due_date": "due_date", "reference": "reference", "status": "status", "created_at": "create_date",
+         # Retard (days_overdue) : calculé au jour, il n'est pas stocké ; trié par overdue_search.
+         "days_overdue": "due_date"}
+OPEN = ("todo", "in_progress")
+# Responsable, échéance et coût estimé : réservés au Responsable HSSEQ (une valeur inchangée est ignorée).
+RESERVED = ("owner_id", "due_date", "estimated_cost")
 # Origine d'une action -> (fiche de l'API, champ de l'action). Origine « audit » : l'action répond à un constat
 # de l'audit (origin_id : le constat).
 ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id"),
@@ -191,6 +197,19 @@ def get_action(action_id):
     return action
 
 
+def unchanged(action, data, key):
+    """Champ réservé (responsable, échéance, coût estimé) renvoyé avec la valeur de l'action : un coût vide
+    vaut zéro, comme dans _values."""
+    action = action.sudo()
+    if key == "owner_id":
+        return int_or_none(data, "owner_id") == action.owner_id.id
+    if key == "due_date":
+        return date_value(data, "due_date") == action.due_date
+    cost = max(number(data, "estimated_cost"), 0.0)
+    return action.currency_id.compare_amounts(cost, action.estimated_cost or 0.0) == 0 if action.currency_id \
+        else cost == (action.estimated_cost or 0.0)
+
+
 def approval_pending_domain(comps):
     """Actions coûteuses (au seuil des paramètres de leur société) en attente de la validation de la direction."""
     Settings = request.env["eguitra.hsseq.settings"]
@@ -216,7 +235,7 @@ def list_domain(kw):
     if str(kw.get("mine", "")) in ("1", "true"):
         domain.append(("owner_id", "=", request.env.uid))
     if str(kw.get("overdue", "")) in ("1", "true"):
-        domain += [("status", "in", ("todo", "in_progress")), ("due_date", "<", today())]
+        domain += [("status", "in", OPEN), ("due_date", "<", today())]
     if kw.get("site_id"):
         domain.append(("site_id", "=", int_or_none(kw, "site_id")))
     if kw.get("due_before"):
@@ -232,6 +251,30 @@ def list_domain(kw):
     return domain
 
 
+def overdue_search(domain, offset, limit, desc):
+    """Tri par retard (days_overdue, calculé au jour) : décroissant, les actions en retard de la plus en retard
+    à la moins en retard (échéance croissante), puis les autres, sans retard, par échéance ; croissant, les
+    actions sans retard d'abord, puis les actions en retard de la moins en retard à la plus en retard. Les
+    deux segments se lisent à la suite, page comprise."""
+    Action = request.env["eguitra.hsseq.action"].sudo()
+    day = today()
+    late = domain + [("status", "in", OPEN), ("due_date", "<", day)]
+    on_time = domain + ["|", ("status", "not in", OPEN), ("due_date", ">=", day)]
+    segments = [(late, "due_date asc, id desc"), (on_time, "due_date asc, id desc")] if desc else \
+        [(on_time, "due_date asc, id desc"), (late, "due_date desc, id desc")]
+    rows = Action.browse()
+    for segment, order in segments:
+        if len(rows) >= limit:
+            break
+        count = Action.search_count(segment)
+        if offset >= count:
+            offset -= count
+            continue
+        rows += Action.search(segment, offset=offset, limit=limit - len(rows), order=order)
+        offset = 0
+    return rows
+
+
 class EguitraHsseqActions(http.Controller):
     @hsseq_route("/hsseq/actions", profiles=None)
     def actions(self, **kw):
@@ -239,7 +282,11 @@ class EguitraHsseqActions(http.Controller):
         domain = list_domain(kw)
         offset, limit, order = page_args(kw, "due_date", SORTS)
         Action = request.env["eguitra.hsseq.action"].sudo()
-        rows = Action.search(domain, offset=offset, limit=limit, order=order)
+        sort = kw.get("sort") or "due_date"
+        if sort.lstrip("-") == "days_overdue":
+            rows = overdue_search(domain, offset, limit, desc=sort.startswith("-"))
+        else:
+            rows = Action.search(domain, offset=offset, limit=limit, order=order)
         by_status = {code: Action.search_count(domain + [("status", "=", code)]) for code, _l in ACTION_STATUSES}
         counts = {"by_status": by_status,
                   "overdue": Action.search_count(domain + [("status", "in", ("todo", "in_progress")),
@@ -319,7 +366,9 @@ class EguitraHsseqActions(http.Controller):
         if not rights(action)["can_edit"]:
             raise forbidden("Seuls le responsable de l'action et le Responsable HSSEQ la mettent à jour, tant "
                             "qu'elle n'est ni close ni annulée.")
-        if {"owner_id", "due_date", "estimated_cost"} & set(data) and not is_hsseq():
+        # Un formulaire complet renvoie aussi les champs réservés tels quels : une valeur inchangée est ignorée.
+        data = {key: value for key, value in data.items() if key not in RESERVED or not unchanged(action, data, key)}
+        if set(RESERVED) & set(data) and not is_hsseq():
             raise forbidden("Responsable, échéance et coût estimé d'une action : réservés au Responsable HSSEQ.")
         action.write(self._values(data, action))
         return action_detail(action)

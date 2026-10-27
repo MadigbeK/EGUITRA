@@ -20,7 +20,7 @@ import { CYCLE_EVENEMENT, Criticite, DOMAINE, NIVEAUX, STATUT_EVENEMENT, TYPE_EV
 import { apiDownload, useApi } from "@/lib/api-client";
 import { fmtInt } from "@/lib/format";
 import type { CriticalityLevel, Domain, EventCounts, EventLine, EventStatus, EventType, Page, Ref, VehicleKind } from "@/lib/hsseq-types";
-import { EcheanceEnquete, OPTIONS_NIVEAUX, fmtHeure, messageRefus, sitesDuCompte, useReferentiels } from "./commun";
+import { EcheanceEnquete, OPTIONS_NIVEAUX, fmtHeure, messageRefus, peutExporter, sitesDuCompte, useReferentiels } from "./commun";
 import { Declaration } from "./Declaration";
 
 const PAR_PAGE = 50;
@@ -216,9 +216,12 @@ export function ListeEvenements() {
         subtitle="Accidents, presque-accidents, situations dangereuses, déversements et atteintes à la sûreté : de la déclaration à la clôture, avec la criticité, l'enquête et les actions."
         actions={
           <>
-            <Button onClick={exporter} loading={export_.envoi}>
-              <Download className="h-4 w-4" /> Exporter le registre
-            </Button>
+            {/* Export du registre : profils du cockpit ; l'auditeur lit sans exporter (refusé par le noyau). */}
+            {peutExporter(ref) && (
+              <Button onClick={exporter} loading={export_.envoi}>
+                <Download className="h-4 w-4" /> Exporter le registre
+              </Button>
+            )}
             <Button variant="primary" onClick={() => setDeclarer(true)}>
               <Plus className="h-4 w-4" /> Déclarer un événement
             </Button>

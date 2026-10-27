@@ -88,7 +88,8 @@ export function Enquete({
   onOuvrir: () => void;
   onPlanifier: () => void;
   envoiPlan: boolean;
-  onRapport: () => void;
+  /** Rapport d'enquête en PDF ; absent pour un profil qui ne l'obtient pas (auditeur). */
+  onRapport?: () => void;
   rapport: boolean;
 }) {
   // Enquête que le noyau vient d'enregistrer : l'éditeur, reparti de sa réponse, le confirme.
@@ -175,7 +176,7 @@ function Editeur({
   onMaj: (e: Evenement) => void;
   onPlanifier: () => void;
   envoiPlan: boolean;
-  onRapport: () => void;
+  onRapport?: () => void;
   rapport: boolean;
 }) {
   const attendue = methodeAttendue(e.level, referentiels?.criticality_thresholds);
@@ -205,9 +206,11 @@ function Editeur({
       <Card
         title="Conduite de l'enquête"
         actions={
-          <Button variant="ghost" size="sm" loading={rapport} onClick={onRapport}>
-            <FileText className="h-4 w-4" /> Rapport d'enquête (PDF)
-          </Button>
+          onRapport && (
+            <Button variant="ghost" size="sm" loading={rapport} onClick={onRapport}>
+              <FileText className="h-4 w-4" /> Rapport d'enquête (PDF)
+            </Button>
+          )
         }
       >
         <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

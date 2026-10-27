@@ -86,8 +86,9 @@ export type Lecture = "cumul" | "mois";
 /**
  * Indicateurs du mois, proactifs puis réactifs. « Mois et cumul » : plan et réalisé du mois, cumul de
  * l'année, état, commentaire ; les valeurs à saisie manuelle et les commentaires s'y saisissent quand
- * le compte le peut (rights.can_edit). « Mois par mois » : le réalisé de chaque mois depuis janvier,
- * marqué comme au comité (losange : cible manquée ; orange : à moins de la marge).
+ * le compte le peut (rights.can_edit). « Mois par mois » : le réalisé de chaque mois de la période
+ * (depuis janvier, ou le premier mois du modèle), marqué comme au comité (losange : cible manquée ;
+ * orange : à moins de la marge).
  */
 export function Indicateurs({ r, lecture, onLecture, saisie, brouillon, onValeur, onCommentaire }: {
   r: MonthlyReport;
@@ -279,7 +280,7 @@ function TableMois({ titre, r, lignes }: { titre: string; r: MonthlyReport; lign
       <div role="region" aria-label={`Tableau : ${titre.replace(/^\d+\.\s*/, "")}`} tabIndex={0} className={CADRE}>
         <table className="w-full min-w-[760px] border-collapse text-[13px]">
           <caption className="sr-only">
-            {titre} : plan annuel, réalisé de chaque mois depuis janvier, cumul et état. Une case marquée d&apos;un losange manque la cible du mois ; une case en orange en est à moins de la marge.
+            {titre} : plan de l&apos;année, réalisé de chaque mois de la période, cumul et état. Une case marquée d&apos;un losange manque la cible du mois ; une case en orange en est à moins de la marge.
           </caption>
           <thead>
             <tr className={ENTETE}>

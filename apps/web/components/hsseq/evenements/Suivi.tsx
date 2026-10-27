@@ -1,22 +1,28 @@
 "use client";
 
 /**
- * Suivi d'un événement : actions liées (lien vers le plan d'actions), notifications envoyées (dans
- * l'application et par courriel, pas de SMS au lot 1) et journal de la fiche (§11).
+ * Suivi d'un événement : actions liées (création d'une action par le Responsable HSSEQ, lien vers le
+ * plan d'actions), notifications envoyées (dans l'application et par courriel, pas de SMS au lot 1) et
+ * journal de la fiche (§11), en clair.
  */
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight } from "@/components/icons";
-import { Card, DataTable, Notice, classesBouton } from "@/components/ui";
-import { NIVEAU_MAITRISE, STATUT_ACTION, STATUT_EVENEMENT, Tampon } from "@/components/hsseq/commun";
-import { INSECABLE, fmtDate, fmtGNF, fmtInt, pluriel } from "@/lib/format";
-import type { ActionLine, Event as Evenement, EventStatus, HistoryEntry, HsseqNotification } from "@/lib/hsseq-types";
+import { ArrowUpRight, Plus } from "@/components/icons";
+import { Button, Card, DataTable, Notice, classesBouton } from "@/components/ui";
+import { NIVEAU_MAITRISE, STATUT_ACTION, Tampon } from "@/components/hsseq/commun";
+import { CHAMP_EVENEMENT, OPERATION_EVENEMENT, operationLue, valeurLue } from "@/components/hsseq/journal";
+import { INSECABLE, fmtDate, fmtInt, pluriel } from "@/lib/format";
+import type { ActionLine, Event as Evenement, HistoryEntry, HsseqNotification } from "@/lib/hsseq-types";
 import { CANAL, fmtJourHeure } from "./commun";
 
 /* ─── Actions liées ───────────────────────────────────────────────────── */
 
-export function ActionsLiees({ e }: { e: Evenement }) {
+/**
+ * Actions de l'événement. `onNouvelle` (Responsable HSSEQ, fiche pas encore close : la règle du noyau)
+ * ouvre la création d'une action d'origine « événement ».
+ */
+export function ActionsLiees({ e, onNouvelle }: { e: Evenement; onNouvelle?: () => void }) {
   const router = useRouter();
   const ouvertes = e.actions.filter((a) => a.status !== "closed" && a.status !== "cancelled").length;
   return (
@@ -24,15 +30,25 @@ export function ActionsLiees({ e }: { e: Evenement }) {
       {e.status === "actions" && ouvertes > 0 && (
         <Notice tone="neutral">{`La clôture de l'événement attend la clôture ou l'annulation de ${pluriel(ouvertes, "action ouverte", "actions ouvertes")}.`}</Notice>
       )}
+      {e.status === "actions" && e.actions.length === 0 && onNouvelle && (
+        <Notice tone="neutral">Enquête conclue : créez ici les actions correctives et préventives, une par mesure, avec leur responsable et leur échéance.</Notice>
+      )}
       <Card
         title="Actions liées"
         padded={false}
         actions={
-          // Plan d'actions : fiche ouverte par ?action=, actions d'origine événement par ?origine=event ;
-          // ?evenement= (event_id du contrat) borne la liste à cet événement quand l'écran le lit.
-          <Link href={`/hsseq/actions?origine=event&evenement=${e.id}`} className={classesBouton("secondary", "sm")}>
-            Plan d'actions de l'événement <ArrowUpRight className="h-3.5 w-3.5" />
-          </Link>
+          <span className="flex flex-wrap items-center gap-2">
+            {onNouvelle && (
+              <Button size="sm" variant={e.status === "actions" ? "primary" : "secondary"} onClick={onNouvelle}>
+                <Plus className="h-3.5 w-3.5" /> Nouvelle action
+              </Button>
+            )}
+            {/* Plan d'actions : fiche ouverte par ?action=, actions d'origine événement par ?origine=event ;
+                ?evenement= (event_id du contrat) borne la liste à cet événement. */}
+            <Link href={`/hsseq/actions?origine=event&evenement=${e.id}`} className={classesBouton("secondary", "sm")}>
+              Plan d'actions de l'événement <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </span>
         }
       >
         <DataTable
@@ -105,23 +121,14 @@ export function Notifications({ e }: { e: Evenement }) {
 
 /* ─── Journal ─────────────────────────────────────────────────────────── */
 
-/** Champs journalisés dont la valeur se traduit ; les autres s'affichent tels que le noyau les écrit. */
-const CHAMP: Record<string, { label: string; valeur?: (v: string) => string }> = {
-  status: { label: "Statut", valeur: (v) => STATUT_EVENEMENT[v as EventStatus] ?? v },
-  criticality: { label: "Criticité" },
-  total_cost: { label: "Coût total", valeur: (v) => fmtGNF(v) },
-  root_cause: { label: "Cause racine" },
-  type: { label: "Type" },
-  domain: { label: "Domaine" },
-};
-
+/** Champ modifié, ses valeurs avant et après, en clair (codes traduits, dates à la française). */
 function Detail({ h }: { h: HistoryEntry }) {
-  if (!h.field) return <span className="text-muted">–</span>;
-  const c = CHAMP[h.field];
-  const lire = (v: string | null) => (v === null || v === "" ? "vide" : c?.valeur ? c.valeur(v) : v);
+  const champ = h.field;
+  if (!champ) return <span className="text-muted">–</span>;
+  const lire = (v: string | null) => valeurLue(CHAMP_EVENEMENT, champ, v);
   return (
     <span>
-      <span className="text-muted">{c?.label ?? h.field} : </span>
+      <span className="text-muted">{CHAMP_EVENEMENT[champ]?.label ?? champ} : </span>
       {lire(h.old_value)} <span aria-hidden>→</span>
       <span className="sr-only"> devient </span> {lire(h.new_value)}
     </span>
@@ -139,7 +146,7 @@ export function Journal({ e }: { e: Evenement }) {
         columns={[
           { key: "at", label: "Date", render: (h) => <span className="whitespace-nowrap">{fmtJourHeure(h.at)}</span> },
           { key: "by", label: "Par", render: (h) => h.by?.name ?? "Système", sortValue: (h) => h.by?.name ?? "" },
-          { key: "action", label: "Opération", render: (h) => (h.note ? `${h.action} : ${h.note}` : h.action) },
+          { key: "action", label: "Opération", render: (h) => operationLue(h, OPERATION_EVENEMENT), sortValue: (h) => OPERATION_EVENEMENT[h.action] ?? h.action },
           { key: "field", label: "Détail", render: (h) => <Detail h={h} /> },
         ]}
       />

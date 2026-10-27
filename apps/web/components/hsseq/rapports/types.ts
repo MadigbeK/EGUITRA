@@ -139,7 +139,10 @@ export interface ReportPoint {
   status: IndicatorStatus;
 }
 
-/** Indicateur du rapport d'un mois : le mois, le cumul de janvier au mois, l'état du cumul. */
+/**
+ * Indicateur du rapport d'un mois : le mois, le cumul depuis le premier mois de la période (janvier, ou
+ * le premier mois du modèle s'il vient plus tard dans l'année), l'état du cumul.
+ */
 export interface ReportIndicator {
   id: number;
   code: string;
@@ -159,7 +162,7 @@ export interface ReportIndicator {
   status: IndicatorStatus;
   /** Commentaire du mois. */
   comment: string | null;
-  /** De janvier au mois du rapport. */
+  /** Du premier mois de la période au mois du rapport. */
   series: ReportPoint[];
 }
 
@@ -220,7 +223,7 @@ export interface MonthlyReport {
   company: Ref;
   month: string;
   label: string;
-  /** « Janvier à septembre 2026 ». */
+  /** « Janvier à septembre 2026 » ; « Juillet à septembre 2026 » pour un modèle commencé en juillet. */
   period_label: string;
   state: ReportState;
   frozen: boolean;

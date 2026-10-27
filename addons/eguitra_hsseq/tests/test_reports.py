@@ -65,7 +65,8 @@ class TestReports(HsseqCase):
         status, report = self.api("kadi.hsseq", "GET", path)
         self.assertEqual(status, 200, report)
         rows = {i["code"]: i for i in report["indicators"]}
-        self.assertEqual(len(report["months"]), self.day.month, "De janvier au mois du rapport")
+        self.assertEqual(report["months"], [f"{self.day:%Y-%m}"],
+                         "Du premier mois du modèle (celui de sa création) au mois du rapport")
         self.assertEqual((rows["A1-12"]["value"], rows["B1-1"]["value"]), (1.0, 1.0))
         self.assertEqual(rows["B1-1"]["status"], "missed", "Un accident pour une cible nulle : non conforme")
         self.assertEqual(rows["A1-1"]["status"], "no_data", "Indicateur saisi, pas encore renseigné")

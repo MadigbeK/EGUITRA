@@ -441,12 +441,23 @@ class EguitraHsseqReportTemplateCompute(models.Model):
 
     # ─── Rapport d'un mois ────────────────────────────────────────────────
 
+    def _first_month(self, month):
+        """Premier mois du rapport d'un mois : janvier, ou le premier mois du modèle s'il vient plus tard dans
+        l'année (les mois antérieurs n'entrent ni dans le plan cumulé ni dans le cumul) ; un mois antérieur au
+        premier mois du modèle se lit seul."""
+        self.ensure_one()
+        january = date(month.year, 1, 1)
+        start = month_start(self.start_month) if self.start_month else january
+        return min(month, max(january, start))
+
     def _report(self, company, month):
-        """Rapport du mois : pour chaque indicateur, plan contre réalisé par mois depuis janvier, cumul de
-        l'année et son état ; synthèse pour le comité (santé globale, points d'attention, tendance)."""
+        """Rapport du mois : pour chaque indicateur, plan contre réalisé par mois depuis le premier mois de la
+        période (janvier, ou le premier mois du modèle), cumul et son état ; synthèse pour le comité (santé
+        globale, points d'attention, tendance)."""
         self.ensure_one()
         settings = self.env["eguitra.hsseq.settings"]._get(company)
-        months = [date(month.year, m, 1) for m in range(1, month.month + 1)]
+        first = self._first_month(month)
+        months = [date(month.year, m, 1) for m in range(first.month, month.month + 1)]
         Month = self.env["eguitra.hsseq.report.month"]
         records = {m: Month._get(self, company, m, create=False) for m in months}
         live, comps = {}, None
@@ -484,7 +495,8 @@ class EguitraHsseqReportTemplateCompute(models.Model):
             ytd, ytd_target = self._cumulate(indicator, series)
             status = indicator_status(ytd, ytd_target, indicator.direction, self.compliant_ratio, self.watch_ratio,
                                       indicator.alert_threshold if indicator.has_threshold else None)
-            annual = [t for t in (indicator._target(date(month.year, m, 1), settings) for m in range(1, 13))
+            # Plan de l'année : du premier mois de la période à décembre.
+            annual = [t for t in (indicator._target(date(month.year, m, 1), settings) for m in range(first.month, 13))
                       if t is not None]
             if not annual:
                 annual_target = None
