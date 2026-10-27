@@ -69,7 +69,9 @@ class TestAdmin(RefusParProfil, ApiCase):
             "name": "Mariama Achats", "login": "mariama.achats", "password": "Provisoire-2026", "profiles": ["achats"],
         }, token=token)
         self.assertEqual(status, 200, acheteuse)
-        self.assertEqual((acheteuse["profiles"], acheteuse["apps"]), (["achats"], ["finance"]))
+        # NIMOVA · Agenda s'ouvre à tout compte interne, là où son module est installé.
+        agenda = ["agenda"] if "eguitra.agenda.calendar" in self.env else []
+        self.assertEqual((acheteuse["profiles"], acheteuse["apps"]), (["achats"], ["finance", *agenda]))
         # Droit déclaré par eguitra_finance : absent quand ce module n'est pas installé.
         self.assertFalse(acheteuse["rights"].get("free_accounts"), "Saisie libre des comptes non accordée")
 
@@ -83,7 +85,7 @@ class TestAdmin(RefusParProfil, ApiCase):
         self.assertTrue(user["password_change_required"])
         # HSSEQ (web) et NIMOVA Terrain s'ouvrent aussi au chef de parc, là où leur module est installé.
         hsseq_apps = ["hsseq", "terrain"] if "eguitra.hsseq.event" in self.env else []
-        self.assertEqual(sorted(user["apps"]), sorted(["finance", "mobile", "transport", *hsseq_apps]))
+        self.assertEqual(sorted(user["apps"]), sorted(["finance", "mobile", "transport", *hsseq_apps, *agenda]))
 
         status, _b = self.call("POST", "/admin/users", {
             "name": "Doublon", "login": "ibrahima", "password": "Provisoire-2026", "profiles": ["finance"],
@@ -134,11 +136,12 @@ class TestAdmin(RefusParProfil, ApiCase):
         self.assertEqual(status, 422, body)
         self.assertIn("MB AxisPro Consulting", body["message"])
         status, user = self.call("POST", "/admin/users", dict(compte, company_ids=[cabinet.id]), token=token)
-        self.assertEqual((status, sorted(user["apps"])), (200, ["analyse", "axispro"]), user)
+        agenda = ["agenda"] if "eguitra.agenda.calendar" in self.env else []
+        self.assertEqual((status, sorted(user["apps"])), (200, sorted(["analyse", "axispro", *agenda])), user)
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "chantiers"]}, token=token)
         self.assertEqual(status, 422, "Le profil chantiers exige EGUITRA GROUP")
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "finance"]}, token=token)
-        self.assertEqual((status, sorted(body["apps"])), (200, ["analyse", "axispro", "finance"]),
+        self.assertEqual((status, sorted(body["apps"])), (200, sorted(["analyse", "axispro", "finance", *agenda])),
                          "Un comptable du cabinet ouvre Finance, AxisPro Suite et Analyse, dans le seul cabinet")
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual({p["code"]: p["entity"] for p in profils}["cabinet"], "cabinet")

@@ -57,6 +57,7 @@ APP_LABELS = {
     "mobile": "NIMOVA · Rotations",
     "analyse": "NIMOVA · Analyse",
     "rh": "NIMOVA · RH",
+    "agenda": "NIMOVA · Agenda",
     PLATFORM_APP: "Plateforme (connexion, compte, autre)",
 }
 
