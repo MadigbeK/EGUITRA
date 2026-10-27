@@ -266,6 +266,7 @@ export function Saisie({
                 <Champ libelle="Bon de livraison" value={form.delivery_note} onChangeText={(t) => changer({ delivery_note: t })} autoCapitalize="characters" />
               </View>
             </View>
+            <Champ libelle="N° de bon" value={form.loading_voucher ?? ""} onChangeText={(t) => changer({ loading_voucher: t })} autoCapitalize="characters" />
           </Feuille>
         </View>
 

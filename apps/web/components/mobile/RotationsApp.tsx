@@ -55,6 +55,8 @@ interface Form {
   route_id: string;
   product: string;
   delivery_note: string;
+  /** N° du bon (commande ou enlèvement), imprimé sur la facture ; absent des saisies d'avant son ajout. */
+  loading_voucher?: string;
   volume_loaded: string;
   volume_delivered: string;
   note: string;
@@ -172,7 +174,7 @@ function jourA(d: Date): string {
 const today = () => jourA(new Date());
 const blank = (): Form => ({
   uuid: null, nouveau_uuid: newUuid(), date_loading: today(), vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
-  delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
+  delivery_note: "", loading_voucher: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
 /**
  * Nombre saisi, à la française (lireNombre : « 36,5 », « 1 500 000 ») ; vide ou illisible : 0. Le
@@ -198,7 +200,7 @@ const CLE_BROUILLON = "brouillon";
 /** Formulaire où rien n'est saisi : la date et le produit proposés d'office ne comptent pas. */
 function formVide(f: Form): boolean {
   const vide = (v: string | undefined) => !(v ?? "").trim();
-  return !f.uuid && !f.vehicle_id && !f.driver_id && !f.partner_id && !f.route_id && vide(f.delivery_note) && vide(f.volume_loaded)
+  return !f.uuid && !f.vehicle_id && !f.driver_id && !f.partner_id && !f.route_id && vide(f.delivery_note) && vide(f.loading_voucher) && vide(f.volume_loaded)
     && vide(f.volume_delivered) && vide(f.note) && Object.values(f.costs ?? {}).every(vide) && Object.values(f.measures ?? {}).every(vide);
 }
 
@@ -329,6 +331,7 @@ function toPayload(f: Form): Record<string, unknown> {
   const correction = Boolean(f.uuid);
   if (f.driver_id) p.driver_id = Number(f.driver_id);
   if (f.delivery_note.trim() || correction) p.delivery_note = f.delivery_note.trim();
+  if ((f.loading_voucher ?? "").trim() || correction) p.loading_voucher = (f.loading_voucher ?? "").trim();
   if (f.volume_loaded.trim() || correction) p.volume_loaded = num(f.volume_loaded);
   if (f.volume_delivered.trim() || correction) p.volume_delivered = num(f.volume_delivered);
   if (f.note.trim() || correction) p.note = f.note.trim();
@@ -346,7 +349,7 @@ function fromPayload(item: QueuedRotation, refs: Referentials): Form {
     uuid: item.client_uuid, revision: item.revision ?? 1, envoyee: item.envoyee, created_at: item.created_at,
     date_loading: s("date_loading") || today(), vehicle_id: s("vehicle_id"), driver_id: s("driver_id"),
     partner_id: s("partner_id"), route_id: s("route_id"), product: s("product") || "gasoil", delivery_note: s("delivery_note"),
-    volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
+    loading_voucher: s("loading_voucher"), volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
     // Une saisie d'avant la mise à jour garde son ancien total des taxes (« specific_taxes ») : il
     // repart tel quel, le bureau le traite comme avant.
     costs: { ...pick(refs.costs), ...(p.specific_taxes ? { specific_taxes: s("specific_taxes") } : {}) },
@@ -968,6 +971,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                   <Field label="Produit" className={LIBELLE}><Select className={champ} value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} options={refs.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
                   <Field label="Bon de livraison" className={LIBELLE}><Input className={champ} value={form.delivery_note} onChange={(e) => setForm({ ...form, delivery_note: e.target.value })} /></Field>
                 </div>
+                <Field label="N° de bon" className={LIBELLE}><Input className={champ} value={form.loading_voucher ?? ""} onChange={(e) => setForm({ ...form, loading_voucher: e.target.value })} /></Field>
               </section>
 
               <section className={cx(FEUILLE, "grid grid-cols-2 gap-3 p-4")}>

@@ -15,6 +15,8 @@ export interface Form {
   route_id: string;
   product: string;
   delivery_note: string;
+  /** N° du bon (commande ou enlèvement), imprimé sur la facture ; absent des saisies d'avant son ajout. */
+  loading_voucher?: string;
   /** Volumes en m³, tels que tapés (« 36,5 »). */
   volume_loaded: string;
   volume_delivered: string;
@@ -30,7 +32,7 @@ export type Erreurs = Partial<Record<Requis, string>>;
 
 export const blank = (date = aujourdhui()): Form => ({
   uuid: null, date_loading: date, vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
-  delivery_note: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
+  delivery_note: "", loading_voucher: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
 
 /** Nombre tapé au téléphone : espaces retirés, virgule ou point décimal. */
@@ -68,6 +70,7 @@ export function toPayload(f: Form): Record<string, unknown> {
   };
   if (f.driver_id) p.driver_id = Number(f.driver_id);
   if (f.delivery_note.trim()) p.delivery_note = f.delivery_note.trim();
+  if ((f.loading_voucher ?? "").trim()) p.loading_voucher = (f.loading_voucher ?? "").trim();
   if (f.volume_loaded) p.volume_loaded = num(f.volume_loaded);
   if (f.volume_delivered) p.volume_delivered = num(f.volume_delivered);
   if (f.note.trim()) p.note = f.note.trim();
@@ -83,7 +86,7 @@ export function fromPayload(item: QueuedItem, refs: Referentials): Form {
   return {
     uuid: item.client_uuid, date_loading: s("date_loading") || aujourdhui(), vehicle_id: s("vehicle_id"), driver_id: s("driver_id"),
     partner_id: s("partner_id"), route_id: s("route_id"), product: s("product") || "gasoil", delivery_note: s("delivery_note"),
-    volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
+    loading_voucher: s("loading_voucher"), volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
     costs: pick(refs.costs), measures: pick(refs.measures ?? []),
   };
 }
