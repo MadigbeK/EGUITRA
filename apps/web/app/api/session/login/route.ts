@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import QRCode from "qrcode";
-import { isAppCode } from "@/lib/config";
+import { isAppCode, isEspaceCode } from "@/lib/config";
 import { forbiddenOrigin, lireReponse, readJson, sameOrigin, serviceIndisponible } from "@/lib/route-helpers";
 import {
   COOKIES,
@@ -15,7 +15,7 @@ import {
 /** Étape 1 de la connexion : identifiant et mot de passe. */
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req)) return forbiddenOrigin();
-  const { login, password, app } = await readJson(req);
+  const { login, password, app, fallback } = await readJson(req);
   if (typeof login !== "string" || typeof password !== "string" || !isAppCode(app)) {
     return NextResponse.json(
       { error: "missing_fields", message: "Identifiant et mot de passe requis." },
@@ -26,7 +26,9 @@ export async function POST(req: NextRequest) {
   let res: Response;
   try {
     res = await odooFetch("/auth/login", {
-      body: { login, password, app },
+      // Repli (page de l'adresse commune) : un compte qui n'ouvre pas l'application demandée entre dans la
+      // première application web interne de son profil ; la réponse dit laquelle.
+      body: { login, password, app, fallback: fallback === true && isEspaceCode(app) },
       app,
       clientIp: clientIpFrom(req.headers),
       userAgent: req.headers.get("user-agent"),
@@ -36,25 +38,26 @@ export async function POST(req: NextRequest) {
   }
   const data = await lireReponse(res);
   if (!res.ok) return NextResponse.json(data, { status: res.status });
+  const chosen = isAppCode(data.app) ? data.app : app;
 
   switch (data.status) {
     case "ok": {
-      const out = NextResponse.json({ status: "ok" });
-      setSessionCookies(out.cookies, data as unknown as SessionTokens, app);
+      const out = NextResponse.json({ status: "ok", app: chosen });
+      setSessionCookies(out.cookies, data as unknown as SessionTokens, chosen);
       // Nouvelle session : une société retirée du compte depuis la précédente ne reste pas mémorisée.
       clearCompanyCookies(out.cookies);
       return out;
     }
     case "mfa_required": {
-      const out = NextResponse.json({ status: "mfa_required" });
-      setStepCookie(out.cookies, COOKIES.app, app, 600);
+      const out = NextResponse.json({ status: "mfa_required", app: chosen });
+      setStepCookie(out.cookies, COOKIES.app, chosen, 600);
       setStepCookie(out.cookies, COOKIES.mfa, String(data.mfa_token), 300);
       return out;
     }
     case "mfa_setup_required": {
       const qr = await QRCode.toDataURL(String(data.otpauth_uri), { margin: 1, width: 220 });
-      const out = NextResponse.json({ status: "mfa_setup_required", secret: data.secret, qr_png: qr });
-      setStepCookie(out.cookies, COOKIES.app, app, 600);
+      const out = NextResponse.json({ status: "mfa_setup_required", app: chosen, secret: data.secret, qr_png: qr });
+      setStepCookie(out.cookies, COOKIES.app, chosen, 600);
       setStepCookie(out.cookies, COOKIES.mfaSetup, String(data.setup_token), 600);
       return out;
     }

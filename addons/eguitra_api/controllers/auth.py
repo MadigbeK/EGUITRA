@@ -24,6 +24,10 @@ from .framework import (
 
 MAX_MFA_ATTEMPTS = 5
 APPS = tuple(APP_REGISTRY)
+# Applications web internes, dans l'ordre de l'accueil : une connexion « de repli » (fallback) depuis
+# l'adresse commune entre dans la première que le profil ouvre, quand il n'ouvre pas celle demandée.
+# Ni le portail (porteurs), ni les applications de téléphone (sessions longues, routes bornées).
+FALLBACK_APPS = ("finance", "transport", "axispro", "analyse", "rh", "hsseq")
 
 
 def _mfa_required(env):
@@ -76,7 +80,7 @@ def _session_payload(env, user, app, family=None, started=None, mfa_passed=False
     tokens = env["eguitra.api.token"]._issue_session(
         user, app, family=family, ip=client_ip(), user_agent=_user_agent(), started=started, mfa_passed=mfa_passed
     )
-    return {"status": "ok", **tokens, "user": user.with_env(env)._eguitra_public()}
+    return {"status": "ok", **tokens, "app": app, "user": user.with_env(env)._eguitra_public()}
 
 
 class EguitraAuthController(http.Controller):
@@ -99,14 +103,21 @@ class EguitraAuthController(http.Controller):
         _record_attempt(env, login, True)
 
         user = env["res.users"].browse(auth_info["uid"])
-        if app not in user._eguitra_apps():
-            raise ApiError(403, "app_forbidden", "Votre profil ne donne pas accès à cette application.")
+        apps = user._eguitra_apps()
+        if app not in apps:
+            # Page de connexion de l'adresse commune (application par défaut : Finance) : un compte qui ne
+            # l'ouvre pas, RH seule par exemple, entre dans sa première application web interne ; la
+            # réponse porte l'application retenue (« app »).
+            fallback = data.get("fallback") is True and app in FALLBACK_APPS
+            app = next((a for a in FALLBACK_APPS if a in apps), None) if fallback else None
+            if not app:
+                raise ApiError(403, "app_forbidden", "Votre profil ne donne pas accès à cette application.")
 
         Token = env["eguitra.api.token"]
         if _mfa_required(env):
             if user.totp_enabled:
                 raw, _rec = Token._issue(user, "mfa", app, ip=client_ip(), user_agent=_user_agent())
-                return {"status": "mfa_required", "mfa_token": raw}
+                return {"status": "mfa_required", "mfa_token": raw, "app": app}
             secret = base64.b32encode(os.urandom(20)).decode()
             raw, _rec = Token._issue(user, "mfa_setup", app, payload=secret, ip=client_ip())
             issuer = "EGUITRA" if app != "axispro" else "AxisPro"
@@ -121,6 +132,7 @@ class EguitraAuthController(http.Controller):
             )
             return {
                 "status": "mfa_setup_required",
+                "app": app,
                 "setup_token": raw,
                 "secret": " ".join(secret[i:i + 4] for i in range(0, len(secret), 4)),
                 "otpauth_uri": uri,

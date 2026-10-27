@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button, Field, Input, Notice, PasswordInput, cx } from "@/components/ui";
-import { APPS, type AppCode } from "@/lib/config";
+import { APPS, isAppCode, type AppCode } from "@/lib/config";
 import { MESSAGE_RESEAU } from "@/lib/erreurs";
 
 type Step = { kind: "credentials" } | { kind: "mfa" } | { kind: "setup"; secret: string; qr: string };
@@ -48,10 +48,14 @@ export function LoginForm({ app, next, message, enFenetre = false, identifiant =
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Application retenue par le noyau : celle demandée, ou la première application web interne du profil
+  // quand il n'ouvre pas celle-ci (connexion depuis l'adresse commune, compte RH seule par exemple).
+  const [entree, setEntree] = useState<AppCode>(app);
 
-  function done() {
+  function done(retenue: AppCode = entree) {
     if (onConnecte) return void onConnecte();
-    window.location.href = next;
+    // Autre application que celle demandée : sa page d'accueil, sauf l'accueil commun, qui les montre toutes.
+    window.location.href = retenue === app || next === "/accueil" ? next : APPS[retenue].home;
   }
 
   // Le bouton reste en chargement jusqu'à l'écran suivant quand la connexion aboutit ; sinon il est
@@ -62,12 +66,14 @@ export function LoginForm({ app, next, message, enFenetre = false, identifiant =
     setError(null);
     let connecte = false;
     try {
-      const { ok, data } = await post("/api/session/login", { login, password, app });
+      const { ok, data } = await post("/api/session/login", { login, password, app, fallback: !enFenetre });
       if (!ok) return setError(data.message ?? "Connexion impossible.");
       setPassword("");
+      const retenue = isAppCode(data.app) ? data.app : app;
+      setEntree(retenue);
       if (data.status === "ok") {
         connecte = true;
-        return done();
+        return done(retenue);
       }
       if (data.status === "mfa_required") return setStep({ kind: "mfa" });
       if (data.status === "mfa_setup_required") {
