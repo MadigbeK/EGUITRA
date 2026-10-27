@@ -9,6 +9,8 @@ export type Profile =
   | "chantiers"
   | "immobilier"
   | "cabinet"
+  /** Associé du cabinet : porte aussi « cabinet » ; scelle les décisions, force un gate, rouvre une révision. */
+  | "associe"
   | "porteur"
   | "rh";
 

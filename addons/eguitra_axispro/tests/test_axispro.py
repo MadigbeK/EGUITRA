@@ -419,6 +419,26 @@ class TestAxispro(ApiCase):
         entry = dossier.journal_ids.filtered(lambda j: j.note == "Responsable du dossier")
         self.assertEqual((entry.before, entry.after), (self.consultant.name, second.name))
 
+    def test_porteur_cree_en_recette_a_mot_de_passe_commun(self):
+        """Recette en mot de passe commun (eguitra_api.shared_password = 1, aucun changement permis) : le
+        porteur créé par « Ouvrir l'accès » garde le mot de passe saisi, sans changement imposé, et se
+        connecte ; hors de ce réglage, le mot de passe reste provisoire."""
+        dossier = self._dossier()
+        token = self.open_session("consultant", app="axispro")["access_token"]
+        path = f"/axispro/dossiers/{dossier.id}/portal-access"
+        self.env["ir.config_parameter"].sudo().set_param("eguitra_api.shared_password", "1")
+        status, body = self.call("POST", path, {"login": "porteur.recette", "name": "Porteur", "password": PASSWORD},
+                                 token=token)
+        self.assertEqual((status, body["portal_access"]["password_temporary"]), (200, False), body)
+        porteur = self.open_session("porteur.recette", app="portail")
+        self.assertFalse(porteur["user"]["password_change_required"])
+        status, _b = self.call("GET", f"/portail/dossiers/{dossier.id}/pieces.pdf", token=porteur["access_token"])
+        self.assertEqual(status, 200, "Le porteur de la recette se connecte et lit son dossier")
+        self.env["ir.config_parameter"].sudo().set_param("eguitra_api.shared_password", "0")
+        status, body = self.call("POST", path, {"login": "porteur.prod", "name": "Porteur", "password": PASSWORD},
+                                 token=token)
+        self.assertEqual((status, body["portal_access"]["password_temporary"]), (200, True), "Ailleurs : provisoire")
+
     def test_dossier_clos_fige_cote_cabinet(self):
         """Audit du noyau (M8) : un dossier clos se consulte mais ne s'évalue plus et ne reçoit plus de
         revue tant qu'il n'est pas rouvert ; chaque changement d'état est au journal."""

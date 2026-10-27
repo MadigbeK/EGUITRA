@@ -201,13 +201,15 @@ function EquipeEtPortail({ d, onChanged }: { d: DossierDetail; onChanged: () => 
   const motDePasseCourt = portal.password.length > 0 && portal.password.length < 10;
 
   async function ouvrir() {
-    const r = await envoyer(() => apiSend<DossierDetail & { portal_access?: { login: string; created: boolean } }>("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), undefined, "ouvrir");
+    const r = await envoyer(() => apiSend<DossierDetail & { portal_access?: { login: string; created: boolean; password_temporary?: boolean } }>("POST", `/axispro/dossiers/${d.id}/portal-access`, portal), undefined, "ouvrir");
     if (r === undefined) return;
     setRetour({
       tone: "ok",
       text: r.portal_access?.created === false
         ? `Compte porteur existant « ${r.portal_access.login} » rattaché au dossier : son mot de passe ne change pas.`
-        : "Accès au portail ouvert : le porteur remplacera ce mot de passe provisoire à sa première connexion.",
+        : r.portal_access?.password_temporary === false
+          ? "Accès au portail ouvert : le porteur se connecte avec ce mot de passe (recette en mot de passe commun, sans changement)."
+          : "Accès au portail ouvert : le porteur remplacera ce mot de passe provisoire à sa première connexion.",
     });
     setPortal({ login: "", name: "", password: "" });
     onChanged();

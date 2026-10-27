@@ -60,9 +60,10 @@ export function scoreEcrit(v: number | null | undefined) {
  * Utilisateur connecté et droit d'écriture sur les dossiers : seul le profil cabinet modifie (la
  * direction et l'administration lisent), comme le noyau.
  */
-export function useCabinet(): { moi: MoiAxispro | null; cabinet: boolean } {
+export function useCabinet(): { moi: MoiAxispro | null; cabinet: boolean; scelle: boolean } {
   const moi = useMoi();
-  return { moi, cabinet: moi?.cabinet ?? false };
+  // scelle : sceau du comité, passage forcé d'un gate, nouvelle révision (associé du cabinet ou direction).
+  return { moi, cabinet: moi?.cabinet ?? false, scelle: moi?.scelle ?? false };
 }
 
 /**
