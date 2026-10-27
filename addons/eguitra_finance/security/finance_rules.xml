@@ -61,4 +61,14 @@
         <field name="model_id" ref="model_eguitra_reprise_reference"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_statement_comparative_company" model="ir.rule">
+        <field name="name">Comparatifs importés : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_statement_comparative"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_statement_comparative_line_company" model="ir.rule">
+        <field name="name">Lignes des comparatifs importés : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_statement_comparative_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>

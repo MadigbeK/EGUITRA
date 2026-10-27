@@ -22,4 +22,5 @@ from . import expense_category
 from . import res_partner
 from . import res_users
 from . import reprise_reference
+from . import statement_comparative
 from . import year_close

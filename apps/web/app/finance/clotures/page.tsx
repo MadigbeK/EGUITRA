@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CheckCircle2, Download, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Modal, Notice, PageHeader, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ClotureExercice } from "@/components/finance/ClotureExercice";
+import { Comparatifs } from "@/components/finance/Comparatifs";
 import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
 import { anneeEnCours } from "@/lib/jour";
@@ -118,6 +119,7 @@ export default function ClosingPage() {
       <ClotureExercice year={selectedYear} />
       <Integrity />
       <RepriseValidation />
+      <Comparatifs />
       {month && <MonthModal key={month.period} month={month} onClose={() => setMonth(null)} onChanged={() => mutate()} />}
     </div>
   );
