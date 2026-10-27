@@ -62,7 +62,7 @@ class TestApiCommerce(RefusParProfil, CommerceDataMixin, ApiCase):
         return response
 
     def _upload(self, path, name, content, token=None):
-        response = self.url_open(f"/api/v1{path}", files={"file": (name, content)},
+        response = self.url_open(f"/api/v1{path}", files={"file": (name, io.BytesIO(content))},
                                  headers={"Authorization": f"Bearer {token or self.finance}", "X-Eguitra-App": "test"},
                                  timeout=60)
         try:
