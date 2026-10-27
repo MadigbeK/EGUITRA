@@ -104,7 +104,7 @@ class AccountJournal(models.Model):
         elif len(groups[-1]) > 9:
             reason = "son compteur dépasse neuf chiffres"
         elif not readable or reset not in CONTINUABLE_RESETS:
-            reason = "le noyau n'en reconnaît pas le format"
+            reason = "la plateforme n'en reconnaît pas le format"
         elif reset != "never" and str(values["year"]).zfill(values["year_length"]) not in {
                 str(y)[-values["year_length"]:] for y in (day.year, day.year - 1)}:
             # « 0026/MBAX06/26 » se lit année 06, compteur 26 : la suite serait 0026/MBAX06/27.
@@ -116,8 +116,8 @@ class AccountJournal(models.Model):
             return None
         suggestion, following = self._eguitra_nearest_number(number, day)
         return {
-            "message": (f"Numéro « {number} » refusé : {reason}. La numérotation du noyau continue toujours le "
-                        f"dernier groupe de chiffres du numéro, et ne saurait pas continuer celui-ci. Format "
+            "message": (f"Numéro « {number} » refusé : {reason}. La numérotation continue toujours le dernier "
+                        f"groupe de chiffres du numéro, et ne saurait pas continuer celui-ci. Format "
                         f"continu le plus proche : saisissez « {suggestion} » ; la première facture portera "
                         f"« {following} », puis la numérotation repartira à 0001 chaque année."),
             "suggestion": suggestion,
