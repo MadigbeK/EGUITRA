@@ -65,7 +65,7 @@ export function OffresPage({ commandes = false }: { commandes?: boolean }) {
                 { key: "date", label: "Date", render: (o) => fmtDate(o.date) },
                 commandes
                   ? { key: "to_invoice", label: "Reste à facturer HT", align: "right", render: (o) => fmtInt(o.invoicing?.to_invoice) }
-                  : { key: "validity", label: "Validité", render: (o) => <span>{fmtDate(o.validity_date)}{o.expires_in !== null && o.expires_in <= 3 && o.expires_in >= 0 && <span className="block text-[12px] font-semibold text-warn">{o.expires_in === 0 ? "expire aujourd'hui" : `expire dans ${o.expires_in} j`}</span>}</span> },
+                  : { key: "validity", label: "Validité", render: (o) => <span>{fmtDate(o.validity_date)}{o.expires_in !== null && o.expires_in <= 7 && o.expires_in >= 0 && <span className="block text-[12px] font-semibold text-warn">{o.expires_in === 0 ? "expire aujourd'hui" : `expire dans ${o.expires_in} j`}</span>}</span> },
                 { key: "amount_untaxed", label: "HT (GNF)", align: "right", render: (o) => fmtInt(o.amount_untaxed) },
                 { key: "status", label: "État", render: (o) => <div><Badge tone={TON_OFFRE[o.status]}>{o.status_label}</Badge>{o.chantier_mode && <div className="text-[11.5px] text-muted">Offre de travaux</div>}</div> },
               ]} />

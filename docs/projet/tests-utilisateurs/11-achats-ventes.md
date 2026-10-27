@@ -1,0 +1,1287 @@
+# Cahier de test : Achats et ventes
+
+Le cycle commercial dans NIMOVA · Finance, pour EGUITRA GROUP SARLU et MB AxisPro Consulting :
+catalogue des articles et prestations, offres commerciales, commandes des clients et leur facturation
+(acomptes, quantités exécutées), offre de travaux vers le chantier, bons de commande fournisseur,
+réceptions, rapprochement des pièces d'achat, devis fournisseurs, tableaux de bord et réglages.
+
+Écrans : Finance > Ventes (onglets Factures, Offres, Commandes, Catalogue, Tableau de bord), Finance >
+Achats et dépenses (onglets Pièces d'achat, Bons de commande, Catalogue, Tableau de bord), la fiche
+d'un engagement de dépense, « À valider », Administration > Achats et ventes ; refus attendus par
+profil.
+
+| Rubrique {28} | À remplir {72} |
+|---|---|
+| Module | Achats et ventes (NIMOVA · Finance) |
+| Version de la plateforme | ______ (communiquée par E-VOLUTION XP) |
+| Date du test | ______ |
+| Nom du testeur | ______ |
+| Fonction | ______ |
+| Profil utilisé | ______ |
+| Compte de test | ______ |
+| Société | ☐ EGUITRA GROUP SARLU    ☐ MB AxisPro Consulting |
+
+Document préparé par E-VOLUTION XP le 27 octobre 2026, d'après les écrans de la plateforme à cette
+date.
+
+<!-- saut de page -->
+
+## Mode d'emploi
+
+Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des données fictives repérées
+« (démo) ». Rien de ce que vous y faites ne touche les vrais dossiers : vous pouvez tout essayer, y
+compris les erreurs.
+
+1. Se connecter. Ouvrez, dans Chrome ou Edge, l'adresse de la recette communiquée par E-VOLUTION XP,
+   puis la tuile « Finance » de l'accueil. Identifiant : le compte de test indiqué dans le scénario.
+   Mot de passe : le mot de passe commun de la recette, remis par l'administrateur.
+2. Société. Les données de démonstration sont surtout celles d'EGUITRA GROUP SARLU : travaillez dans
+   cette société (choix en haut de l'écran), sauf mention contraire. Les comptes test.daf,
+   test.comptable, test.dg, test.achats et test.admin sont ouverts aux deux sociétés.
+3. Numéros. Les offres sont numérotées OF/EG/2026/… pour EGUITRA GROUP SARLU et OF/MBAX/2026/… pour
+   MB AxisPro Consulting ; les bons de commande BC/EG/…, BC/MBAX/… ; les réceptions REC/EG/…. Notez les
+   numéros créés : d'autres scénarios s'en servent.
+4. Courriels. La recette peut ne pas avoir de serveur de courrier : un envoi par courriel est alors
+   refusé avec un message clair, et le document s'imprime. Les scénarios le précisent.
+5. Jouer un scénario. Suivez les étapes dans l'ordre, avec les données indiquées. Un scénario à deux
+   comptes se joue dans deux navigateurs (Chrome et Edge) ou sur deux postes. Les essais portent la
+   mention « (essai) ».
+6. Noter le résultat. Cochez « Réussi » si l'écran correspond au résultat attendu, sinon « Échoué ».
+   Dans « Remarques », notez ce qui diffère : l'écran, le message affiché, l'heure.
+7. Signaler une anomalie. Menu du compte (rond à vos initiales, en haut à droite) > « Mes demandes »
+   > « Nouvelle demande », type « Remarque de recette », application NIMOVA · Finance, la gravité ;
+   titre commençant par le numéro du scénario (par exemple « ACV-15 : acompte refusé ») ;
+   description ; « Déposer la demande ». Reportez le numéro reçu (DEM-…) dans les remarques.
+
+## Comptes de test
+
+| Compte {18} | Profil {22} | Périmètre {26} | Rôle dans ce cahier {34} |
+|---|---|---|---|
+| test.daf | Finance | les deux sociétés | offres, facturation, réglages, approbations |
+| test.comptable | Finance | les deux sociétés | approbations, pièces d'achat |
+| test.dg | Direction | les deux sociétés | offres, approbations au-delà de 50 M, lecture |
+| test.achats | Achats | les deux sociétés | bons de commande, réceptions, pièces d'achat |
+| test.chantiers | BTP | EGUITRA GROUP SARLU | engagement et bon de commande du chantier, situations |
+| test.exploitation | Exploitation | EGUITRA GROUP SARLU | refus |
+| test.admin | Administration | les deux sociétés | réglages, consultation |
+| test.consultant | Cabinet | MB AxisPro Consulting | refus |
+
+Données fictives utiles : catalogue d'EGUITRA GROUP SARLU « Location de camion-benne, par jour
+(démo) », « Terrassement en déblai, au m³ (démo) », « Crépissage, au mètre carré (démo) », « Ciment
+CPA 42,5, sac de 50 kg (démo) », « Gasoil, au litre (démo) » ; catalogue de MB AxisPro Consulting
+« Accompagnement de porteur de projet, par jour (démo) » et « Étude de faisabilité, au forfait
+(démo) » ; offre « Crépissage du bâtiment administratif (démo) » pour « Démo - Maître d'ouvrage »,
+acceptée, avec deux acomptes facturés (50 % et 30 %) ; offre « Location de deux camions-bennes
+(démo) » pour « Démo - Société minière B », envoyée, qui expire dans cinq jours ; offre « Étude de
+faisabilité d'une unité de séchage (démo) » de MB AxisPro Consulting, en brouillon ; bon de commande
+« Ciment du chantier (démo) » chez « Démo - Quincaillerie du port », approuvé, 120 sacs reçus sur
+200, avec la pièce d'achat « FAC-QDP-0001 (démo) » en brouillon (150 sacs à 97 500 GNF) ; chantier
+« Entrepôt de stockage (démo) ».
+
+## A. Catalogue
+
+### ACV-01. Lire le catalogue de la société
+
+Objectif : vérifier que le catalogue montre les articles de la seule société de travail.
+
+Compte : test.daf.
+
+Données : aucune.
+
+1. Ouvrez Comptabilité > Ventes, onglet « Catalogue ».
+2. Lisez les colonnes « Article », « Type », « Unité », « Prix de vente HT », « TVA », « Activité »,
+   « Usage ».
+3. En haut de l'écran, passez dans MB AxisPro Consulting ; revenez dans EGUITRA GROUP SARLU.
+
+Résultat attendu : dans EGUITRA GROUP SARLU, les cinq articles « (démo) » du groupe ; la location de
+camion-benne est une « Prestation » au « Jours » (ou « Jour »), le ciment un « Article » marqué
+« Achat ». Dans MB AxisPro Consulting, seuls l'accompagnement et l'étude au forfait (« fft »).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-02. Créer un article du catalogue
+
+Objectif : vérifier la saisie d'un article avec son unité, son prix, son compte et sa TVA.
+
+Compte : test.daf.
+
+Données : « Pose de carrelage, au mètre carré (essai) », prestation, unité « m² », prix de vente
+45 000, TVA de vente 18 %, compte de produit commençant par 706, activité « BTP ».
+
+1. Onglet « Catalogue », « Nouvel article ».
+2. Remplissez « Nom », « Type », « Unité », « Activité analytique ». Laissez « Vendu » coché.
+3. Remplissez « Prix de vente HT (GNF) », « TVA de vente », « Compte de produit ».
+4. Cliquez sur « Enregistrer ».
+
+Résultat attendu : la fenêtre se ferme ; l'article apparaît dans la liste avec l'unité « m² », le
+prix 45 000, la TVA, l'activité « BTP » et le badge « Vente ». En le rouvrant, le compte de produit
+choisi est repris.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-03. Importer le catalogue depuis un fichier
+
+Objectif : vérifier l'import au modèle fourni, puis la mise à jour par un second import.
+
+Compte : test.daf.
+
+Données : le modèle d'import, avec deux lignes ajoutées : « Location de chargeuse, par jour
+(essai) », prestation, unité « fft », prix 2 500 000, TVA 18 % ; « Fer à béton de 12, la barre
+(essai) », article, unité « ens. », prix 0, acheté « oui ».
+
+1. Onglet « Catalogue », « Modèle d'import » : le fichier Excel se télécharge.
+2. Remplissez les deux lignes sous l'en-tête, en gardant l'en-tête, et enregistrez.
+3. Cliquez sur « Importer un fichier » et choisissez le fichier.
+4. Changez le prix de la chargeuse à 2 600 000 dans le fichier, puis importez-le de nouveau.
+
+Résultat attendu : à l'étape 3, « Import terminé : 2 articles créés, 0 mis à jour. » ; les deux
+articles apparaissent. À l'étape 4, « 0 article créé, 2 mis à jour. » ; la chargeuse est à 2 600 000.
+Une ligne à l'unité inconnue fait refuser tout le fichier avec « Ligne n : Unité inconnue… ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-04. Catalogue en lecture pour les achats
+
+Objectif : vérifier que le profil Achats lit le catalogue sans le modifier.
+
+Compte : test.achats.
+
+Données : aucune.
+
+1. Ouvrez Comptabilité > Achats et dépenses, onglet « Catalogue ».
+2. Cherchez les boutons « Nouvel article », « Importer un fichier », « Modèle d'import ».
+3. Cliquez sur une ligne du catalogue.
+
+Résultat attendu : la liste s'affiche ; aucun des trois boutons n'est proposé ; cliquer sur une ligne
+n'ouvre aucune fenêtre de modification. Les colonnes des comptes ne sont pas montrées.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## B. Offres commerciales
+
+### ACV-05. Établir une offre avec rubriques, unités et remise
+
+Objectif : vérifier la saisie complète d'une offre et sa numérotation propre à la société.
+
+Compte : test.daf.
+
+Données : client « Démo - Maître d'ouvrage » ; objet « Réfection de la cour (essai) » ; remise
+générale 5 % ; rubrique « Terrassement » ; ligne « Terrassement en déblai, au m³ (démo) », 120 m³ ;
+rubrique « Revêtement » ; ligne « Pose de carrelage, au mètre carré (essai) », 300 m² ; note
+« Évacuation des gravats comprise (essai) » ; conditions « Exécution sous 30 jours (essai) ».
+
+1. Ventes, onglet « Offres », « Nouvelle offre ».
+2. Choisissez le « Client », saisissez le « Commentaire ou indication (objet) » et la « Remise
+   générale (%) ». Laissez « Validité (jours) » vide.
+3. Dans « Lignes », ajoutez les rubriques, les lignes (« Article du catalogue », puis la quantité) et
+   la note avec « Rubrique », « Ligne » et « Note ».
+4. Saisissez les « Conditions de l'offre », puis « Enregistrer l'offre ».
+
+Résultat attendu : le total indicatif tient compte de la remise de 5 %. La fiche s'ouvre : numéro
+OF/EG/2026/…, état « Brouillon », validité « 15 jours, jusqu'au … » ; les lignes portent leur unité
+et la remise de 5 %. Notez le numéro.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-06. Imprimer l'offre
+
+Objectif : vérifier l'offre imprimée au gabarit des factures de la société.
+
+Compte : test.daf.
+
+Données : l'offre d'ACV-05.
+
+1. Ouvrez la fiche de l'offre, puis « Offre en PDF ».
+2. Lisez le document.
+
+Résultat attendu : le document porte le logo et l'identité d'EGUITRA GROUP SARLU, le titre « OFFRE »,
+« N° OF/EG/2026/… », « Conakry, le … », le bloc « CLIENT » ; à droite « Référence offre : OF/EG/… » et
+« Validité offre : 15 jours, jusqu'au … » ; « Commentaire ou indication : Réfection de la cour
+(essai) » ; les rubriques « I. Terrassement » et « II. Revêtement » avec leur sous-total, les colonnes
+« Unité » et « Remise », la note ; les totaux HT, TVA et TTC ; « Arrêtée la présente offre à la somme
+de : » suivi du montant en lettres ; « CONDITIONS DE L'OFFRE ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-07. Marquer l'offre envoyée
+
+Objectif : vérifier qu'une offre remise au client passe « Envoyée » et ne se modifie plus.
+
+Compte : test.daf.
+
+Données : l'offre d'ACV-05.
+
+1. Sur la fiche, cliquez sur « Marquer envoyée ».
+2. Cherchez le bouton « Modifier ».
+
+Résultat attendu : « Offre marquée envoyée. » ; l'état devient « Envoyée », la date d'envoi
+s'affiche. « Modifier » n'est plus proposé : une offre envoyée se change par une nouvelle version.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-08. Envoyer l'offre par courriel
+
+Objectif : vérifier l'envoi par courriel, ou son refus clair sans serveur de courrier.
+
+Compte : test.daf.
+
+Données : l'offre d'ACV-05 ; adresse « essai@exemple.test ».
+
+1. Sur la fiche, « Envoyer par courriel ».
+2. Saisissez l'adresse, puis « Envoyer ».
+
+Résultat attendu : avec un serveur de courrier, « Courriel envoyé, l'offre en PDF jointe. » et
+l'adresse s'affiche sous « Envoyée ». Sans serveur, un message en français : « Aucun serveur d'envoi
+de courriel n'est paramétré : imprimez le document et remettez-le. » ; rien ne change.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-09. Créer une nouvelle version
+
+Objectif : vérifier qu'une nouvelle version reprend l'offre et remplace l'ancienne.
+
+Compte : test.daf.
+
+Données : l'offre d'ACV-05 ; nouvelle quantité de carrelage : 280 m².
+
+1. Sur la fiche, « Nouvelle version ».
+2. Sur la fiche de la version, « Modifier », changez la quantité de carrelage, « Enregistrer
+   l'offre ».
+3. Dans « Versions », cliquez sur la première version.
+
+Résultat attendu : la version porte le numéro de l'offre suivi de « -V2 », état « Brouillon »,
+validité de nouveau 15 jours, les mêmes lignes. La première version est « Remplacée » ; « Nouvelle
+version » n'y est plus accepté (« Une version plus récente existe déjà »).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-10. Enregistrer le refus du client
+
+Objectif : vérifier qu'un refus exige son motif.
+
+Compte : test.daf.
+
+Données : une offre en brouillon créée pour l'occasion (une ligne libre « Prestation (essai) »,
+100 000) ; motif « Budget reporté à l'an prochain (essai) ».
+
+1. Sur sa fiche, « Refusée par le client ».
+2. Laissez le motif vide : le bouton reste grisé. Saisissez le motif, puis « Enregistrer le refus ».
+3. Imprimez l'offre.
+
+Résultat attendu : l'état devient « Refusée » avec le motif affiché. L'offre imprimée porte en tête
+« OFFRE REFUSÉE par le client : document sans valeur d'engagement. ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-11. Expiration d'une offre
+
+Objectif : vérifier qu'une offre dont la validité est passée ne s'accepte plus et expire la nuit.
+
+Compte : test.daf.
+
+Données : une offre datée d'il y a 20 jours, validité 15 jours, une ligne libre.
+
+1. « Nouvelle offre », « Date de l'offre » il y a 20 jours, « Validité (jours) » 15, une ligne,
+   « Enregistrer l'offre ».
+2. Cliquez sur « Acceptée par le client », puis confirmez.
+3. Le lendemain, rouvrez la fiche.
+
+Résultat attendu : à l'étape 2, un message : « L'offre … a expiré le … : créez-en une nouvelle
+version, à faire accepter. ». Le lendemain, l'état est « Expirée » ; « Nouvelle version » reste
+proposée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-12. Relancer une offre qui expire bientôt
+
+Objectif : vérifier le repérage des offres qui expirent et la relance du client.
+
+Compte : test.daf.
+
+Données : l'offre « Location de deux camions-bennes (démo) ».
+
+1. Onglet « Offres », vue « En cours » : lisez la colonne « Validité ».
+2. Ouvrez la fiche, « Relancer le client », adresse « essai@exemple.test », « Envoyer ».
+
+Résultat attendu : la ligne de l'offre porte « expire dans 5 j » (ou moins) sous sa date de validité.
+La relance part par courriel avec l'offre jointe, ou, sans serveur de courrier, est refusée avec le
+message de ACV-08.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-13. Numérotation propre à MB AxisPro Consulting
+
+Objectif : vérifier que chaque société a sa propre suite de numéros.
+
+Compte : test.daf.
+
+Données : en haut de l'écran, la société MB AxisPro Consulting ; une offre au client « Démo - Porteur
+de projet accompagné », ligne « Étude de faisabilité, au forfait (démo) ».
+
+1. Passez dans MB AxisPro Consulting, Ventes, onglet « Offres ».
+2. Créez l'offre, puis imprimez-la.
+
+Résultat attendu : le numéro commence par OF/MBAX/2026/ ; l'offre imprimée porte l'identité et la
+couleur de MB AxisPro Consulting, et l'unité « fft ». L'offre « Étude de faisabilité d'une unité de
+séchage (démo) » figure dans la liste ; aucune offre d'EGUITRA GROUP SARLU n'y apparaît.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## C. Commandes et facturation
+
+### ACV-14. Accepter une offre : elle devient commande
+
+Objectif : vérifier le passage de l'offre à la commande.
+
+Compte : test.daf.
+
+Données : la version V2 d'ACV-09.
+
+1. Sur la fiche, « Acceptée par le client », puis confirmez.
+2. Ouvrez l'onglet « Commandes ».
+
+Résultat attendu : « Offre acceptée : elle est devenue commande. » ; l'état est « Acceptée » ; la
+carte « Facturation de la commande » montre « Commandé HT », « Facturé HT » à 0 et « Reste à
+facturer HT ». La commande figure dans l'onglet « Commandes ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-15. Facturer une avance de démarrage de 50 %
+
+Objectif : vérifier la facture d'acompte en pourcentage.
+
+Compte : test.daf.
+
+Données : la commande d'ACV-14 ; « Avance de démarrage 50 % ».
+
+1. Sur la fiche de la commande, « Facturer un acompte ».
+2. Choisissez « Pourcentage », saisissez 50 et le libellé, puis « Créer la facture d'acompte ».
+
+Résultat attendu : la carte montre une ligne « Acompte ou avance » en « Brouillon » ; « Acomptes
+facturés » vaut la moitié du hors taxes. Dans l'onglet « Factures », le brouillon porte le client,
+la référence de l'offre (« Référence offre ») et la ligne « Avance de démarrage 50 % », au compte
+4191, TVA comprise.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-16. Valider et imprimer la facture d'acompte
+
+Objectif : vérifier que la facture produite est une facture de la plateforme, au gabarit du client.
+
+Compte : test.daf.
+
+Données : le brouillon d'ACV-15.
+
+1. Onglet « Factures », ouvrez le brouillon, validez-le.
+2. Imprimez la facture.
+
+Résultat attendu : la facture reçoit le numéro suivant du journal de vente ; elle porte « FACTURE »,
+« Référence offre : OF/EG/…-V2 », « Commentaire ou indication : Réfection de la cour (essai) », la
+ligne de l'acompte, la TVA 18 % et le montant en lettres.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-17. Facturer un deuxième acompte en montant
+
+Objectif : vérifier l'acompte en montant TVA comprise, et la borne du reste à facturer.
+
+Compte : test.daf.
+
+Données : la commande d'ACV-14 ; un montant TTC égal à 30 % du total TTC ; libellé « Deuxième
+acompte 30 % ».
+
+1. « Facturer un acompte », « Montant TTC », le montant et le libellé, « Créer la facture
+   d'acompte ».
+2. Validez la facture dans l'onglet « Factures ».
+3. Essayez un nouvel acompte de 30 %.
+
+Résultat attendu : la facture d'acompte vaut le montant saisi, TVA comprise. À l'étape 3, le message
+« L'acompte dépasse ce qui reste à facturer de la commande. ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-18. Facture finale : les acomptes sont déduits
+
+Objectif : vérifier la déduction des acomptes sur la facture du solde.
+
+Compte : test.daf.
+
+Données : la commande d'ACV-14, ses deux acomptes validés.
+
+1. Sur la fiche, « Facturer le reste (acomptes déduits) ».
+2. Ouvrez le brouillon dans l'onglet « Factures ».
+
+Résultat attendu : « Facture créée en brouillon, acomptes déduits… » ; la facture porte toutes les
+lignes de la commande, puis deux lignes négatives « Déduction : Avance de démarrage 50 % » et
+« Déduction : Deuxième acompte 30 % » ; son hors taxes est 20 % de la commande. Sur la fiche,
+« Acomptes à déduire » vaut 0 et « Reste à facturer HT » 0.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-19. Facturer les quantités exécutées
+
+Objectif : vérifier la facturation d'une prestation au fur et à mesure de son exécution.
+
+Compte : test.daf.
+
+Données : une offre acceptée pour « Démo - Société minière B », ligne « Location de camion-benne, par
+jour (démo) », 20 jours ; 8 jours exécutés, puis 20.
+
+1. Créez l'offre, puis « Acceptée par le client ».
+2. « Quantités exécutées… », saisissez 8, puis « Enregistrer et facturer l'exécuté ».
+3. De nouveau « Quantités exécutées… », 20, puis « Enregistrer et facturer l'exécuté ».
+
+Résultat attendu : une première facture en brouillon de 8 jours, puis une seconde de 12 jours. La
+colonne « Facturé » de la ligne passe à 8, puis 20 ; « Reste à facturer HT » vaut 0. Une quantité
+exécutée au-delà des 20 jours commandés est refusée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-20. Annuler une commande
+
+Objectif : vérifier qu'une commande ne s'annule que sans facture validée.
+
+Compte : test.daf.
+
+Données : la commande « Crépissage du bâtiment administratif (démo) », puis une commande acceptée
+sans facture.
+
+1. Ouvrez la commande de démonstration, « Annuler », confirmez.
+2. Acceptez une offre d'essai sans la facturer, puis « Annuler », confirmez.
+
+Résultat attendu : à l'étape 1, le message « La commande … a des factures validées (…) : établissez
+un avoir depuis les ventes. » ; rien ne change. À l'étape 2, l'état devient « Annulée ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## D. Offre de travaux et chantier
+
+### ACV-21. Établir une offre de travaux
+
+Objectif : vérifier la saisie d'une offre de travaux avec avance de démarrage et retenue de garantie.
+
+Compte : test.daf.
+
+Données : client « Démo - Maître d'ouvrage » ; objet « Clôture du terrain (essai) » ; « Offre de
+travaux (BTP) » cochée ; avance de démarrage 30 % ; retenue de garantie 5 % ; « Chantier existant »
+vide ; deux lignes libres « Fondations de la clôture » 40 000 000 et « Élévation et enduit »
+60 000 000.
+
+1. « Nouvelle offre », remplissez l'en-tête, cochez la case de la carte « Offre de travaux (BTP) »,
+   saisissez les taux.
+2. Ajoutez les lignes, « Enregistrer l'offre ».
+
+Résultat attendu : la fiche porte « Offre de travaux : avance de démarrage 30 %, retenue de garantie
+5 %, chantier créé à l'acceptation. » ; le hors taxes est de 100 000 000.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-22. Acceptée, l'offre crée le chantier
+
+Objectif : vérifier la création du chantier au montant de l'offre.
+
+Compte : test.daf, puis test.chantiers.
+
+Données : l'offre d'ACV-21.
+
+1. test.daf : « Acceptée par le client », confirmez.
+2. Lisez la carte « Chantier … » de la fiche ; cherchez « Facturer le reste ».
+3. test.chantiers : ouvrez Métiers > BTP.
+
+Résultat attendu : la carte « Chantier Clôture du terrain (essai) » montre le marché à 100 000 000 HT
+et l'avance de démarrage à 30 %, soit 30 000 000 HT ; aucun bouton de facturation de la commande
+(elle se facture par ses situations). Dans BTP, le chantier « Clôture du terrain (essai) » existe,
+au maître d'ouvrage et au montant du marché de l'offre, retenue 5 %.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-23. Facturer l'avance de démarrage
+
+Objectif : vérifier la facture unique de l'avance.
+
+Compte : test.daf.
+
+Données : la commande d'ACV-22.
+
+1. Sur la fiche, « Facturer l'avance de démarrage », confirmez.
+2. Lisez la liste des factures de la carte ; ouvrez la facture dans l'onglet « Factures ».
+
+Résultat attendu : « Avance de démarrage facturée. » ; la facture est validée : « Avance de démarrage
+30 % du marché - Clôture du terrain (essai) », 30 000 000 HT, 35 400 000 TTC, au compte 4191, avec la
+référence de l'offre. « Avance à déduire » vaut 30 000 000 ; le bouton n'est plus proposé.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-24. Situation d'avancement : l'avance se déduit au prorata
+
+Objectif : vérifier la déduction de l'avance sur une situation, la retenue restant celle d'avant.
+
+Compte : test.chantiers, puis test.daf.
+
+Données : le chantier « Clôture du terrain (essai) » ; situation au cumul de 40 000 000.
+
+1. test.chantiers : dans BTP, ouvrez le chantier, ajoutez la situation au cumul de 40 000 000.
+2. test.daf : facturez la situation.
+3. Ouvrez sa facture dans l'onglet « Factures ».
+
+Résultat attendu : la facture porte la ligne des travaux de 40 000 000 et la ligne « Déduction de
+l'avance de démarrage - situation n° 1 » de -12 000 000 (30 % des travaux), soit 28 000 000 HT et
+33 040 000 TTC ; la retenue de garantie est de 2 000 000 (5 % des 40 000 000 de travaux). Sur la
+commande, « Avance à déduire » vaut 18 000 000.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-25. Dernière situation : l'avance s'épuise
+
+Objectif : vérifier que la situation qui atteint le montant du marché déduit le reste de l'avance.
+
+Compte : test.chantiers, puis test.daf.
+
+Données : le même chantier ; situation au cumul de 100 000 000.
+
+1. test.chantiers : ajoutez la situation au cumul de 100 000 000.
+2. test.daf : facturez-la ; ouvrez la fiche de la commande.
+
+Résultat attendu : la facture déduit 18 000 000, le reste de l'avance ; « Avance à déduire » vaut 0 ;
+« Travaux facturés HT » vaut 100 000 000 (100 %).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## E. Bons de commande fournisseur
+
+### ACV-26. Bon de commande depuis un engagement approuvé
+
+Objectif : vérifier qu'un bon de commande dans la limite de son engagement est approuvé d'office.
+
+Compte : test.chantiers, puis test.comptable.
+
+Données : engagement « Fers à béton du chantier (essai) », fournisseur « Démo - Quincaillerie du
+port », 6 000 000 HT ; ligne libre « Fer à béton de 12, la barre », 1 000 barres à 6 000, catégorie
+de dépense au choix.
+
+1. test.chantiers : Pilotage > Engagements de dépense, « Nouvel engagement », remplissez et
+   « Soumettre à l'approbation ».
+2. test.comptable : « À valider », approuvez la demande.
+3. test.chantiers : rouvrez l'engagement ; dans la carte « Bons de commande », cliquez sur « Bon de
+   commande ».
+4. Ajoutez la ligne (« Ligne », désignation, quantité, prix, « Catégorie de dépense »), puis
+   « Soumettre à l'approbation ».
+
+Résultat attendu : le fournisseur et l'objet de l'engagement sont repris. Le bon de commande
+BC/EG/2026/… est aussitôt « Approuvé », sans nouvelle demande dans « À valider » : il reste dans
+l'engagement approuvé. Il apparaît dans la carte « Bons de commande » de l'engagement et sous
+Pilotage > Bons de commande. Un bon saisi sans ligne depuis un engagement dont la finance a précisé
+le compte reprend seul le reste de l'engagement.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-27. Bon de commande direct, soumis au circuit
+
+Objectif : vérifier qu'un bon de commande direct suit le circuit des engagements.
+
+Compte : test.achats.
+
+Données : fournisseur « Démo - Quincaillerie du port » ; objet « Peinture de façade (essai) » ;
+ligne libre « Peinture acrylique, seau de 20 l », 40 seaux à 150 000, catégorie de dépense au choix.
+
+1. Achats et dépenses, onglet « Bons de commande », « Nouveau bon de commande ».
+2. Laissez « Engagement de dépense approuvé » vide ; remplissez le fournisseur, l'objet, la ligne et
+   sa « Catégorie de dépense ».
+3. « Soumettre à l'approbation ».
+
+Résultat attendu : le bon est « En approbation », « chez : Finance et comptabilité ». Aucun champ de
+compte n'est proposé : la catégorie fixe le compte. Notez le numéro.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-28. Quatre yeux : l'auteur n'approuve pas son bon
+
+Objectif : vérifier que celui qui saisit un bon de commande n'en tranche aucune étape.
+
+Compte : test.comptable, puis test.daf.
+
+Données : un bon de commande direct de 3 000 000 saisi et soumis par test.comptable.
+
+1. test.comptable : créez et soumettez le bon de commande.
+2. test.comptable : ouvrez « À valider ».
+3. test.daf : ouvrez « À valider », puis la demande du bon.
+
+Résultat attendu : chez test.comptable, la demande n'est pas dans la corbeille « À valider » (elle
+figure dans ses demandes). Chez test.daf, elle y est, avec le détail du bon (« Saisi par … : ni lui,
+ni le demandeur de son engagement ne tranchent une étape »), et « Approuver » est proposé.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-29. Approuver un bon de commande au-delà de 50 M
+
+Objectif : vérifier les deux étapes du circuit et leurs approbateurs.
+
+Compte : test.achats, test.daf, puis test.dg.
+
+Données : bon de commande direct « Groupe électrogène 100 kVA (essai) », une ligne de 60 000 000.
+
+1. test.achats : créez et soumettez le bon.
+2. test.daf : « À valider », ouvrez la demande, « Approuver ».
+3. test.dg : « À valider », ouvrez la demande, « Approuver », confirmez.
+
+Résultat attendu : la demande porte deux étapes : la finance, puis la direction (« de plus de 50 M »).
+Après test.daf, le bon reste « En approbation », chez la direction. Après test.dg, le bon est
+« Approuvé » ; son PDF porte « APPROUVÉ PAR » avec les deux noms.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-30. Refus puis nouvelle soumission
+
+Objectif : vérifier le retour du bon en brouillon après un refus motivé.
+
+Compte : test.daf, puis test.achats.
+
+Données : le bon d'ACV-27 ; motif « Joindre un second devis (essai) ».
+
+1. test.daf : refusez la demande avec le motif.
+2. test.achats : ouvrez le bon ; « Modifier », ramenez la quantité à 35 seaux, « Soumettre à
+   l'approbation ».
+
+Résultat attendu : après le refus, le bon est « Refusé », avec « Refusé par … : Joindre un second
+devis (essai) ». Après la modification, il repart « En approbation » ; la nouvelle demande montre le
+nouveau montant.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-31. Imprimer et envoyer le bon de commande
+
+Objectif : vérifier le bon de commande imprimé et son envoi au fournisseur.
+
+Compte : test.achats.
+
+Données : le bon d'ACV-26 (approuvé).
+
+1. Ouvrez le bon, « Bon de commande en PDF ».
+2. « Envoyer au fournisseur », adresse « essai@exemple.test », « Envoyer ».
+3. Sans serveur de courrier, « Marquer envoyé ».
+
+Résultat attendu : le document porte « BON DE COMMANDE », « N° BC/EG/2026/… », le bloc « FOURNISSEUR »,
+« Engagement : ENG/… », les lignes, « Arrêté le présent bon de commande à la somme de : ». Le courriel
+part avec le bon joint, ou le message d'absence de serveur s'affiche ; après « Marquer envoyé », l'état
+est « Envoyé ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-32. Annuler un bon de commande
+
+Objectif : vérifier l'annulation d'un bon sans réception.
+
+Compte : test.achats.
+
+Données : le bon d'ACV-30, en approbation.
+
+1. Ouvrez le bon, « Annuler », confirmez.
+2. Ouvrez « Mes demandes ».
+
+Résultat attendu : le bon est « Annulé » ; sa demande d'approbation est annulée et n'attend plus
+personne.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## F. Réceptions
+
+### ACV-33. Réception partielle avec bon de livraison
+
+Objectif : vérifier la réception (service fait) partielle, par qui, quand, et sa pièce jointe.
+
+Compte : test.chantiers.
+
+Données : le bon d'ACV-26 ; 400 barres reçues ; un PDF ou une photo de bon de livraison.
+
+1. Pilotage > Bons de commande, ouvrez le bon, « Enregistrer une réception ».
+2. Dans « Reçu ce jour », saisissez 400 ; « Observations » « Première livraison (essai) » ;
+   « Joindre le bon de livraison ».
+3. « Enregistrer la réception ».
+
+Résultat attendu : l'état devient « Reçu partiellement » ; la carte « Réceptions (service fait) »
+montre REC/EG/2026/…, la date, « Constatée par » test.chantiers, les 400 barres et le bon de
+livraison, téléchargeable.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-34. Pas de réception au-delà de la commande
+
+Objectif : vérifier le refus d'une quantité reçue supérieure à la commande.
+
+Compte : test.chantiers.
+
+Données : le même bon ; 1 000 barres.
+
+1. « Enregistrer une réception », saisissez 1 000.
+2. « Enregistrer la réception ».
+
+Résultat attendu : le message « … reçus en plus des … déjà reçus dépassent les … commandés. Faites
+modifier la commande. » ; aucune réception n'est ajoutée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-35. Annuler une réception
+
+Objectif : vérifier l'annulation motivée d'une réception.
+
+Compte : test.chantiers.
+
+Données : la réception d'ACV-33 ; motif « Quantité mal comptée (essai) ».
+
+1. Dans la carte « Réceptions (service fait) », « Annuler » sur la ligne.
+2. Saisissez le motif, « Annuler la réception ».
+3. Enregistrez de nouveau la réception des 400 barres.
+
+Résultat attendu : la réception passe « Annulée » ; la colonne « Reçu » de la ligne revient à 0 et
+l'état à « Approuvé » ou « Envoyé ». La nouvelle réception remet le bon « Reçu partiellement ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## G. Rapprochement des pièces d'achat
+
+### ACV-36. Pièce conforme : validée sans circuit
+
+Objectif : vérifier qu'une facture du fournisseur conforme à la commande et à la réception se valide
+sans repasser par le circuit.
+
+Compte : test.achats.
+
+Données : le bon d'ACV-33 ; facture « FAC-ESSAI-36 », date du jour, 400 barres à 6 000.
+
+1. Ouvrez le bon, « Saisir la facture du fournisseur ».
+2. Saisissez le numéro et la date ; gardez les quantités (le reçu non facturé) et les prix.
+3. « Enregistrer et soumettre ».
+
+Résultat attendu : la fenêtre « Pièce d'achat rattachée » dit « Conforme à la commande et à la
+réception : comptabilisée sans circuit. ». La carte « Pièces d'achat rattachées et rapprochement »
+montre la pièce « Conforme », « Comptabilisée » ; sur l'engagement, le consommé augmente d'autant.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-37. Écart de prix : la pièce passe par le circuit
+
+Objectif : vérifier qu'un prix facturé au-delà de la tolérance renvoie la pièce au circuit des
+pièces d'achat.
+
+Compte : test.achats, puis test.comptable.
+
+Données : le bon d'ACV-29 (groupe électrogène, approuvé) ; prix facturé 63 000 000, soit 5 % de plus
+que le prix commandé.
+
+1. test.achats : ouvrez le bon, « Enregistrer une réception » (1 reçu), « Enregistrer la réception ».
+2. « Saisir la facture du fournisseur », « PU HT facturé » 63 000 000, « Enregistrer et soumettre ».
+3. test.comptable : « À valider », approuvez la pièce.
+
+Résultat attendu : à l'étape 2, « Écart de rapprochement : « Groupe électrogène 100 kVA (essai) » :
+prix facturé 63 000 000 pour 60 000 000 commandé. Soumise, elle passe par le circuit des pièces
+d'achat. » ; la pièce reste en brouillon, en validation (contrôle de la finance, puis accord de la
+direction au-delà de 50 M). Elle n'est comptabilisée qu'au bout du circuit.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-38. Écart bloquant selon le réglage
+
+Objectif : vérifier qu'un écart bloque la pièce quand l'administration le règle ainsi.
+
+Compte : test.admin, puis test.achats.
+
+Données : la pièce « FAC-QDP-0001 (démo) » du bon « Ciment du chantier (démo) » (150 sacs facturés
+pour 120 reçus, à 97 500 pour 95 000).
+
+1. test.admin : Administration > Achats et ventes, « Une pièce en écart » : « Écart bloquant »,
+   « Enregistrer les réglages ».
+2. test.achats : Achats et dépenses, onglet « Pièces d'achat », ouvrez la pièce et validez-la.
+3. test.admin : remettez « Écart soumis au circuit des pièces d'achat ».
+
+Résultat attendu : à l'étape 2, le message « La pièce … s'écarte du bon de commande … : « Ciment
+CPA 42,5… » : 150 facturés pour 120 reçus. … prix facturé 97 500 pour 95 000 commandé. Corrigez la
+pièce (quantités, prix) ou enregistrez la réception manquante. » ; la pièce reste en brouillon.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-39. Lire le rapprochement sur le bon de commande
+
+Objectif : vérifier l'affichage des écarts d'une pièce rattachée.
+
+Compte : test.daf.
+
+Données : le bon « Ciment du chantier (démo) ».
+
+1. Achats et dépenses, onglet « Bons de commande », vue « À recevoir », ouvrez le bon.
+2. Lisez les cartes « Réceptions (service fait) » et « Pièces d'achat rattachées et rapprochement ».
+
+Résultat attendu : la réception de 120 sacs, et la pièce « FAC-QDP-0001 (démo) » marquée « Écart »,
+avec les deux écarts écrits en clair, et « Passe par le circuit des pièces d'achat. ». Le bon est
+« Reçu partiellement » (120 sur 200).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-40. Pièce d'achat sans commande : rien ne change
+
+Objectif : vérifier qu'une pièce d'achat saisie sans bon de commande suit les règles actuelles.
+
+Compte : test.achats, puis test.comptable.
+
+Données : pièce d'achat « Fournitures de bureau (essai) », 500 000, catégorie au choix, saisie
+directement.
+
+1. test.achats : onglet « Pièces d'achat », « Nouvelle pièce d'achat », saisissez et soumettez.
+2. test.comptable : « À valider », approuvez.
+
+Résultat attendu : comme avant le module : la pièce part au circuit (« Pièces d'achat : contrôle de
+la finance ») et n'est comptabilisée qu'après l'approbation.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## H. Devis fournisseurs
+
+### ACV-41. Comparer des devis et retenir le meilleur
+
+Objectif : vérifier la comparaison des devis d'un engagement et le choix motivé.
+
+Compte : test.chantiers.
+
+Données : engagement en brouillon « Location de groupe électrogène (essai) », 4 000 000 ; devis
+« Démo - Quincaillerie du port » 4 000 000, délai 10 jours ; second devis d'un autre fournisseur
+3 600 000, délai 15 jours ; motif « Moins cher, délai acceptable (essai) ».
+
+1. Créez l'engagement en brouillon, ouvrez-le.
+2. Dans « Devis fournisseurs comparés », « Ajouter un devis », deux fois ; joignez une pièce à l'un.
+3. « Retenir » sur le second, motif, « Retenir ce devis ».
+
+Résultat attendu : les deux devis s'affichent avec montant, délai et pièce. Le second est « Retenu »
+avec son motif ; l'engagement prend son fournisseur et son montant (3 600 000).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-42. Trois devis au-delà du seuil
+
+Objectif : vérifier la règle des trois devis, désactivée par défaut, réglée par l'administration.
+
+Compte : test.admin, puis test.chantiers.
+
+Données : seuil 3 000 000 ; l'engagement d'ACV-41.
+
+1. test.admin : Administration > Achats et ventes, « Trois devis exigés au-delà de (GNF HT) » :
+   3 000 000, « Enregistrer les réglages ».
+2. test.chantiers : sur l'engagement, « Soumettre à l'approbation ».
+3. Ajoutez un troisième devis, retenez de nouveau le second, puis soumettez.
+4. test.admin : remettez le seuil à 0.
+
+Résultat attendu : à l'étape 2, le message « Un engagement de plus de 3 000 000 GNF HT se soumet avec 3
+devis de fournisseurs différents au moins (2 joints). » ; la carte le rappelle. À l'étape 3,
+l'engagement part en approbation.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-43. Devis figés après la soumission
+
+Objectif : vérifier que les devis d'un engagement soumis ne changent plus.
+
+Compte : test.chantiers.
+
+Données : l'engagement d'ACV-42, en approbation.
+
+1. Ouvrez l'engagement, cherchez « Ajouter un devis », « Retenir » et la corbeille des devis.
+
+Résultat attendu : aucun de ces boutons n'est proposé ; les devis et le choix restent lisibles.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## I. Tableaux de bord et exports
+
+### ACV-44. Tableau de bord des ventes
+
+Objectif : vérifier les indicateurs des ventes.
+
+Compte : test.dg.
+
+Données : aucune.
+
+1. Ventes, onglet « Tableau de bord ».
+2. Lisez « Offres en cours », « Taux de transformation », « Reste à facturer », « Acomptes à
+   déduire » ; parcourez les trois onglets.
+3. Changez la période « Offres datées du … au … ».
+
+Résultat attendu : les offres en cours comptent celle des camions-bennes, signalée sous sa validité ;
+le taux de transformation rapporte les offres acceptées aux offres décidées (acceptées, refusées,
+expirées) de la période ; « Acomptes à déduire » liste la commande « Crépissage du bâtiment
+administratif (démo) ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-45. Tableau de bord des achats
+
+Objectif : vérifier les indicateurs des achats.
+
+Compte : test.daf.
+
+Données : aucune.
+
+1. Achats et dépenses, onglet « Tableau de bord ».
+2. Parcourez « À recevoir », « À facturer », « Écarts », « Engagements non soldés ».
+
+Résultat attendu : « Ciment du chantier (démo) » est à recevoir (reste 80 sacs) ; il n'est pas « À
+facturer », sa pièce en brouillon couvrant déjà plus que le reçu ; « Écarts » montre « FAC-QDP-0001
+(démo) » et ses écarts ; les engagements approuvés non soldés sont listés avec leur reste.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-46. Exporter les tableaux de bord
+
+Objectif : vérifier les exports Excel et CSV.
+
+Compte : test.daf.
+
+Données : aucune.
+
+1. Sur le tableau de bord des ventes, « Excel », puis « CSV du tableau » sur l'onglet « Commandes à
+   facturer ».
+2. Sur celui des achats, « Excel ».
+
+Résultat attendu : le classeur des ventes a quatre feuilles (« Synthèse », « Offres en cours »,
+« Commandes à facturer », « Acomptes à déduire »), avec la société et la date d'export en tête ; le
+CSV reprend les colonnes du tableau, séparées par des points-virgules ; les montants sont des
+nombres, aucun texte n'est lu comme une formule.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## J. Réglages
+
+### ACV-47. Régler la validité et le rapprochement
+
+Objectif : vérifier les réglages propres à chaque société.
+
+Compte : test.admin.
+
+Données : validité 10 jours, tolérance de prix 3 %, dans MB AxisPro Consulting.
+
+1. Passez dans MB AxisPro Consulting, Administration > Achats et ventes.
+2. « Validité par défaut (jours) » : 10 ; « Tolérance sur les prix (%) » : 3 ; « Enregistrer les
+   réglages ».
+3. Repassez dans EGUITRA GROUP SARLU, rouvrez l'écran.
+4. Remettez 15 et 2 dans MB AxisPro Consulting.
+
+Résultat attendu : « Réglages enregistrés. » ; dans EGUITRA GROUP SARLU, la validité reste 15 jours
+et la tolérance 2 %. Une validité de 0 est refusée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-48. Régler la numérotation
+
+Objectif : vérifier le préfixe et le prochain numéro, et le refus d'un numéro déjà donné.
+
+Compte : test.daf.
+
+Données : la carte « Numérotation », ligne « Offres commerciales ».
+
+1. Administration > Achats et ventes ; lisez « Prochain : OF/EG/2026/… ».
+2. Mettez « Prochain numéro » au numéro d'une offre déjà créée, « Enregistrer les réglages ».
+3. Remettez le prochain numéro affiché à l'étape 1.
+
+Résultat attendu : à l'étape 2, « Le numéro OF/EG/2026/… existe déjà : choisissez un numéro suivant le
+dernier attribué. » ; rien ne change.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## K. Refus attendus
+
+### ACV-49. Le profil Achats ne voit pas les ventes
+
+Objectif : vérifier que le profil Achats n'atteint ni les offres ni les commandes des clients.
+
+Compte : test.achats.
+
+Données : aucune.
+
+1. Ouvrez le menu de Finance ; cherchez « Ventes ».
+2. Ouvrez l'adresse de la recette suivie de /finance/ventes/offres.
+
+Résultat attendu : « Ventes » n'est pas au menu ; la page des offres affiche un refus en français
+(« Accès non autorisé pour votre profil. »), sans données.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-50. La direction établit des offres, la finance facture
+
+Objectif : vérifier que la direction ne crée pas de facture depuis une commande.
+
+Compte : test.dg.
+
+Données : une commande acceptée (par exemple celle d'ACV-19).
+
+1. Créez une offre d'essai : elle s'enregistre.
+2. Ouvrez la commande ; cherchez « Facturer un acompte » et « Facturer le reste ».
+
+Résultat attendu : l'offre s'enregistre ; sur la commande, les boutons de facturation ne sont pas
+proposés à la direction (« Quantités exécutées… » reste proposé).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-51. Un métier ne voit que ses bons de commande
+
+Objectif : vérifier que le BTP ne voit que ses demandes et ne saisit pas la pièce d'achat.
+
+Compte : test.chantiers.
+
+Données : le bon d'ACV-26 (le sien) et celui d'ACV-27 (de test.achats).
+
+1. Pilotage > Bons de commande : lisez la liste.
+2. Ouvrez le bon d'ACV-26 ; cherchez « Saisir la facture du fournisseur ».
+
+Résultat attendu : la liste montre le bon d'ACV-26, pas celui d'ACV-27 ; aucune barre d'onglets ;
+« Saisir la facture du fournisseur » n'est pas proposé (réservé à la finance et aux achats).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-52. Réglages réservés à l'administration et à la finance
+
+Objectif : vérifier le refus des réglages aux autres profils.
+
+Compte : test.dg, puis test.exploitation.
+
+Données : aucune.
+
+1. test.dg : cherchez « Achats et ventes » dans Administration ; ouvrez l'adresse de la recette
+   suivie de /finance/admin/commerce.
+2. test.exploitation : ouvrez la même adresse.
+
+Résultat attendu : l'entrée n'est pas au menu ; la page affiche un refus en français, sans réglages.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## L. Séparation des deux sociétés
+
+### ACV-53. Les offres de chaque société restent dans ses livres
+
+Objectif : vérifier que les comptabilités restent séparées.
+
+Compte : test.daf.
+
+Données : l'offre d'ACV-13 (MB AxisPro Consulting).
+
+1. Dans EGUITRA GROUP SARLU, Ventes, onglet « Offres », vue « Toutes » : cherchez OF/MBAX.
+2. Dans MB AxisPro Consulting, essayez une offre avec l'article « Location de camion-benne, par jour
+   (démo) » : la liste « Article du catalogue » ne le propose pas.
+3. Dans MB AxisPro Consulting, cherchez la carte « Offre de travaux (BTP) » du formulaire.
+
+Résultat attendu : aucune offre OF/MBAX dans EGUITRA GROUP SARLU ; le catalogue de MB AxisPro
+Consulting ne propose que ses articles ; la carte « Offre de travaux (BTP) » n'apparaît pas (les
+chantiers ne concernent qu'EGUITRA GROUP SARLU).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-54. Le cabinet n'ouvre pas Finance
+
+Objectif : vérifier qu'un compte du cabinet n'atteint pas les achats et les ventes.
+
+Compte : test.consultant.
+
+Données : aucune.
+
+1. Ouvrez l'adresse de la recette suivie de /finance/ventes/offres.
+2. Ouvrez l'adresse de la recette suivie de /finance/achats/commandes.
+
+Résultat attendu : NIMOVA ouvre AxisPro Suite ou affiche un refus en français ; aucune offre ni aucun
+bon de commande n'est montré.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## Synthèse
+
+| Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
+|---|---|---|---|---|
+| A. Catalogue | 4 | | | |
+| B. Offres commerciales | 9 | | | |
+| C. Commandes et facturation | 7 | | | |
+| D. Offre de travaux et chantier | 5 | | | |
+| E. Bons de commande fournisseur | 7 | | | |
+| F. Réceptions | 3 | | | |
+| G. Rapprochement des pièces d'achat | 5 | | | |
+| H. Devis fournisseurs | 3 | | | |
+| I. Tableaux de bord et exports | 3 | | | |
+| J. Réglages | 2 | | | |
+| K. Refus attendus | 4 | | | |
+| L. Séparation des deux sociétés | 2 | | | |
+| Total | 54 | | | |
+
+Réserves et anomalies relevées :
+
+| N° {6} | Scénario {12} | Constat {52} | Demande DEM-… {16} | Gravité {14} |
+|---|---|---|---|---|
+| 1 | | | | |
+| 2 | | | | |
+| 3 | | | | |
+| 4 | | | | |
+| 5 | | | | |
+
+## Signatures
+
+| Le testeur {50} | Le référent du domaine {50} |
+|---|---|
+| Nom : | Nom : |
+| Fonction : | Fonction : |
+| Date : | Date : |
+| Signature : | Signature : |
