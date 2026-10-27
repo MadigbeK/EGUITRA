@@ -282,6 +282,8 @@ def move_summary(move):
         "company": ref(move.company_id),
         "approval": move._eguitra_approval_info(),
         "contract_ref": move.eguitra_contract_ref or None,
+        # « Commentaire ou indication » de la facture imprimée (eguitra_base).
+        "invoice_object": move.eguitra_object or None,
         "dispute": move.eguitra_dispute,
         "dispute_reason": move.eguitra_dispute_reason or None,
         "dispute_date": move.eguitra_dispute_date,
@@ -328,6 +330,7 @@ def move_detail(move):
                 "analytic_distribution": line.analytic_distribution or {},
                 "analytic": describe_distribution(line.analytic_distribution, labels),
                 "category": ref(line.eguitra_expense_category_id),
+                "uom": {"id": line.product_uom_id.id, "name": line.product_uom_id.name} if line.product_uom_id else None,
                 "display_type": line.display_type,
             }
             for line in lines

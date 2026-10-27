@@ -336,6 +336,8 @@ export interface MoveSummary {
   company: Ref;
   approval?: { request_id?: number; state: string; level: number | null; pending_with: string | null } | null;
   contract_ref?: string | null;
+  /** Objet de la facture imprimée (« Commentaire ou indication »). */
+  invoice_object?: string | null;
   /** Engagement de dépense consommé par la pièce d'achat. */
   commitment?: { id: number; name: string; object: string } | null;
   /** Facture contestée : statut « Litige » prioritaire, hors relances. */
@@ -369,6 +371,9 @@ export interface MoveLine {
   analytic_distribution: Record<string, number>;
   analytic?: AnalyticShare[];
   category?: Ref | null;
+  /** Unité de la ligne (m³, m², heure…) ; la facture l'imprime quand elle n'est pas « Unité ». */
+  uom?: { id: number; name: string } | null;
+  /** product : ligne chiffrée ; line_section : rubrique ; line_note : note. */
   display_type: string;
 }
 

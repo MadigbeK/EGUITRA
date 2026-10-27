@@ -56,6 +56,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "/finance/admin/axes": "Activités, chantiers et autres axes",
   "/finance/admin/imputations": "Règles d'imputation analytique",
   "/finance/admin/parametres": "Seuils d'alerte et taux",
+  "/finance/admin/factures": "Signataires, numérotation, comptes bancaires",
   "/finance/admin/audit": "Qui a fait quoi, et quand",
   "/axispro": "Portefeuille des projets évalués",
   "/axispro/actions": "Recommandations et leur suivi",

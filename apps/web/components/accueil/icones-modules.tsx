@@ -797,6 +797,7 @@ const PAR_ADRESSE: Record<string, string> = {
   "/finance/admin/axes": "axes",
   "/finance/admin/imputations": "imputations",
   "/finance/admin/parametres": "parametres",
+  "/finance/admin/factures": "ventes",
   "/finance/admin/audit": "audit",
   "/axispro/admin/utilisateurs": "utilisateurs",
   "/axispro/admin/societes": "societes",

@@ -10,6 +10,9 @@ import { ApiError, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
 
+/** Ligne chiffrée de la pièce (et non rubrique ni note). */
+const chiffree = (l: MoveDetail["lines"][number]) => !l.display_type || l.display_type === "product";
+
 /** Message de la fiche ; ouvrir : pièce créée par l'action (avoir, extourne), à ouvrir d'un clic. */
 type Message = { tone: "danger" | "ok" | "accent"; text: string; ouvrir?: { id: number; libelle: string } };
 
@@ -246,6 +249,7 @@ export function MoveDetailModal({
               {move.currency !== "GNF" ? `, en ${move.currency}` : ""}
             </span>
           </div>
+          {move.invoice_object && <p className="text-sm text-ink"><span className="text-muted">Objet : </span>{move.invoice_object}</p>}
           {move.dispute && (
             <Notice tone="danger">
               En litige depuis le {fmtDate(move.dispute_date)} : {move.dispute_reason}. La facture n&apos;est pas relancée tant que le litige dure.
@@ -276,16 +280,24 @@ export function MoveDetailModal({
           ) : (
             <DataTable
               dense
-              rows={move.lines.filter((l) => !l.display_type || l.display_type === "product")}
+              rows={move.lines.filter((l) => !l.display_type || ["product", "line_section", "line_note"].includes(l.display_type))}
               rowKey={(l) => l.id}
               columns={[
-                { key: "name", label: "Libellé", render: (l) => <div>{l.name}{l.category && <div className="text-[12px] text-muted">{l.category.name}</div>}</div> },
-                { key: "account", label: "Compte", render: (l) => (l.account ? `${l.account.code}` : "–") },
-                { key: "analytic", label: "Analytique", render: (l) => <AnalyticTags shares={l.analytic} /> },
-                { key: "quantity", label: "Qté", align: "right", render: (l) => fmtDec(l.quantity) },
-                { key: "price_unit", label: "PU HT", align: "right", render: (l) => montantDevise(l.price_unit, move.currency) },
-                { key: "taxes", label: "TVA", render: (l) => l.taxes.map((t) => taux(t.amount)).join(", ") || "–" },
-                { key: "price_subtotal", label: "Total HT", align: "right", render: (l) => montantDevise(l.price_subtotal, move.currency) },
+                {
+                  key: "name",
+                  label: "Libellé",
+                  render: (l) =>
+                    l.display_type === "line_section" ? <span className="font-semibold">Rubrique : {l.name}</span>
+                    : l.display_type === "line_note" ? <span className="italic text-muted">{l.name}</span>
+                    : <div>{l.name}{l.uom && <span className="text-[12px] text-muted"> ({l.uom.name})</span>}{l.category && <div className="text-[12px] text-muted">{l.category.name}</div>}</div>,
+                },
+                // Rubriques et notes : libellé seul.
+                { key: "account", label: "Compte", render: (l) => (!chiffree(l) ? "" : l.account ? `${l.account.code}` : "–") },
+                { key: "analytic", label: "Analytique", render: (l) => (chiffree(l) ? <AnalyticTags shares={l.analytic} /> : "") },
+                { key: "quantity", label: "Qté", align: "right", render: (l) => (chiffree(l) ? fmtDec(l.quantity) : "") },
+                { key: "price_unit", label: "PU HT", align: "right", render: (l) => (chiffree(l) ? montantDevise(l.price_unit, move.currency) : "") },
+                { key: "taxes", label: "TVA", render: (l) => (chiffree(l) ? l.taxes.map((t) => taux(t.amount)).join(", ") || "–" : "") },
+                { key: "price_subtotal", label: "Total HT", align: "right", render: (l) => (chiffree(l) ? montantDevise(l.price_subtotal, move.currency) : "") },
               ]}
             />
           )}

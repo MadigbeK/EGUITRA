@@ -47,6 +47,10 @@ MOVE_TYPES = {
     "entry": "Opération diverse",
 }
 MAX_ATTACHMENT = 15 * 1024 * 1024
+# Lignes sans montant d'une facture : rubrique (section du noyau, numérotée I, II… avec son sous-total sur la
+# facture imprimée) et note.
+DISPLAY_LINES = ("line_section", "line_note")
+MAX_OBJECT = 250
 # Routes ouvertes au profil Achats, bornées aux pièces d'achat et aux avoirs fournisseurs (common.achats_only).
 PURCHASE_READ = FIN_READ + ACHATS
 PURCHASE_WRITE = FIN_WRITE + ACHATS
@@ -161,9 +165,11 @@ def _invoice_lines(data, move_type, partner=None):
     d'achat se saisit par catégorie (ou produit). TVA : celle saisie, sinon celle de la catégorie, sinon
     la taxe par défaut. Analytique : la répartition saisie, complétée par les imputations automatiques
     pour les axes laissés vides. Profil Achats : taxes d'achat de la société seulement, compte jamais
-    choisi (free_accounts)."""
+    choisi (free_accounts). Unité : uom_id (m³, m², forfait…), imprimée quand elle n'est pas « Unité ».
+    Rubriques et notes (display_type line_section, line_note) : libellé seul, entre les lignes chiffrées."""
     lines = data.get("lines") or []
-    if not isinstance(lines, list) or not lines:
+    if not isinstance(lines, list) or not any(
+            isinstance(line, dict) and line.get("display_type") not in DISPLAY_LINES for line in lines):
         raise ApiError(400, "missing_fields", "Au moins une ligne est requise.", fields=["lines"])
     company = request.env.company
     sale = move_type.startswith("out_")
@@ -175,11 +181,22 @@ def _invoice_lines(data, move_type, partner=None):
     for i, line in enumerate(lines, start=1):
         if not isinstance(line, dict) or not line.get("name"):
             raise ApiError(400, "missing_fields", f"Ligne {i} : libellé requis.")
+        if line.get("display_type") in DISPLAY_LINES:
+            commands.append(Command.create({"display_type": line["display_type"], "name": str(line["name"])[:500]}))
+            continue
+        if line.get("display_type") not in (None, "", "product"):
+            raise ApiError(400, "invalid_parameter", f"Ligne {i} : type de ligne inconnu (rubrique : line_section, "
+                                                     "note : line_note).")
         values = {
             "name": str(line["name"])[:500],
             "quantity": as_float(line.get("quantity", 1), "quantity"),
             "price_unit": as_float(line.get("price_unit", 0), "price_unit"),
         }
+        if line.get("uom_id"):
+            uom = request.env["uom.uom"].browse(as_int(line["uom_id"], "uom_id")).exists()
+            if not uom:
+                raise ApiError(422, "business_rule", f"Ligne {i} : unité inconnue.")
+            values["product_uom_id"] = uom.id
         dist = distribution(line.get("analytic_distribution"), company)
         category = category_of(line.get("category_id"), company) if not sale else request.env["eguitra.expense.category"]
         account = chosen_account(line.get("account_id"), company, f"Ligne {i} : compte", allowed=category.account_id)
@@ -267,8 +284,9 @@ def _entry_categories(data, move_type, company):
     (personnel, organismes sociaux, État) ; vide pour une pièce d'achat ordinaire."""
     if not move_type.startswith("in_"):
         return request.env["account.account"]
-    lines = data.get("lines") or []
-    categories = [category_of(line.get("category_id"), company) if isinstance(line, dict) else None for line in lines]
+    lines = [line for line in data.get("lines") or []
+             if not (isinstance(line, dict) and line.get("display_type") in DISPLAY_LINES)]
+    categories =[category_of(line.get("category_id"), company) if isinstance(line, dict) else None for line in lines]
     entries = [c for c in categories if c and c.is_entry()]
     if not entries:
         return request.env["account.account"]
@@ -290,6 +308,8 @@ def _purchase_as_entry(data, move_type, partner, partner_account, company):
     day = parse_date(data, "invoice_date", today())
     commands, total = [], 0.0
     for i, line in enumerate(data["lines"], start=1):
+        if line.get("display_type") in DISPLAY_LINES:
+            continue
         if not line.get("name"):
             raise ApiError(400, "missing_fields", f"Ligne {i} : libellé requis.")
         category = category_of(line.get("category_id"), company)
@@ -435,6 +455,8 @@ class EguitraFinanceMoves(http.Controller):
             values["narration"] = str(data["narration"])
         if data.get("contract_ref"):
             values["eguitra_contract_ref"] = str(data["contract_ref"]).strip()[:120]
+        if data.get("invoice_object"):
+            values["eguitra_object"] = str(data["invoice_object"]).strip()[:MAX_OBJECT]
         if move_type == "entry":
             require_free_accounts("Opération diverse", ENTRY_DETAIL)
             if not data.get("journal_id"):
@@ -501,6 +523,8 @@ class EguitraFinanceMoves(http.Controller):
                 values[key] = data[key] or False
         if "contract_ref" in data:
             values["eguitra_contract_ref"] = str(data["contract_ref"] or "").strip()[:120] or False
+        if "invoice_object" in data:
+            values["eguitra_object"] = str(data["invoice_object"] or "").strip()[:MAX_OBJECT] or False
         if "partner_id" in data:
             values["partner_id"] = as_int(data["partner_id"], "partner_id")
         if "commitment_id" in data and move.move_type == "in_invoice":
@@ -641,9 +665,10 @@ class EguitraFinanceMoves(http.Controller):
         if not move.is_invoice(include_receipts=True):
             raise ApiError(422, "business_rule", "Pas d'impression pour ce type de pièce.")
         # Profil Achats seul : la pièce sans ses règlements ni son reste dû, qui relèvent de la trésorerie.
+        # Factures et avoirs des clients : gabarit des sociétés (eguitra_base, report_invoice.xml).
         report = "account.account_invoices_without_payment" if achats_only(FIN_READ) else "account.account_invoices"
         pdf, _type = request.env["ir.actions.report"].sudo()._render_qweb_pdf(report, move.ids)
-        name = (move.name or "brouillon").replace("/", "-")
+        name = (move.name if move.name and move.name != "/" else "brouillon").replace("/", "-")
         return request.make_response(pdf, headers=[
             ("Content-Type", "application/pdf"),
             ("Content-Disposition", content_disposition(f"{name}.pdf")),
