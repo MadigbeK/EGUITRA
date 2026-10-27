@@ -49,7 +49,8 @@ class EguitraChantier(models.Model):
     def _compute_eguitra_deducted(self):
         for chantier in self:
             done = chantier.situation_ids.filtered(lambda s: s.state == "invoiced")
-            deducted = sum(done.mapped(lambda s: s._eguitra_advance_deduction_of_invoice()))
+            # Somme par situation : mapped appellerait la méthode sur un ensemble vide s'il n'y en a aucune.
+            deducted = sum(s._eguitra_advance_deduction_of_invoice() for s in done)
             chantier.eguitra_advance_deducted = deducted
             billed = chantier.eguitra_advance_invoice_id.sudo().state == "posted"
             chantier.eguitra_advance_remaining = max(chantier.eguitra_advance_amount - deducted, 0.0) if billed else 0.0

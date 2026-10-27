@@ -274,9 +274,12 @@ class EguitraCommerceCatalogue(http.Controller):
             if not data.get("name"):
                 raise ApiError(422, "business_rule", f"Ligne {number} : nom manquant.")
             try:
-                existing = Template.search([("eguitra_catalogue", "=", True), ("company_id", "=", comp.id),
-                                            "|", ("name", "=", data["name"]),
-                                            ("default_code", "=", data.get("code") or "\x00")], limit=1)
+                # Même nom, ou même référence quand la ligne en porte une (jamais une référence vide).
+                same = [("name", "=", data["name"])]
+                if data.get("code"):
+                    same = ["|", *same, ("default_code", "=", data["code"])]
+                existing = Template.search([("eguitra_catalogue", "=", True), ("company_id", "=", comp.id), *same],
+                                           limit=1)
                 values, accounts = _values(data, comp, creating=not existing)
                 if existing:
                     _save(existing, values, accounts, comp)
