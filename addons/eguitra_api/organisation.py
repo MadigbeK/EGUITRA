@@ -129,6 +129,14 @@ SESSION_ROUTES = {
             ("POST", "/hsseq/procedures/<int:procedure_id>/acknowledge"),
             ("POST", "/hsseq/bulletins/<int:bulletin_id>/acknowledge"),
             ("GET", "/hsseq/my/crisis-contacts"),
+            # Lectures bornées au conducteur par le module HSSEQ : rotations du jour où il déclare, plan de
+            # trajet de sa rotation, ses alcootests (fait ou non, jamais le résultat), ses actions et ses
+            # risques.
+            ("GET", "/hsseq/rotations"),
+            ("GET", "/hsseq/rotations/<int:rotation_id>/journey"),
+            ("GET", "/hsseq/breath-tests"),
+            ("GET", "/hsseq/actions"),
+            ("GET", "/hsseq/risks"),
         }),
         # Sur une rotation, le seul passage en route : la validation, l'annulation et la remise en
         # brouillon restent au bureau.
