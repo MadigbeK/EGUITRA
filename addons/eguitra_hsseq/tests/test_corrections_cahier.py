@@ -137,3 +137,28 @@ class TestCorrectionsCahier(HsseqCase):
             self.assertEqual(status, 403, f"Auditeur : {path} refusé")
             status, _body = self.api("ibrahima", "GET", path)
             self.assertEqual(status, 200, f"Chef de parc : {path} servi")
+
+    def test_cible_cumulee_depuis_le_premier_mois_du_modele(self):
+        """Modèle commencé en juillet : ni le plan ni le réalisé des mois antérieurs n'entrent dans le cumul (le
+        plan cumulé de janvier à septembre ferait paraître l'indicateur non conforme à tort)."""
+        year = self.day.year - 1
+        status, template = self.api("kadi.hsseq", "POST", "/hsseq/reports/templates", {
+            "name": "Rapport commencé en juillet (fictif)", "start_month": f"{year}-07", "indicators": [
+                {"code": "A-1", "label": "Visites de sécurité sur site", "nature": "proactive", "mode": "manual",
+                 "unit": "nbre", "direction": "up", "aggregation": "sum", "targets": [1] * 12}]})
+        self.assertEqual(status, 200, template)
+        indicator_id = template["indicators"][0]["id"]
+        for month in ("07", "08", "09"):
+            status, body = self.api("kadi.hsseq", "PATCH", f"/hsseq/reports/{template['id']}/{year}-{month}",
+                                    {"values": [{"indicator_id": indicator_id, "value": 1}]})
+            self.assertEqual(status, 200, body)
+        status, report = self.api("kadi.hsseq", "GET", f"/hsseq/reports/{template['id']}/{year}-09")
+        self.assertEqual(status, 200, report)
+        self.assertEqual(report["months"], [f"{year}-07", f"{year}-08", f"{year}-09"],
+                         "Du premier mois du modèle au mois du rapport")
+        self.assertEqual(report["period_label"], f"Juillet à septembre {year}")
+        [row] = report["indicators"]
+        self.assertEqual((row["ytd"], row["ytd_target"], row["status"], row["annual_target"]), (3, 3, "met", 6),
+                         "Plan cumulé de juillet à septembre ; plan de l'année de juillet à décembre")
+        status, alone = self.api("kadi.hsseq", "GET", f"/hsseq/reports/{template['id']}/{year}-05")
+        self.assertEqual((status, alone["months"]), (200, [f"{year}-05"]), "Mois antérieur au modèle : lu seul")

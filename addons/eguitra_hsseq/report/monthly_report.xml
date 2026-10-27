@@ -65,7 +65,7 @@
                 </t>
                 <p t-else="" class="muted">Aucun indicateur non conforme ni sous surveillance.</p>
 
-                <h2>3. Plan contre réalisé depuis janvier</h2>
+                <h2>3. Plan contre réalisé sur la période</h2>
                 <table>
                     <tr>
                         <th>N°</th><th>Indicateur</th><th>Unité</th>
