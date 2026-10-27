@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Factures et avoirs des clients au modèle des sociétés du groupe (modèles Excel remis par EGUITRA
+        GROUP SARLU et MB AxisPro Consulting), dans la charte (logo et couleur de la société, à défaut le
+        vert d'EGUITRA GROUP). Les valeurs, déjà mises en forme, viennent de
+        account.move._eguitra_report_values (models/account_move.py) ; le transport ajoute le tableau de
+        ses rotations (eguitra_transport, report/facture_transport.xml). Les pièces d'achat gardent le
+        gabarit du noyau (_get_name_invoice_report).
+    -->
+    <template id="report_invoice_document" inherit_id="account.report_invoice_document" primary="True">
+        <xpath expr="//t[@t-call='web.external_layout']" position="replace">
+            <t t-call="web.external_layout">
+                <t t-set="o" t-value="o.with_context(lang=lang)"/>
+                <!-- L'en-tête du document garde le logo et le slogan ; l'identité de la société est ci-dessous. -->
+                <t t-set="eguitra_document_header" t-value="True"/>
+                <t t-set="d" t-value="o._eguitra_report_values(print_with_payments)"/>
+                <div class="page o_eg_invoice">
+                    <style t-out="d['css']"/>
+                    <div t-if="d['banner']" class="o_eg_banner" t-out="d['banner']"/>
+
+                    <table class="o_eg_head" name="eguitra_head">
+                        <tr>
+                            <td style="width: 60%;">
+                                <div class="o_eg_company_name" t-out="d['company_name']"/>
+                                <div t-foreach="d['company_lines']" t-as="company_line" t-out="company_line"/>
+                            </td>
+                            <td class="o_eg_title">
+                                <div class="o_eg_title_main" t-out="d['title']"/>
+                                <div t-if="d['number']" class="o_eg_key">N° <t t-out="d['number']"/></div>
+                                <div t-if="d['status']" class="o_eg_status" t-out="d['status']"/>
+                                <div t-out="d['place_date']"/>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <table class="o_eg_parties" name="eguitra_parties">
+                        <tr>
+                            <td style="width: 60%;">
+                                <div class="o_eg_box">
+                                    <div class="o_eg_label">CLIENT</div>
+                                    <div t-foreach="d['client']" t-as="item">
+                                        <span class="o_eg_key"><t t-out="item[0]"/> :</span> <t t-out="item[1]"/>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="o_eg_refs">
+                                <div t-foreach="d['references']" t-as="item">
+                                    <span class="o_eg_key"><t t-out="item[0]"/> :</span> <t t-out="item[1]"/>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div t-if="d['object']" class="o_eg_object" name="eguitra_object">
+                        <span class="o_eg_key">Commentaire ou indication :</span> <t t-out="d['object']"/>
+                    </div>
+
+                    <div name="eguitra_lines">
+                        <table t-if="d['rows'] and d['simple_rows']" class="o_eg_lines" name="eguitra_simple_lines">
+                            <thead>
+                                <tr>
+                                    <th>Autres éléments facturés</th>
+                                    <th class="o_eg_num" t-out="d['amount_label']"/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="d['rows']" t-as="row">
+                                    <tr t-if="row['kind'] == 'line'">
+                                        <td class="o_eg_desc" t-out="row['name']"/>
+                                        <td class="o_eg_num" t-out="row['amount']"/>
+                                    </tr>
+                                    <tr t-elif="row['kind'] == 'subtotal'" class="o_eg_subtotal">
+                                        <td t-out="row['label']"/>
+                                        <td class="o_eg_num" t-out="row['amount']"/>
+                                    </tr>
+                                    <tr t-else="" t-att-class="'o_eg_%s' % row['kind']">
+                                        <td colspan="2" class="o_eg_desc" t-out="row['label']"/>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                        <table t-elif="d['rows']" class="o_eg_lines" name="eguitra_main_lines">
+                            <t t-set="columns" t-value="5 + (1 if d['show_unit'] else 0) + (1 if d['show_discount'] else 0)"/>
+                            <thead>
+                                <tr>
+                                    <th class="o_eg_num" style="width: 7%;">N°</th>
+                                    <th>Description</th>
+                                    <th t-if="d['show_unit']">Unité</th>
+                                    <th class="o_eg_num">Quantité</th>
+                                    <th class="o_eg_num" t-out="d['price_label']"/>
+                                    <th t-if="d['show_discount']" class="o_eg_num">Remise</th>
+                                    <th class="o_eg_num" t-out="d['amount_label']"/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-foreach="d['rows']" t-as="row">
+                                    <tr t-if="row['kind'] == 'line'">
+                                        <td class="o_eg_num" t-out="row['number']"/>
+                                        <td class="o_eg_desc" t-out="row['name']"/>
+                                        <td t-if="d['show_unit']" t-out="row['unit']"/>
+                                        <td class="o_eg_num" t-out="row['quantity']"/>
+                                        <td class="o_eg_num" t-out="row['price']"/>
+                                        <td t-if="d['show_discount']" class="o_eg_num" t-out="row['discount']"/>
+                                        <td class="o_eg_num" t-out="row['amount']"/>
+                                    </tr>
+                                    <tr t-elif="row['kind'] == 'subtotal'" class="o_eg_subtotal">
+                                        <td t-att-colspan="columns - 1" class="o_eg_num" t-out="row['label']"/>
+                                        <td class="o_eg_num" t-out="row['amount']"/>
+                                    </tr>
+                                    <tr t-else="" t-att-class="'o_eg_%s' % row['kind']">
+                                        <td t-att-colspan="columns" class="o_eg_desc" t-out="row['label']"/>
+                                    </tr>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <table class="o_eg_bottom" name="eguitra_totals">
+                        <tr>
+                            <td class="o_eg_words" style="width: 55%;">
+                                <div class="o_eg_key" t-out="d['words_intro']"/>
+                                <div class="o_eg_accent" t-out="d['words']"/>
+                            </td>
+                            <td>
+                                <table class="o_eg_totals">
+                                    <tr t-foreach="d['totals']" t-as="total" t-att-class="'o_eg_main' if total.get('main') else None">
+                                        <td t-out="total['label']"/>
+                                        <td class="o_eg_num" t-out="total['amount']"/>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <table class="o_eg_footer" name="eguitra_footer">
+                        <tr>
+                            <td name="eguitra_terms">
+                                <t t-if="d['terms']">
+                                    <div class="o_eg_key">CONDITIONS ET MODE DE RÈGLEMENT</div>
+                                    <div t-if="d['terms']['due']">Échéance : <t t-out="d['terms']['due']"/></div>
+                                    <div t-if="d['terms']['term']">Conditions : <t t-out="d['terms']['term']"/></div>
+                                    <div class="o_eg_key" t-out="d['terms']['methods']"/>
+                                    <div t-foreach="d['terms']['banks']" t-as="bank" class="o_eg_bank">
+                                        <span class="o_eg_key" t-out="bank['bank']"/>
+                                        <t t-if="bank['currency']"> (<t t-out="bank['currency']"/>)</t>
+                                        : compte n° <t t-out="bank['number']"/>
+                                        <t t-if="bank['iban']"><br/>IBAN : <t t-out="bank['iban']"/></t>
+                                        <t t-if="bank['swift']"><t t-if="bank['iban']"> · </t><t t-else=""><br/></t>SWIFT : <t t-out="bank['swift']"/></t>
+                                    </div>
+                                </t>
+                            </td>
+                            <td class="o_eg_sign" name="eguitra_signature">
+                                <div class="o_eg_key" t-out="d['signatory']"/>
+                                <div class="o_eg_sign_space"/>
+                                <div class="o_eg_company_name" t-out="d['company_name']"/>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </t>
+        </xpath>
+    </template>
+
+    <!-- Aiguillage des factures vers le gabarit des sociétés, comme le font les localisations du noyau. -->
+    <template id="report_invoice_eguitra" inherit_id="account.report_invoice">
+        <xpath expr="//t[@t-call='account.report_invoice_document']" position="after">
+            <t t-elif="o._get_name_invoice_report() == 'eguitra_base.report_invoice_document'"
+               t-call="eguitra_base.report_invoice_document" t-lang="lang"/>
+        </xpath>
+    </template>
+</odoo>
