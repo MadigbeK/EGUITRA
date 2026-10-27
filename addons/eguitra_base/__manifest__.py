@@ -2,7 +2,7 @@
     "name": "EGUITRA - Socle",
     "summary": "Sociétés du groupe, profils, axes analytiques, piste d'audit, double authentification, "
                "factures au modèle des sociétés",
-    "version": "19.0.1.10.0",
+    "version": "19.0.1.11.0",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",
