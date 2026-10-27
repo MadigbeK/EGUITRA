@@ -2,9 +2,10 @@
 
 NIMOVA · Finance, pour EGUITRA GROUP SARLU et MB AxisPro Consulting.
 
-Ventes, achats, trésorerie, rapprochement, tiers, relances, immobilisations, dette, budget,
-fiscalité, états, clôtures du mois et de l'exercice, approbations et engagements de dépense, avec le
-profil Achats.
+Ventes et factures imprimées au modèle de la société, achats, trésorerie, rapprochement, tiers,
+relances, immobilisations, dette, budget, fiscalité, états au modèle SYSCOHADA et comparatifs de
+l'exercice précédent, clôtures du mois et de l'exercice, approbations et engagements de dépense, avec
+le profil Achats.
 
 | Rubrique {28} | À remplir {72} |
 |---|---|
@@ -17,7 +18,7 @@ profil Achats.
 | Compte de test | ______ |
 | Société | ☐ EGUITRA GROUP SARLU    ☐ MB AxisPro Consulting |
 
-Document préparé par E-VOLUTION XP le 26 octobre 2026, d'après les écrans de la plateforme à cette
+Document préparé par E-VOLUTION XP le 27 octobre 2026, d'après les écrans de la plateforme à cette
 date.
 
 <!-- saut de page -->
@@ -47,11 +48,11 @@ compris les erreurs.
 
 | Compte {18} | Profil {18} | Sociétés {26} | Rôle dans ce cahier {38} |
 |---|---|---|---|
-| test.dg | Direction | les deux | tableau de bord, approbations de la direction, réouverture |
-| test.daf | Finance | les deux | approbations de la finance, trésorerie, clôtures |
-| test.comptable | Finance | les deux | saisie des ventes, des achats et des opérations |
+| test.dg | Direction | les deux | tableau de bord, approbations de la direction, réouverture, lecture des comparatifs |
+| test.daf | Finance | les deux | approbations de la finance, trésorerie, états, clôtures |
+| test.comptable | Finance | les deux | saisie des ventes, des achats et des opérations, factures imprimées |
 | test.achats | Achats | les deux | engagements, pièces d'achat, fournisseurs |
-| test.admin | Administration | les deux | utilisateurs, seuils, journal d'audit |
+| test.admin | Administration | les deux | utilisateurs, seuils, journal d'audit, sociétés, factures et journaux, import des comparatifs |
 | test.chantiers | BTP | EGUITRA GROUP SARLU | refus |
 
 Données fictives utiles : clients « Démo - Distributeur pétrolier A » et « Démo - Société minière
@@ -200,8 +201,10 @@ quantité 1, prix unitaire HT 10 000 000, TVA de la société.
 5. Ouvrez la facture dans la liste, puis cliquez sur « PDF ».
 
 Résultat attendu : la facture reçoit un numéro d'EGUITRA GROUP SARLU. Total HT 10 000 000 GNF,
-TVA et total TTC calculés. L'échéance suit les conditions du client. Le PDF porte l'en-tête de la
-société, le client, la ligne et les totaux.
+TVA et total TTC calculés. L'échéance suit les conditions du client. Le PDF suit le modèle de la
+société (détail en FIN-52 à FIN-55) : logo et identité de la société, « FACTURE » et son numéro, bloc
+« CLIENT », la ligne, les totaux et le montant en toutes lettres. Sans unité ni rubrique, le tableau
+n'a ni colonne « Unité » ni « Sous-total ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -645,13 +648,15 @@ Compte : test.daf.
 Données : arrêté au dernier jour du mois précédent.
 
 1. Ouvrez Comptabilité > Balance et états. Onglet « Bilan », date « Arrêté au ».
-2. Comparez le total de l'actif et celui du passif.
+2. Comparez « Total général actif » (BZ, tableau « Bilan actif ») et « Total général passif » (DZ,
+   tableau « Bilan passif »).
 3. Ouvrez « Compte de résultat », puis « Tableau des flux ».
 4. Cliquez sur « XLSX » d'un état, puis sur « Tous les états (XLSX) ».
 
-Résultat attendu : le bilan est équilibré (actif égal au passif). Le compte de résultat donne le mois,
-l'exercice et l'exercice précédent. Les classeurs s'ouvrent dans Excel, avec des nombres et non du
-texte.
+Résultat attendu : le message « Bilan équilibré au » suivi de la date s'affiche ; le total général de
+l'actif égale celui du passif. Le compte de résultat donne le mois, l'exercice, le pourcentage du
+chiffre d'affaires et la même période de l'an dernier (colonne « N-1 »). Les classeurs s'ouvrent dans
+Excel, avec des nombres et non du texte. Le détail des états au modèle SYSCOHADA est en partie H.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -1235,6 +1240,433 @@ saisie. À l'étape 3, l'opération est enregistrée une seule fois.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## G. Factures au modèle de la société
+
+### FIN-52. Mettre le slogan et les téléphones de la société sur les factures
+
+Objectif : vérifier que l'identité saisie dans Sociétés figure en tête des factures imprimées.
+
+Compte : test.admin, puis test.comptable.
+
+Données : slogan « Votre partenaire global pour un avenir durable » ; téléphones « +224 620 00 00 01
+/ +224 620 00 00 02 » (fictifs) ; la facture validée de FIN-06. Notez les valeurs actuelles de la
+fiche pour les remettre à la fin.
+
+1. test.admin : ouvrez Administration > Sociétés, carte « Groupe » (EGUITRA GROUP SARLU).
+2. Saisissez le « Slogan » et les « Téléphones » ; vérifiez que « Ville » porte « Conakry ». Cliquez
+   sur « Enregistrer ».
+3. test.comptable : Comptabilité > Ventes, ouvrez la facture de FIN-06, puis « PDF ».
+4. test.admin : remettez les valeurs notées, puis « Enregistrer ».
+
+Résultat attendu : le message « Société enregistrée. » s'affiche. En tête du PDF, le logo et le
+slogan. Dessous, à gauche, la raison sociale, l'adresse, « BP … – Conakry » si une boîte postale est
+saisie, « Contact : +224 620 00 00 01 / +224 620 00 00 02 », le courriel et, s'ils sont renseignés,
+le NIF et le RCCM ; à droite, « FACTURE », « N° » suivi du numéro et « Conakry, le » suivi de la date
+de la facture. Les titres sont à la couleur de la société, à défaut en vert.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-53. Régler le signataire, les modes de règlement et les comptes bancaires
+
+Objectif : vérifier que l'administration règle le bas des factures : signataire, modes de règlement
+et comptes bancaires cochés « Afficher sur les factures ».
+
+Compte : test.admin, puis test.comptable.
+
+Données : premier journal du bloc « Journaux de vente » : signataire « SERVICE COMMERCIAL », modes de
+règlement « Par espèces, virement bancaire ou chèque » ; premier compte du bloc « Comptes bancaires
+portés sur les factures » : banque « Banque d'essai », numéro « 99000111222333 », IBAN « gn00 essa
+9900 0111 2223 33 », code SWIFT « essagnxx » (fictifs) ; la facture validée de FIN-06. Notez les
+valeurs actuelles pour les remettre à la fin.
+
+1. test.admin : ouvrez Finance > Administration > Factures et journaux. Lisez la présentation de la
+   page.
+2. Dans le premier journal de vente, saisissez le « Signataire » et les « Modes de règlement », puis
+   « Enregistrer ».
+3. Dans le premier compte bancaire, videz « Numéro de compte » et cochez « Afficher sur les
+   factures » : regardez le bouton « Enregistrer ».
+4. Remplissez « Banque », « Numéro de compte », « IBAN » et « Code SWIFT », laissez la case cochée,
+   puis « Enregistrer ».
+5. test.comptable : ouvrez la facture de FIN-06, puis « PDF ».
+6. test.admin : décochez « Afficher sur les factures », « Enregistrer », puis remettez les valeurs
+   notées. test.comptable : rouvrez le PDF.
+
+Résultat attendu : « Journal « … » enregistré. », puis « Compte « … » enregistré. ». À l'étape 3,
+« Enregistrer » reste grisé tant que le numéro de compte manque. Après l'étape 4, l'IBAN et le SWIFT
+reviennent en majuscules, sans espaces, et le compte porte « Sur les factures ». Sur le PDF, sous
+« CONDITIONS ET MODE DE RÈGLEMENT » : « Par espèces, virement bancaire ou chèque », puis « Banque
+d'essai : compte n° 99000111222333 » et « IBAN : GN00ESSA99000111222333 · SWIFT : ESSAGNXX » ; en bas
+à droite, « SERVICE COMMERCIAL », puis la raison sociale. Les comptes non cochés n'y figurent pas. À
+l'étape 6, le compte porte « Hors des factures » et disparaît du PDF.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-54. Saisir une facture avec objet, rubriques, notes et unité
+
+Objectif : vérifier que le formulaire de vente porte la référence de l'offre, l'objet, les rubriques,
+les notes et l'unité, et que le PDF les reprend au modèle de la société.
+
+Compte : test.comptable.
+
+Données : client « Démo - Distributeur pétrolier A » ; « Référence de l'offre » « OFF-ESSAI-012 » ;
+« Contrat ou bon de commande » « BC-ESSAI-045 » ; « Objet de la facture » « Crépissage du bâtiment
+principal (essai) » ; rubrique « Charpente et couverture » avec les lignes « Charpente » (une unité
+de la liste autre que l'unité ordinaire, quantité 2, prix unitaire HT 250 000) et « Couverture »
+(quantité 1, prix 300 000), puis la note « Travaux réalisés selon le devis accepté. » ; rubrique
+« Divers » avec la ligne « Accessoires de fixation » (quantité 1, prix 200 000) ; TVA de la société,
+sans retenue.
+
+1. Ouvrez Comptabilité > Ventes, puis « Nouvelle facture ». Choisissez le « Client » et remplissez
+   « Référence de l'offre », « Contrat ou bon de commande » et « Objet de la facture ».
+2. Cliquez sur « Ajouter une rubrique », supprimez la ligne vide du haut (corbeille), puis écrivez
+   « Charpente et couverture ».
+3. « Ajouter une ligne » deux fois : « Charpente », avec son « Unité », puis « Couverture ». Cliquez
+   ensuite sur « Ajouter une note ».
+4. « Ajouter une rubrique » : « Divers », puis « Ajouter une ligne » : « Accessoires de fixation ».
+5. Cliquez sur « Enregistrer en brouillon ». Ouvrez le brouillon, puis « PDF ».
+6. Cliquez sur « Valider », puis de nouveau sur « PDF ».
+
+Résultat attendu : la fiche du brouillon montre « Objet : » suivi de l'objet et « Rubrique :
+Charpente et couverture ». Le PDF du brouillon porte en tête « BROUILLON : facture non validée, sans
+numéro ni valeur comptable. Le numéro est attribué à la validation. » et « Brouillon » sous
+« FACTURE », sans numéro ; validée, la facture n'a plus ce bandeau et porte « N° » suivi de son
+numéro. Le PDF porte « Référence offre : OFF-ESSAI-012 » et « Contrat ou bon de commande :
+BC-ESSAI-045 » à droite du bloc « CLIENT », et dessous « Commentaire ou indication : Crépissage du
+bâtiment principal (essai) ». Le tableau a les colonnes « N° », « Description », « Unité »,
+« Quantité », « PU HT (GNF) » et « Montant HT (GNF) » : « I. Charpente et couverture », ses lignes 1
+et 2, la note en italique, « Sous-total Charpente et couverture » 800 000, puis « II. Divers », la
+ligne 3 et « Sous-total Divers » 200 000. Totaux : « Montant HT » 1 000 000 GNF, la TVA à 18 %
+(180 000 GNF) et « NET À PAYER (TTC) » 1 180 000 GNF ; à gauche, « Arrêtée la présente facture à la
+somme de : » et « Un million cent quatre-vingt mille francs guinéens ». Plus bas, « CONDITIONS ET MODE
+DE RÈGLEMENT » (échéance, modes de règlement, comptes bancaires cochés) et, à droite, le signataire
+puis la raison sociale.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-55. Imprimer une facture en partie réglée et un avoir
+
+Objectif : vérifier le reste à payer d'une facture en partie réglée et la présentation d'un avoir.
+
+Compte : test.comptable.
+
+Données : la facture validée de FIN-54 (1 180 000 GNF TTC) ; encaissement de 180 000 GNF ; l'avoir
+validé en FIN-07.
+
+1. Comptabilité > Ventes, ouvrez la facture de FIN-54, puis « Encaisser ».
+2. Choisissez le « Compte de trésorerie » et le « Mode de paiement », saisissez 180 000 dans
+   « Montant », puis « Enregistrer le règlement ».
+3. Cliquez sur « PDF ».
+4. Ouvrez l'avoir de FIN-07 dans la liste des ventes, puis « PDF ».
+
+Résultat attendu : sous « NET À PAYER (TTC) », le PDF de la facture ajoute « Paiement perçu »
+180 000 GNF, puis « Reste à payer » 1 000 000 GNF en gras. Le PDF de l'avoir porte « AVOIR » et son
+numéro, « Référence : Avoir sur » suivi du numéro de la facture de FIN-06, « Facture d'origine : »
+suivi du même numéro, « TOTAL TTC » et « Arrêté le présent avoir à la somme de : » avec le montant en
+toutes lettres ; il n'a pas de bloc « CONDITIONS ET MODE DE RÈGLEMENT ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-56. Reprendre la numérotation de l'ancien système
+
+Objectif : vérifier que le dernier numéro de l'ancien système donne le numéro de la prochaine facture
+(EG24137 donne EG24138), et qu'un format que la plateforme ne sait pas continuer est refusé, avec un
+format proposé.
+
+Compte : test.admin.
+
+Données : le premier journal de vente, qui a déjà des factures de démonstration ; un journal de vente
+encore sans facture, préparé sur la recette par E-VOLUTION XP ; les numéros « EG24137 », puis
+« 0026/MBAX06/26 » (ancien format de MB AxisPro Consulting). Numéros proposés donnés pour 2026 : ils
+portent l'année en cours.
+
+1. Ouvrez Finance > Administration > Factures et journaux, bloc « Journaux de vente ». Regardez le
+   premier journal.
+2. Sur le journal préparé, saisissez « EG24137 » dans « Dernier numéro de l'ancien système », puis
+   cliquez hors du champ.
+3. Remplacez par « 0026/MBAX06/26 » et cliquez hors du champ.
+4. Cliquez sur le bouton qui propose de saisir « MBAX/2026/0026 ».
+5. Remettez « EG24137 », cliquez hors du champ, puis « Enregistrer ».
+
+Résultat attendu : étape 1, le champ est grisé, avec « Le journal numérote déjà ses factures
+(dernière : …) : la numérotation continue d'elle-même. » ; « Prochaine facture : » donne le numéro
+suivant de ce journal. Étape 2, « Prochaine facture : EG24138 » s'affiche à côté du nom du journal.
+Étape 3, un message rouge refuse le numéro, car le compteur n'est pas en fin de numéro ; il propose de
+saisir « MBAX/2026/0026 » : la première facture portera « MBAX/2026/0027 », puis la numérotation
+repartira à 0001 chaque année. « Enregistrer » reste grisé. Étape 4, le champ reçoit
+« MBAX/2026/0026 » et « Prochaine facture : MBAX/2026/0027 » s'affiche. Étape 5, « Journal « … »
+enregistré. » et « Prochaine facture : EG24138 ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-57. Les réglages des factures sont tenus par l'administration
+
+Objectif : vérifier que la finance consulte les réglages des factures sans les modifier, et que les
+autres profils n'y ont pas accès.
+
+Compte : test.daf, puis test.achats.
+
+Données : aucune.
+
+1. test.daf : ouvrez Finance > Administration > Factures et journaux.
+2. Essayez de modifier un signataire ou de cocher « Afficher sur les factures ».
+3. Cherchez « Sociétés » dans le menu « Administration ». Dans la barre d'adresse, remplacez la fin de
+   l'adresse par /finance/admin/societes et validez.
+4. test.achats : remplacez la fin de l'adresse par /finance/admin/factures et validez.
+
+Résultat attendu : chez test.daf, la page affiche « Réglages tenus par l'administration :
+consultation seulement. » ; champs et cases sont grisés, sans bouton « Enregistrer ». « Sociétés »
+n'apparaît pas ; par l'adresse, l'écran n'affiche aucune donnée et signale « Non ouvert à votre
+profil ». Chez test.achats, Factures et journaux n'affiche aucune donnée et signale « Non ouvert à
+votre profil ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## H. États au modèle SYSCOHADA
+
+### FIN-58. Lire le bilan détaillé par poste
+
+Objectif : vérifier le bilan au modèle du système normal : postes détaillés, brut, amortissements et
+dépréciations, net et N-1.
+
+Compte : test.daf.
+
+Données : arrêté au dernier jour du mois précédent. Les dates de cette partie sont données pour une
+campagne de tests en 2026 : l'exercice précédent est 2025.
+
+1. Ouvrez Comptabilité > Balance et états, onglet « Bilan », et choisissez la date « Arrêté au ».
+2. Lisez le message au-dessus des tableaux.
+3. Dans « Bilan actif », lisez les colonnes, puis les postes sous « Immobilisations incorporelles »
+   (AD), « Immobilisations corporelles » (AI), « Immobilisations financières » (AQ) et « Créances et
+   emplois assimilés » (BG).
+4. Sur la ligne « Matériel de transport » (AN), comparez « Brut », « Amort. et dépréc. » et « Net ».
+5. Lisez « Bilan passif ».
+
+Résultat attendu : le message « Bilan équilibré au » suivi de la date, puis « Montants en GNF ;
+colonne N-1 : bilan à la clôture de l'exercice précédent. ». « Bilan actif » a les colonnes
+« Réf. », « Rubrique », « Note », « Brut », « Amort. et dépréc. », « Net » et « N-1 (31/12/2025) ».
+Les postes AE à AH, AJ à AN, AR et AS, BH à BJ sont en retrait sous leur rubrique ; « Avances et
+acomptes versés sur immobilisations » (AP) est une ligne à part, hors des immobilisations
+corporelles ; les rubriques et les totaux (AD, AI, AQ, AZ, BG, BK, BT, BZ) sont en gras. Sur chaque
+ligne, le net égale le brut moins les amortissements et dépréciations : AN porte en brut les
+ensembles et véhicules de la société (dont « Ensemble citerne DEMO-04 (démo) ») et en amortissements
+leur cumul. La colonne « Note » donne le numéro de la note annexe (« 3 » pour les immobilisations
+incorporelles et corporelles, « 7 » pour les clients). « Bilan passif » a les colonnes « Note »,
+« Net » et « N-1 ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-59. Lire les signes, les notes et les lettres des états
+
+Objectif : vérifier le signe et la note du compte de résultat, les lettres A à H du tableau des flux
+et son contrôle par la trésorerie du bilan.
+
+Compte : test.daf.
+
+Données : du 1er janvier à la date du jour.
+
+1. Onglet « Compte de résultat » : choisissez « Du » et « Au ».
+2. Lisez la colonne qui suit « Rubrique », puis la colonne « Note ».
+3. Onglet « Tableau des flux », même période : lisez la colonne qui suit « Rubrique ».
+4. Lisez la ligne placée sous FE, les dernières lignes du tableau et le message au-dessus.
+
+Résultat attendu : au compte de résultat, « + » devant chaque produit (lignes T, par exemple
+« Travaux, services vendus », note 21), « - » devant chaque charge (lignes R, par exemple « Charges
+de personnel », note 27), rien devant les soldes (« Chiffre d'affaires », « Résultat net ») ; les
+montants restent positifs, le signe dit le sens. Les colonnes « Mois », « Exercice », « % du CA » et
+« N-1 » (même période de l'an dernier) suivent. Au tableau des flux, les lettres A à H marquent les
+totaux ZA à ZH ; la ligne « Variation du BF lié aux activités opérationnelles (FB + FC + FD + FE) »
+suit FE ; en bas, « Contrôle : trésorerie actif - trésorerie passif du bilan » égale ZH, et le message
+commence par « Le tableau rejoint la trésorerie nette du bilan au ». Sinon, le message chiffre l'écart,
+à analyser avec l'expert-comptable, et une ligne rouge « Écart : contrôle - trésorerie nette de fin
+(H) » s'ajoute.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-60. Produire les états au modèle SYSCOHADA
+
+Objectif : vérifier le classeur « Modèle SYSCOHADA » : trois feuilles au modèle de l'expert-comptable,
+des valeurs et jamais de formules.
+
+Compte : test.daf.
+
+Données : arrêté au dernier jour du mois précédent.
+
+1. Onglet « Bilan », date « Arrêté au », puis « Modèle SYSCOHADA ».
+2. Ouvrez le classeur dans Excel et lisez le nom des feuilles.
+3. Feuille « Bilan » : lisez l'en-tête et les colonnes de l'actif et du passif. Comparez trois postes
+   avec l'écran, par leur code de la colonne « REF ». Cliquez sur la cellule d'un total.
+4. Lisez les feuilles « Compte de Résultat » et « Tableau des Flux de trésorerie ».
+5. Onglet « Compte de résultat » : changez « Du » pour le 1er du mois, gardez « Au », puis « Modèle
+   SYSCOHADA ».
+
+Résultat attendu : le classeur a trois feuilles, « Bilan », « Compte de Résultat » et « Tableau des
+Flux de trésorerie ». Chacune porte « Désignation entité : EGUITRA GROUP SARLU », « Numéro
+d'identification : » suivi du NIF de la société (ou « non renseigné »), « Exercice clos le
+31-12-2026 » et « Durée (en mois) : 12 », puis un titre comme « BILAN AU 30 SEPTEMBRE 2026 ». L'actif
+a les colonnes « REF », « ACTIF », « Note », « EXERCICE AU » la date d'arrêté (« BRUT », « AMORT. ET
+DÉPRÉC. », « NET ») et « EXERCICE AU 31/12/2025 » (« NET ») ; le passif a « REF », « PASSIF »,
+« Note » et les deux colonnes « NET ». Les montants sont ceux de l'écran, les totaux en gras ; une
+cellule de total contient un nombre, pas une formule. Le compte de résultat porte le signe et la note
+de chaque ligne ; le tableau des flux, ses lettres, la variation du BF et le contrôle de la
+trésorerie. À l'étape 5, le classeur porte toujours sur l'exercice, de son premier jour à la date
+« Au ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-61. Importer les états de l'exercice précédent
+
+Objectif : vérifier l'import des états de l'exercice précédent au modèle, ses refus et ses contrôles.
+
+Compte : test.admin.
+
+Données : deux classeurs produits par « Modèle SYSCOHADA » (Balance et états, onglet « Bilan ») : le
+premier arrêté à la date du jour, le second au 31/12/2025, dernier jour de l'exercice précédent. Sur
+la recette, l'exercice précédent n'a aucune écriture : ne datez aucune pièce de 2025 pendant ces
+essais.
+
+1. Produisez les deux classeurs : « Arrêté au » à la date du jour, puis « Modèle SYSCOHADA » ;
+   « Arrêté au » au 31/12/2025, puis « Modèle SYSCOHADA ».
+2. Ouvrez Comptabilité > Clôtures et contrôles, bloc « Comparatifs du premier exercice », en bas de
+   la page. Lisez la date proposée dans « Exercice clos le ».
+3. Cliquez sur « États de l'exercice (.xlsx) » et choisissez le classeur arrêté à la date du jour.
+4. Changez « Exercice clos le » pour le 30/06/2025, puis choisissez le classeur du 31/12/2025.
+5. Remettez « Exercice clos le » au 31/12/2025 et choisissez de nouveau ce classeur.
+6. Lisez la fiche de l'import.
+
+Résultat attendu : « Exercice clos le » propose le 31/12/2025. Étape 3, refus : « Le classeur porte
+sur l'exercice 2026 et non 2025 : choisissez la date de clôture correspondante. ». Étape 4, refus :
+« Le 30/06/2025 n'est pas une date de clôture d'exercice de EGUITRA GROUP SARLU. ». Ces refus
+n'enregistrent rien. Étape 5, « États importés : contrôles ci-dessous. ». La fiche annonce « Exercice
+du 01/01/2025 au 31/12/2025 : 7 contrôles conformes sur 7 », puis le nom du classeur, la société et
+« importé par Test - Administrateur le » suivi de la date. Elle liste, chacun marqué « Conforme » :
+« Bilan équilibré : total actif (BZ) = total passif (DZ) », « Résultat du bilan (CJ) = résultat net
+du compte de résultat (XI) », « Chaque total égal à la somme de ses postes », « Actif : net = brut -
+amortissements et dépréciations », « Trésorerie nette de fin (ZH) = trésorerie actif (BT) -
+trésorerie passif (DT) », « Trésorerie nette d'ouverture (ZA) = BT - DT de l'exercice précédent » et
+« Report à nouveau (CH) = report N-1 + résultat N-1 - distributions ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-62. Remplacer l'import et le lire en colonne N-1
+
+Objectif : vérifier que le remplacement d'un import se confirme, que les contrôles signalent un écart
+sans bloquer l'import, et que les états importés servent de colonne N-1.
+
+Compte : test.admin, puis test.daf.
+
+Données : le classeur du 31/12/2025 de FIN-61 ; une copie de ce classeur où, dans la feuille
+« Bilan », bloc « PASSIF », la ligne « CA » porte 100 000 000 dans la colonne « EXERCICE AU
+31/12/2025 ».
+
+1. test.admin : préparez la copie dans Excel et enregistrez-la.
+2. Clôtures et contrôles, « Comparatifs du premier exercice », « Exercice clos le » au 31/12/2025 :
+   choisissez la copie. Lisez la fenêtre, puis « Annuler ».
+3. Recommencez et confirmez par « Remplacer l'import ».
+4. test.daf : Balance et états, onglet « Bilan », « Arrêté au » à la date du jour. Lisez les messages
+   et la colonne N-1 de « Capital » (CA).
+5. Onglet « Compte de résultat », « Du » au 01/01/2026 : « Au » à la date du jour, puis au 31/12/2026.
+6. test.admin : remplacez de nouveau l'import par le classeur d'origine.
+
+Résultat attendu : étape 2, la fenêtre indique que des états de l'exercice clos le 31/12/2025 ont déjà
+été importés (nom du classeur, par Test - Administrateur), demande de confirmer leur remplacement et
+précise que le remplacement est inscrit à la piste d'audit ; « Annuler » ne change rien. Étape 3,
+« Import remplacé : contrôles ci-dessous. » et « 6 contrôles conformes sur 7 » : « Chaque total égal
+à la somme de ses postes » est marqué « Écart » et cite « CP Total capitaux propres et ressources
+assimilées (net) : attendu 100 000 000 GNF, lu 0 GNF » ; l'import est enregistré malgré l'écart. Étape
+4, le message « Colonne N-1 (bilan au 31/12/2025) : états de l'exercice précédent importés pour
+EGUITRA GROUP SARLU » s'affiche et « Capital » montre 100 000 000 en N-1. Étape 5, à la date du jour, un
+avertissement explique que les états importés valent pour l'exercice entier et invite à choisir
+l'exercice complet ; au 31/12/2026, le message « Colonne N-1 (compte de résultat) : états de
+l'exercice précédent importés » s'affiche. Étape 6, la fiche revient à « 7 contrôles conformes sur
+7 ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-63. Contrôler le bilan d'ouverture
+
+Objectif : vérifier la comparaison, poste par poste, des à-nouveaux de l'exercice et du bilan importé
+de l'exercice précédent.
+
+Compte : test.daf.
+
+Données : l'import de FIN-61 (classeur d'origine).
+
+1. Clôtures et contrôles, bloc « Comparatifs du premier exercice » : sur la fiche de l'import,
+   cliquez sur « Bilan d'ouverture ».
+2. Lisez le message, puis le tableau.
+3. Cliquez sur « Tous les postes », puis sur « Écarts seulement ».
+4. Cliquez sur « Masquer le bilan d'ouverture ».
+
+Résultat attendu : le tableau a les colonnes « Réf. », « Poste », « Bilan importé (net) »,
+« À-nouveaux (net) » et « Écarts ». Le message est l'un des trois suivants : « Bilan d'ouverture au
+01/01/2026 conforme au bilan importé, poste par poste. » ; le nombre de postes qui diffèrent entre
+les à-nouveaux et le bilan importé, avec le rappel que le résultat de l'exercice précédent se lit en
+CJ s'il est repris au compte 13, en CH s'il l'est au compte 12 ou au compte d'affectation du
+résultat ; ou « Aucun à-nouveau (journal AN) dans l'exercice ouvert le 01/01/2026 : la reprise des
+soldes d'ouverture reste à faire. ». Sur la recette, les à-nouveaux de démonstration diffèrent du
+classeur importé, à zéro : les postes en cause, dont la banque (BS), sont listés avec leur écart.
+« Tous les postes » ajoute les postes conformes, marqués « – ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### FIN-64. L'import est réservé à l'administration, la lecture à la finance et à la direction
+
+Objectif : vérifier que seule l'administration importe ou remplace les états de l'exercice précédent,
+et que la finance et la direction les lisent et produisent le classeur au modèle.
+
+Compte : test.daf, puis test.dg.
+
+Données : l'import de FIN-61.
+
+1. test.daf : ouvrez Clôtures et contrôles, bloc « Comparatifs du premier exercice ».
+2. test.dg : ouvrez le même bloc, puis « Bilan d'ouverture » sur la fiche de l'import.
+3. test.dg : Balance et états, onglet « Bilan », « Modèle SYSCOHADA ».
+
+Résultat attendu : chez test.daf comme chez test.dg, le bloc ne propose ni « Exercice clos le » ni
+« États de l'exercice (.xlsx) » et précise « L'import est fait par l'administration. ». La fiche de
+l'import, ses contrôles et le bilan d'ouverture se lisent. test.dg obtient le classeur au modèle.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -1245,7 +1677,9 @@ saisie. À l'étape 3, l'opération est enregistrée une seule fois.
 | D. Administration | 4 | | | |
 | E. Refus attendus | 6 | | | |
 | F. Contrôles de saisie et de sécurité | 4 | | | |
-| Total | 51 | | | |
+| G. Factures au modèle de la société | 6 | | | |
+| H. États au modèle SYSCOHADA | 7 | | | |
+| Total | 64 | | | |
 
 Réserves et anomalies relevées :
 
