@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Pencil, Plus } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
+import { AchatsEngagement } from "@/components/commerce/DevisEngagement";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { PROFILS_FINANCE, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
@@ -250,6 +251,8 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
                 { key: "state", label: "État", render: (m) => (m.state === "posted" ? <Badge tone="ok">Comptabilisée</Badge> : <Badge>{m.state === "draft" ? "Brouillon" : "Annulée"}</Badge>) },
               ]} />
             </Card>
+            {/* Achats et ventes (eguitra_commerce) : devis fournisseurs comparés et bons de commande de l'engagement. */}
+            <AchatsEngagement commitmentId={c.id} onChanged={relire} />
             <div className="flex flex-wrap gap-2">
               {saisie && (c.state === "draft" || c.state === "rejected") && (
                 <>

@@ -46,6 +46,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/approbations", label: "À valider", icon: "BadgeCheck", profiles: VALIDATION, badge: "approvals" },
         { href: "/finance/demandes", label: "Mes demandes", icon: "BadgeCheck", profiles: ACHATS },
         { href: "/finance/engagements", label: "Engagements de dépense", icon: "ListChecks", profiles: ["admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"] },
+        // Bons de commande des métiers (leurs demandes) ; la finance et les achats les ouvrent depuis Achats et dépenses.
+        { href: "/finance/achats/commandes", label: "Bons de commande", icon: "ShoppingCart", profiles: ["exploitation", "chantiers", "immobilier"] },
         { href: "/finance/alertes", label: "Alertes", icon: "Bell", profiles: FIN, badge: "alerts" },
         { href: "/finance/guide", label: "Guide de la finance", icon: "Info", profiles: FIN },
         { href: "/finance/guide-achats", label: "Guide des achats", icon: "Info", profiles: ACHATS },
@@ -86,6 +88,8 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/admin/parametres", label: "Seuils et taux", icon: "SlidersHorizontal", profiles: ["admin"] },
         // Lecture : finance ; modification : administration (controllers/invoicing.py d'eguitra_finance).
         { href: "/finance/admin/factures", label: "Factures et journaux", icon: "Receipt", profiles: ["admin", "direction", "finance"] },
+        // Réglages des achats et des ventes (eguitra_commerce, controllers/settings.py) : administration et finance.
+        { href: "/finance/admin/commerce", label: "Achats et ventes", icon: "SlidersHorizontal", profiles: ["admin", "finance"] },
         { href: "/finance/admin/audit", label: "Journal d'audit", icon: "ScrollText", profiles: ["admin"] },
       ],
     },
