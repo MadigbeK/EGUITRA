@@ -3,24 +3,28 @@ bilan, compte de résultat (mois, exercice, % du chiffre d'affaires, exercice pr
 flux, balance (classe, soldes d'ouverture, mouvements, soldes débiteur et créditeur), flux mensuels
 de trésorerie (calcul du tableau de bord, avec le contrôle de chaque mois) et grand livre (activité,
 solde progressif, totaux par compte). Un onglet par état, en-tête société, exercice, date d'arrêté et
-date d'export."""
+date d'export.
+
+kind=modele_syscohada : les trois états au modèle du système normal que remplit l'expert-comptable du
+client (etats_modele.py), exercice de la date d'arrêté et colonne N-1.
+"""
 
 from datetime import timedelta
 
-from dateutil.relativedelta import relativedelta
-
 from odoo import http
-from odoo.http import request
+from odoo.http import content_disposition, request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route
 
 from ..models.finance_metrics import ACC_CODE, CARRIED_LINES
 from ..models.report_registry import ACC_NAME
-from ..models.syscohada import OPENING_JOURNAL
+from ..models.syscohada import OPENING_JOURNAL, WORKING_CAPITAL_LABEL
+from . import etats_modele
 from .common import FIN_READ, companies, parse_date, today
-from .exporting import export_meta, table_response
+from .exporting import XLSX_MIME, export_meta, table_response
 
-KINDS = ("bilan", "resultat", "flux", "balance", "flux_mensuels", "grand_livre")
+MODEL_KIND = "modele_syscohada"
+KINDS = ("bilan", "resultat", "flux", "balance", "flux_mensuels", "grand_livre", MODEL_KIND)
 ALL = ("bilan", "resultat", "flux", "balance", "flux_mensuels")
 MAX_LEDGER_DAYS = 400
 # Contrôle de chaque mois des flux mensuels (libellés de l'écran Activités et budget).
@@ -66,25 +70,34 @@ def _bounds(kw):
     return start, end, fy_start, fy_end
 
 
-def _statement_rows(lines, extra=()):
-    rows = [[line["code"], line["label"], line["amount"], *[line.get(k) for k in extra]] for line in lines]
-    styles = ["total" if line.get("total") else None for line in lines]
-    return rows, styles
+def _with_previous(meta, text, previous):
+    """En-tête d'un état : période de la colonne N-1 et son origine, avant la date d'export."""
+    origin = {"import": " (états importés de l'exercice précédent)",
+              "mixed": " (plateforme et états importés de l'exercice précédent)"}.get(previous["source"], "")
+    return meta[:-1] + [("N-1", text + origin)] + meta[-1:]
 
 
 class EguitraFinanceStatementsExport(http.Controller):
     @api_route("/finance/statements/export", profiles=FIN_READ)
     def export(self, **kw):
         """kind=all (classeur des cinq états), ou un état : bilan, resultat, flux, balance,
-        flux_mensuels, grand_livre ; format=xlsx (défaut) ou csv (un seul état)."""
+        flux_mensuels, grand_livre ; format=xlsx (défaut) ou csv (un seul état). kind=modele_syscohada :
+        bilan, compte de résultat et tableau des flux au modèle du système normal (XLSX seulement)."""
         kind = kw.get("kind") or "all"
         fmt = kw.get("format") or "xlsx"
         if kind != "all" and kind not in KINDS:
             raise ApiError(400, "invalid_parameter", f"État inconnu : {kind}.")
-        if fmt == "csv" and kind == "all":
-            raise ApiError(400, "invalid_parameter", "L'export CSV porte sur un seul état (paramètre kind).")
+        if fmt == "csv" and kind in ("all", MODEL_KIND):
+            raise ApiError(400, "invalid_parameter", "L'export CSV porte sur un seul état (paramètre kind) ; les états "
+                                                     "au modèle sont un classeur XLSX.")
         scope = companies(kw)
         start, end, fy_start, fy_end = _bounds(kw)
+        if kind == MODEL_KIND:
+            content = etats_modele.workbook(etats_modele.model_data(scope, end))
+            return request.make_response(content, headers=[
+                ("Content-Type", XLSX_MIME), ("Cache-Control", "no-store"),
+                ("Content-Disposition", content_disposition(f"etats_syscohada_{end:%Y%m%d}.xlsx")),
+            ])
         meta = export_meta(scope, [
             ("Exercice", f"{fy_start:%d/%m/%Y} au {fy_end:%d/%m/%Y}"),
             ("Période", f"{start:%d/%m/%Y} au {end:%d/%m/%Y}"),
@@ -101,45 +114,65 @@ class EguitraFinanceStatementsExport(http.Controller):
     # ─── États ────────────────────────────────────────────────────────────
 
     def _balance_sheet(self, scope, start, end, meta):
-        syscohada = request.env["eguitra.syscohada"].sudo()
-        sheet = syscohada.balance_sheet(scope, end)
-        previous = syscohada.balance_sheet(scope, end - relativedelta(years=1))
-        before = {line["code"]: line["amount"] for line in previous["actif"] + previous["passif"]}
-        rows, styles = [["", "ACTIF", None, None]], ["header"]
+        """Actif (brut, amortissements et dépréciations, net) et passif (net) ; N-1 : bilan à la clôture de
+        l'exercice précédent, ou états importés pour le premier exercice."""
+        sheet = request.env["eguitra.syscohada"].sudo().balance_sheet_compared(scope, end)
+        rows, styles = [["", "ACTIF", None, None, None, None, None]], ["header"]
         for side, label in (("actif", None), ("passif", "PASSIF")):
             if label:
-                rows.append(["", label, None, None])
+                rows.append(["", label, None, None, None, None, None])
                 styles.append("header")
             for line in sheet[side]:
-                rows.append([line["code"], line["label"], line["amount"], before.get(line["code"], 0.0)])
+                gross = (line["gross"], line["depreciation"]) if side == "actif" else (None, None)
+                rows.append([line["code"], line["label"], line["note"], *gross, line["amount"], line["previous"]])
                 styles.append("total" if line["total"] else None)
         if sheet["difference"]:
-            rows.append(["", "Écart actif - passif", sheet["difference"], None])
+            rows.append(["", "Écart actif - passif", None, None, None, sheet["difference"], None])
             styles.append("total")
-        return {"title": "Bilan", "meta": meta, "columns": [("Réf.", "text"), ("Rubrique", "text"),
-                ("Montant net", "money"), ("N-1", "money")], "rows": rows, "styles": styles, "totals": None}
+        previous = sheet["previous"]["date_to"]
+        return {"title": "Bilan", "meta": _with_previous(meta, f"au {previous:%d/%m/%Y}", sheet["previous"]),
+                "columns": [("Réf.", "text"), ("Rubrique", "text"), ("Note", "text"), ("Brut", "money"),
+                            ("Amort. et dépréc.", "money"), ("Montant net", "money"), ("N-1", "money")],
+                "rows": rows, "styles": styles, "totals": None}
 
     def _income(self, scope, start, end, meta):
         current = income_with_month(scope, start, end)
-        previous = request.env["eguitra.syscohada"].sudo().income_statement(
-            scope, start - relativedelta(years=1), end - relativedelta(years=1))
-        before = {line["code"]: line["amount"] for line in previous["lines"]}
-        rows = [[line["code"], line["label"], line["month"], line["amount"], line["pct_revenue"],
-                 before.get(line["code"], 0.0)] for line in current["lines"]]
+        request.env["eguitra.syscohada"].sudo().add_previous_income(current, scope, start, end)
+        # Le signe (+ / -) n'est porté que par l'export au modèle : en CSV, « + » et « - » seraient précédés de
+        # l'apostrophe qui neutralise les formules.
+        rows = [[line["code"], line["label"], line["note"], line["month"], line["amount"], line["pct_revenue"],
+                 line["previous"]] for line in current["lines"]]
         styles = ["total" if line["total"] else None for line in current["lines"]]
-        return {"title": "Compte de résultat", "meta": meta,
-                "columns": [("Réf.", "text"), ("Rubrique", "text"), (f"Mois ({end:%m/%Y})", "money"), ("Exercice", "money"),
-                            ("% du CA", "percent"), ("N-1", "money")],
+        previous = current["previous"]
+        return {"title": "Compte de résultat",
+                "meta": _with_previous(meta, f"du {previous['date_from']:%d/%m/%Y} au {previous['date_to']:%d/%m/%Y}",
+                                       previous),
+                "columns": [("Réf.", "text"), ("Rubrique", "text"), ("Note", "text"), (f"Mois ({end:%m/%Y})", "money"),
+                            ("Exercice", "money"), ("% du CA", "percent"), ("N-1", "money")],
                 "rows": rows, "styles": styles, "totals": None}
 
     def _cash_flow(self, scope, start, end, meta):
-        flows = request.env["eguitra.syscohada"].sudo().cash_flow(scope, start, end)
-        rows, styles = _statement_rows(flows["lines"])
-        if flows["difference"]:
-            rows.append(["", "Écart avec la trésorerie du bilan (à analyser)", flows["difference"]])
+        flows = request.env["eguitra.syscohada"].sudo().cash_flow_compared(scope, start, end)
+        previous = flows["previous"]
+        rows, styles = [], []
+        for line in flows["lines"]:
+            if line["code"] == "ZB":
+                rows.append(["", WORKING_CAPITAL_LABEL, None, flows["bf"], previous["bf"]])
+                styles.append(None)
+            rows.append([line["code"], line["label"], line["letter"], line["amount"], line["previous"]])
+            styles.append("total" if line["total"] else None)
+        rows.append(["", "Contrôle : trésorerie actif - trésorerie passif du bilan", None, flows["treasury_end"],
+                     previous["treasury_end"]])
+        styles.append("total")
+        if flows["difference"] or previous["difference"]:
+            rows.append(["", "Écart avec la trésorerie du bilan (à analyser)", None, flows["difference"],
+                         previous["difference"]])
             styles.append("total")
-        return {"title": "Tableau des flux", "meta": meta,
-                "columns": [("Réf.", "text"), ("Rubrique", "text"), ("Montant", "money")],
+        return {"title": "Tableau des flux",
+                "meta": _with_previous(meta, f"du {previous['date_from']:%d/%m/%Y} au {previous['date_to']:%d/%m/%Y}",
+                                       previous),
+                "columns": [("Réf.", "text"), ("Rubrique", "text"), ("Lettre", "text"), ("Montant", "money"),
+                            ("N-1", "money")],
                 "rows": rows, "styles": styles, "totals": None}
 
     def _trial_balance(self, scope, start, end, meta):

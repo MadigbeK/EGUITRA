@@ -14,9 +14,18 @@ plus le solde du compte d'affectation du résultat (type equity_unaffected, « 9
 Guinée), rejoint CH « Report à nouveau ». L'OD d'affectation décidée par l'assemblée (débit du
 compte d'affectation, crédit des réserves, du report à nouveau ou des dividendes) fait ainsi passer
 le résultat antérieur en réserves sans déséquilibrer le bilan.
+
+Présentation du modèle du système normal (celui que remplit l'expert-comptable du client) : postes de
+l'actif détaillés (AE à AH, AJ à AN, AR et AS), colonnes brut, amortissements et dépréciations, net et
+net N-1, numéros des notes annexes, signe des rubriques du compte de résultat, lettres A à H du tableau
+des flux. Colonne N-1 : bilan à la clôture de l'exercice précédent ; compte de résultat et flux sur la
+même période un an plus tôt. Quand l'exercice précédent n'a aucune écriture dans la plateforme (premier
+exercice), elle reprend les états importés de cet exercice (eguitra.statement.comparative).
 """
 
 from datetime import timedelta
+
+from dateutil.relativedelta import relativedelta
 
 from odoo import api, models
 
@@ -40,7 +49,7 @@ CR_LINES = [
     ("TH", "Autres produits", ["75"], [], "all"),
     ("TI", "Transferts de charges d'exploitation", ["781"], [], "all"),
     ("RC", "Achats de matières premières et fournitures liées", ["602"], [], "all"),
-    ("RD", "Variation de stocks de matières premières", ["6032"], [], "all"),
+    ("RD", "Variation de stocks de matières premières et fournitures liées", ["6032"], [], "all"),
     ("RE", "Autres achats", ["604", "605", "606", "607", "608", "609"], [], "all"),
     ("RF", "Variation de stocks d'autres approvisionnements", ["6033"], [], "all"),
     ("RG", "Transports", ["61"], [], "all"),
@@ -49,7 +58,7 @@ CR_LINES = [
     ("RJ", "Autres charges", ["65"], [], "all"),
     ("RK", "Charges de personnel", ["66"], [], "all"),
     ("TJ", "Reprises d'amortissements, provisions et dépréciations", ["791", "798", "799"], [], "all"),
-    ("RL", "Dotations aux amortissements, provisions et dépréciations", ["681", "691"], [], "all"),
+    ("RL", "Dotations aux amortissements, aux provisions et dépréciations", ["681", "691"], [], "all"),
     ("TK", "Revenus financiers et assimilés", ["77"], [], "all"),
     ("TL", "Reprises de provisions et dépréciations financières", ["797"], [], "all"),
     ("TM", "Transferts de charges financières", ["787"], [], "all"),
@@ -82,11 +91,53 @@ CR_ORDER = [
     "RO", "RP", "XH", "RQ", "RS", "XI",
 ]
 
+# Amortissements (28), dépréciations des immobilisations (29), des stocks (39), des comptes de tiers (49) et de
+# la trésorerie (59) : colonne « Amortissements et dépréciations » de l'actif ; le brut est le net augmenté
+# de ces comptes, que chaque poste reprend avec ses comptes bruts.
+DEPRECIATION_PREFIXES = ("28", "29", "39", "49", "59")
+
+
+def _fixed_asset(code, label, gross, exclude=()):
+    """Poste d'immobilisations : ses comptes bruts (classe 2) et, pour chacun, l'amortissement (28) et la
+    dépréciation (29) du même sous-compte : 245 matériel de transport, 2845 et 2945 ; 22 terrains, 282 et 292."""
+    def extend(prefixes):
+        return [*prefixes, *("28" + p[1:] for p in prefixes), *("29" + p[1:] for p in prefixes)]
+
+    return (code, label, extend(gross), extend(exclude), "all")
+
+
+# Postes d'immobilisations du modèle du système normal (plan SYSCOHADA révisé, 2017), table à valider avec
+# l'expert-comptable du client :
+# - AE : 211 frais de développement, 2181 frais de prospection et d'évaluation de ressources minérales ;
+# - AF : 212 brevets, licences, concessions et droits similaires, 213 logiciels et sites internet, 214 marques ;
+# - AG : 215 fonds commercial, 216 droit au bail ;
+# - AH : le reste du 21 (217 investissements de création, 218 autres droits et valeurs incorporels hors 2181,
+#   219 immobilisations incorporelles en cours) ;
+# - AJ : 22 terrains (agencements et aménagements de terrains, gisements et terrains en cours compris) ;
+# - AK : 231 bâtiments sur sol propre, 232 sur sol d'autrui, 233 ouvrages d'infrastructure, 237 bâtiments mis en
+#   concession, 239 bâtiments en cours ;
+# - AL : le reste du 23 (234 aménagements, agencements et installations techniques, 235 aménagements de
+#   bureaux, 238 autres installations et agencements) ;
+# - AM : le 24 hors 245 (matériel et outillage, matériel d'emballage, mobilier et matériel de bureau, actifs
+#   biologiques, autres matériels, matériels en cours) ; AN : 245 matériel de transport ;
+# - AP : 25 avances et acomptes versés sur immobilisations ;
+# - AR : 26 titres de participation ; AS : 27 autres immobilisations financières (prêts, dépôts et
+#   cautionnements, intérêts courus).
+# Chaque poste reprend aussi les 28 et 29 de ses sous-comptes (_fixed_asset) ; « le reste du 21 » (AH, AL, AM)
+# garantit qu'aucun compte d'immobilisation ne sort du bilan.
 BILAN_ACTIF = [
-    ("AD", "Immobilisations incorporelles", ["21", "281", "291"], [], "all"),
-    ("AI", "Immobilisations corporelles", ["22", "23", "24", "282", "283", "284", "292", "293", "294"], [], "all"),
-    ("AP", "Avances et acomptes versés sur immobilisations", ["25", "295"], [], "all"),
-    ("AQ", "Immobilisations financières", ["26", "27", "296", "297"], [], "all"),
+    _fixed_asset("AE", "Frais de développement et de prospection", ["211", "2181"]),
+    _fixed_asset("AF", "Brevets, licences, logiciels et droits similaires", ["212", "213", "214"]),
+    _fixed_asset("AG", "Fonds commercial et droit au bail", ["215", "216"]),
+    _fixed_asset("AH", "Autres immobilisations incorporelles", ["21"], ["211", "2181", "212", "213", "214", "215", "216"]),
+    _fixed_asset("AJ", "Terrains", ["22"]),
+    _fixed_asset("AK", "Bâtiments", ["231", "232", "233", "237", "239"]),
+    _fixed_asset("AL", "Aménagements, agencements et installations", ["23"], ["231", "232", "233", "237", "239"]),
+    _fixed_asset("AM", "Matériel, mobilier et actifs biologiques", ["24"], ["245"]),
+    _fixed_asset("AN", "Matériel de transport", ["245"]),
+    _fixed_asset("AP", "Avances et acomptes versés sur immobilisations", ["25"]),
+    _fixed_asset("AR", "Titres de participation", ["26"]),
+    _fixed_asset("AS", "Autres immobilisations financières", ["27"]),
     ("BA", "Actif circulant HAO", ["485", "488", "498"], [], "all"),
     ("BB", "Stocks et encours", ["3"], [], "all"),
     # Fournisseurs débiteurs : 409 et tout compte 40 au solde débiteur (avance versée sur 401), sous
@@ -101,14 +152,24 @@ BILAN_ACTIF = [
      ["592", "593", "594"]),
     ("BU", "Écart de conversion actif", ["478"], [], "all"),
 ]
+# AP est une rubrique propre, comme dans la présentation officielle du SYSCOHADA révisé (AZ = AD + AI + AP + AQ) ;
+# le modèle du client le range dans AI (AI = AJ + … + AN + AP, AZ = AD + AI + AQ) : même total AZ. L'import des
+# comparatifs ramène un AI qui comprend AP à la présentation officielle (statement_comparative.py).
 BILAN_ACTIF_TOTALS = [
+    ("AD", "Immobilisations incorporelles", [("AE", 1), ("AF", 1), ("AG", 1), ("AH", 1)]),
+    ("AI", "Immobilisations corporelles", [("AJ", 1), ("AK", 1), ("AL", 1), ("AM", 1), ("AN", 1)]),
+    ("AQ", "Immobilisations financières", [("AR", 1), ("AS", 1)]),
     ("AZ", "Total actif immobilisé", [("AD", 1), ("AI", 1), ("AP", 1), ("AQ", 1)]),
     ("BG", "Créances et emplois assimilés", [("BH", 1), ("BI", 1), ("BJ", 1)]),
     ("BK", "Total actif circulant", [("BA", 1), ("BB", 1), ("BG", 1)]),
     ("BT", "Total trésorerie actif", [("BQ", 1), ("BR", 1), ("BS", 1)]),
     ("BZ", "Total général actif", [("AZ", 1), ("BK", 1), ("BT", 1), ("BU", 1)]),
 ]
-BILAN_ACTIF_ORDER = ["AD", "AI", "AP", "AQ", "AZ", "BA", "BB", "BH", "BI", "BJ", "BG", "BK", "BQ", "BR", "BS", "BT", "BU", "BZ"]
+# Ordre du modèle : une rubrique détaillée (AD, AI, AQ, BG) précède ses postes.
+BILAN_ACTIF_ORDER = [
+    "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AP", "AQ", "AR", "AS", "AZ",
+    "BA", "BB", "BG", "BH", "BI", "BJ", "BK", "BQ", "BR", "BS", "BT", "BU", "BZ",
+]
 
 BILAN_PASSIF = [
     ("CA", "Capital", ["101", "102", "103", "104"], [], "all"),
@@ -147,6 +208,29 @@ BILAN_PASSIF_ORDER = [
     "CA", "CB", "CD", "CE", "CF", "CG", "CH", "CJ", "CL", "CM", "CP", "DA", "DB", "DC", "DD", "DF", "DH", "DI",
     "DJ", "DK", "DM", "DN", "DP", "DQ", "DR", "DT", "DV", "DZ",
 ]
+# Postes présentés en retrait, sous leur rubrique (AD, AI, AQ, BG).
+DETAIL_CODES = {"AE", "AF", "AG", "AH", "AJ", "AK", "AL", "AM", "AN", "AR", "AS", "BH", "BI", "BJ"}
+
+# Numéros des notes annexes du système normal, tels que dans le modèle (colonne « Note »).
+BILAN_NOTES = {
+    "AD": "3", "AI": "3", "AP": "3", "AQ": "4", "BA": "5", "BB": "6", "BH": "17", "BI": "7", "BJ": "8",
+    "BQ": "9", "BR": "10", "BS": "11", "BU": "12",
+    "CA": "13", "CB": "13", "CD": "14", "CE": "3e", "CF": "14", "CG": "14", "CH": "14", "CL": "15", "CM": "15",
+    "DA": "16", "DB": "16", "DC": "16", "DH": "5", "DI": "7", "DJ": "17", "DK": "18", "DM": "19", "DN": "19",
+    "DQ": "20", "DR": "20", "DV": "12",
+}
+CR_NOTES = {
+    "TA": "21", "RA": "22", "RB": "6", "TB": "21", "TC": "21", "TD": "21", "TE": "6", "TF": "21", "TG": "21",
+    "TH": "21", "TI": "12", "RC": "22", "RD": "6", "RE": "22", "RF": "6", "RG": "23", "RH": "24", "RI": "25",
+    "RJ": "26", "RK": "27", "TJ": "28", "RL": "3C&28", "TK": "29", "TL": "28", "TM": "12", "RM": "29",
+    "RN": "3C&28", "TN": "3D", "TO": "30", "RO": "3D", "RP": "30", "RQ": "30",
+}
+
+
+def cr_sign(code):
+    """Colonne de signe du compte de résultat (modèle du client) : « + » pour un produit (T…), « - » pour une
+    charge (R…), rien pour un solde intermédiaire (X…). Les montants restent positifs : le signe dit le sens."""
+    return {"T": "+", "R": "-"}.get(code[:1])
 
 
 def _match(code, include, exclude):
@@ -155,17 +239,15 @@ def _match(code, include, exclude):
     return any(code.startswith(p) for p in include)
 
 
-def _compute(balances, lines, sign):
-    """Montant de chaque rubrique ; sign = 1 pour l'actif et les charges, -1 pour le passif et les produits."""
-    values = {}
-    used = set()
+def _assign(balances, lines):
+    """Comptes repris par chaque rubrique : {rubrique: [(compte, solde)]}."""
+    result = {}
     for code, _label, include, exclude, mode, *rest in lines:
         always = rest[0] if rest else []
-        total = 0.0
+        picked = result.setdefault(code, [])
         for account, balance in balances.items():
             if any(account.startswith(p) for p in always):
-                total += balance
-                used.add(account)
+                picked.append((account, balance))
                 continue
             if not _match(account, include, exclude):
                 continue
@@ -173,8 +255,17 @@ def _compute(balances, lines, sign):
                 continue
             if mode == "credit" and balance >= 0:
                 continue
-            total += balance
-            used.add(account)
+            picked.append((account, balance))
+    return result
+
+
+def _compute(balances, lines, sign):
+    """Montant de chaque rubrique ; sign = 1 pour l'actif et les charges, -1 pour le passif et les produits."""
+    values = {}
+    used = set()
+    for code, picked in _assign(balances, lines).items():
+        total = sum(balance for _account, balance in picked)
+        used.update(account for account, _balance in picked)
         values[code] = sign(code) * total if callable(sign) else sign * total
     return values, used
 
@@ -191,6 +282,39 @@ def _rows(values, order, lines, totals):
     return [{"code": c, "label": labels[c], "amount": values.get(c, 0.0), "total": c in total_codes} for c in order]
 
 
+def _position(balances, current=0.0, previous=0.0):
+    """Bilan d'un jeu de soldes {compte: solde} : actif net, brut et amortissements et dépréciations par poste,
+    passif ; current s'ajoute au résultat de l'exercice (CJ), previous au report à nouveau (CH)."""
+    assigned = _assign(balances, BILAN_ACTIF)
+    net = {code: sum(b for _a, b in picked) for code, picked in assigned.items()}
+    depreciation = {code: -sum(b for a, b in picked if a.startswith(DEPRECIATION_PREFIXES))
+                    for code, picked in assigned.items()}
+    gross = {code: net[code] + depreciation[code] for code in net}
+    for values in (net, gross, depreciation):
+        _totals(values, BILAN_ACTIF_TOTALS)
+    passif, used = _compute(balances, BILAN_PASSIF, -1)
+    passif["CJ"] = passif.get("CJ", 0.0) + current
+    passif["CH"] = passif.get("CH", 0.0) + previous
+    _totals(passif, BILAN_PASSIF_TOTALS)
+    used |= {account for picked in assigned.values() for account, _b in picked}
+    return {"net": net, "gross": gross, "depreciation": depreciation, "passif": passif, "used": used}
+
+
+def _actif_rows(position):
+    rows = _rows(position["net"], BILAN_ACTIF_ORDER, BILAN_ACTIF, BILAN_ACTIF_TOTALS)
+    for row in rows:
+        row.update(gross=position["gross"].get(row["code"], 0.0), depreciation=position["depreciation"].get(row["code"], 0.0),
+                   note=BILAN_NOTES.get(row["code"]), detail=row["code"] in DETAIL_CODES)
+    return rows
+
+
+def _passif_rows(position):
+    rows = _rows(position["passif"], BILAN_PASSIF_ORDER, BILAN_PASSIF, BILAN_PASSIF_TOTALS)
+    for row in rows:
+        row.update(note=BILAN_NOTES.get(row["code"]), detail=False)
+    return rows
+
+
 class EguitraSyscohada(models.AbstractModel):
     _name = "eguitra.syscohada"
     _description = "États financiers SYSCOHADA"
@@ -202,16 +326,20 @@ class EguitraSyscohada(models.AbstractModel):
         values, used = _compute(balances, CR_LINES, lambda code: -1 if code.startswith("T") else 1)
         values = _totals(values, CR_TOTALS)
         unmapped = {a: b for a, b in balances.items() if a[:1] in "678" and a not in used and abs(b) > 0.005}
+        lines = _rows(values, CR_ORDER, CR_LINES, CR_TOTALS)
+        for line in lines:
+            line.update(note=CR_NOTES.get(line["code"]), sign=cr_sign(line["code"]))
         return {
             "date_from": date_from,
             "date_to": date_to,
-            "lines": _rows(values, CR_ORDER, CR_LINES, CR_TOTALS),
+            "lines": lines,
             "totals": {c: values[c] for c, _l, _f in CR_TOTALS},
             "unmapped_accounts": unmapped,
         }
 
     @api.model
     def balance_sheet(self, companies, date_to, exclude_partner_ids=None):
+        """Bilan à la date : actif par poste (brut, amortissements et dépréciations, net) et passif."""
         metrics = self.env["eguitra.finance.metrics"]
         balances = metrics.account_balances(companies, date_to, exclude_partner_ids=exclude_partner_ids)
         # Le compte d'affectation du résultat n'entre dans aucune rubrique par son code : il rejoint le
@@ -219,21 +347,17 @@ class EguitraSyscohada(models.AbstractModel):
         unaffected = sum(balances.pop(code, 0.0) for code in metrics.unaffected_codes(companies))
         result = metrics.result_split(companies, date_to, exclude_partner_ids=exclude_partner_ids)
         previous = result["previous"] - unaffected
-        actif, used_a = _compute(balances, BILAN_ACTIF, 1)
-        actif = _totals(actif, BILAN_ACTIF_TOTALS)
-        passif, used_p = _compute(balances, BILAN_PASSIF, -1)
         # CJ : comptes 13 et résultat de l'exercice en cours ; CH : comptes 12 et résultat des exercices
         # précédents non encore affecté (classes 6 à 8 avant l'exercice, moins ce que l'OD d'affectation
         # a déjà porté au débit du compte d'affectation).
-        passif["CJ"] = passif.get("CJ", 0.0) + result["current"]
-        passif["CH"] = passif.get("CH", 0.0) + previous
-        passif = _totals(passif, BILAN_PASSIF_TOTALS)
-        used = used_a | used_p
-        unmapped = {a: b for a, b in balances.items() if a[:1] in "12345" and a not in used and abs(b) > 0.005}
+        position = _position(balances, result["current"], previous)
+        actif, passif = position["net"], position["passif"]
+        unmapped = {a: b for a, b in balances.items()
+                    if a[:1] in "12345" and a not in position["used"] and abs(b) > 0.005}
         return {
             "date_to": date_to,
-            "actif": _rows(actif, BILAN_ACTIF_ORDER, BILAN_ACTIF, BILAN_ACTIF_TOTALS),
-            "passif": _rows(passif, BILAN_PASSIF_ORDER, BILAN_PASSIF, BILAN_PASSIF_TOTALS),
+            "actif": _actif_rows(position),
+            "passif": _passif_rows(position),
             "total_actif": actif["BZ"],
             "total_passif": passif["DZ"],
             "difference": round(actif["BZ"] - passif["DZ"], 2),
@@ -241,6 +365,151 @@ class EguitraSyscohada(models.AbstractModel):
             "result_current_year": result["current"],
             "result_previous_unallocated": previous,
         }
+
+    @api.model
+    def opening_balance_sheet(self, company, day):
+        """Bilan d'ouverture de l'exercice qui commence le jour `day` : soldes des écritures antérieures et
+        à-nouveaux (journal AN) passés dans l'exercice. Le résultat de l'exercice précédent repris en
+        à-nouveaux se lit dans la rubrique de son compte (13 : CJ, 12 : CH) ; le compte d'affectation du
+        résultat et les comptes de gestion antérieurs rejoignent le report à nouveau (CH)."""
+        metrics = self.env["eguitra.finance.metrics"]
+        fy_end = metrics.fiscal_year_bounds(company, day)[1]
+        balances = metrics.account_balances(company, day - timedelta(days=1))
+        opening = self._period_lines(company, day, fy_end, True)
+        for code, (debit, credit) in opening.items():
+            balances[code] = balances.get(code, 0.0) + debit - credit
+        unaffected = sum(balances.pop(code, 0.0) for code in metrics.unaffected_codes(company))
+        earlier = sum(balances.pop(code) for code in [c for c in balances if c[:1] in "678"])
+        position = _position(balances, 0.0, -earlier - unaffected)
+        return {"date": day, "actif": _actif_rows(position), "passif": _passif_rows(position),
+                "accounts": len(opening), "difference": round(position["net"]["BZ"] - position["passif"]["DZ"], 2)}
+
+    # ─── Colonne N-1 : exercice précédent, ou états importés ─────────────
+
+    def _has_entries(self, company, date_from, date_to):
+        """La société a-t-elle des écritures validées dans la période ?"""
+        self.env.flush_all()
+        self.env.cr.execute(
+            """SELECT 1 FROM account_move_line WHERE parent_state = 'posted' AND company_id = %s
+                  AND date BETWEEN %s AND %s LIMIT 1""",
+            (company.id, date_from, date_to),
+        )
+        return bool(self.env.cr.fetchone())
+
+    def _previous_plan(self, companies, date_from, date_to, period=False):
+        """Origine de la colonne N-1. Bilan : à la clôture de l'exercice précédent ; compte de résultat et
+        flux (period=True) : même période un an plus tôt. Les états importés d'une société (comparatifs)
+        remplacent la plateforme quand son exercice précédent n'a aucune écriture ; pour le compte de résultat
+        et les flux, quand la période N-1 est cet exercice entier (états annuels)."""
+        metrics = self.env["eguitra.finance.metrics"]
+        fy_start = metrics.fiscal_year_bounds(companies[:1], date_to)[0]
+        p_start, p_end = metrics.fiscal_year_bounds(companies[:1], fy_start - timedelta(days=1))
+        span = (date_from - relativedelta(years=1), date_to - relativedelta(years=1)) if period else None
+        Comparative = self.env["eguitra.statement.comparative"].sudo()
+        available = Comparative.search([("company_id", "in", companies.ids), ("date_to", "=", p_end)]).filtered(
+            lambda r: not self._has_entries(r.company_id, p_start, p_end))
+        used = available if not period or span == (p_start, p_end) else Comparative
+        return {
+            "platform": companies - used.company_id, "imports": used, "available": available,
+            "date_from": span[0] if span else p_start, "date_to": span[1] if span else p_end,
+        }
+
+    @staticmethod
+    def _previous_meta(plan):
+        imports = plan["imports"]
+        source = "import" if imports and not plan["platform"] else "mixed" if imports else "platform"
+        return {
+            "date_from": plan["date_from"], "date_to": plan["date_to"], "source": source,
+            "imports": [{"id": r.id, "company": r.company_id.name, "date_to": r.date_to, "source": r.source or None,
+                         "imported_at": r.imported_at} for r in imports],
+            # Comparatifs importés que la période choisie ne permet pas d'employer (période partielle).
+            "import_available": bool(plan["available"] - imports),
+        }
+
+    @api.model
+    def previous_balance_sheet(self, companies, date_to):
+        """Bilan N-1 (clôture de l'exercice précédent) : {"actif": {code: {gross, depreciation, amount}},
+        "passif": {code: montant}} et son origine (plateforme, états importés ou les deux)."""
+        plan = self._previous_plan(companies, None, date_to)
+        actif, passif = {}, {}
+        if plan["platform"]:
+            sheet = self.balance_sheet(plan["platform"], plan["date_to"])
+            actif = {r["code"]: {"gross": r["gross"], "depreciation": r["depreciation"], "amount": r["amount"]}
+                     for r in sheet["actif"]}
+            passif = {r["code"]: r["amount"] for r in sheet["passif"]}
+        for record in plan["imports"]:
+            values = record.statement_values()
+            for code, row in values["actif"].items():
+                current = actif.setdefault(code, {"gross": 0.0, "depreciation": 0.0, "amount": 0.0})
+                for key in current:
+                    current[key] += row[key]
+            for code, amount in values["passif"].items():
+                passif[code] = passif.get(code, 0.0) + amount
+        return dict(self._previous_meta(plan), actif=actif, passif=passif)
+
+    @api.model
+    def previous_income(self, companies, date_from, date_to):
+        """Compte de résultat N-1 (même période un an plus tôt) : {"amounts": {code: montant}} et son origine."""
+        plan = self._previous_plan(companies, date_from, date_to, period=True)
+        amounts = {}
+        if plan["platform"]:
+            data = self.income_statement(plan["platform"], plan["date_from"], plan["date_to"])
+            amounts = {line["code"]: line["amount"] for line in data["lines"]}
+        for record in plan["imports"]:
+            for code, amount in record.statement_values()["resultat"].items():
+                amounts[code] = amounts.get(code, 0.0) + amount
+        return dict(self._previous_meta(plan), amounts=amounts)
+
+    @api.model
+    def previous_cash_flow(self, companies, date_from, date_to):
+        """Tableau des flux N-1 (même période un an plus tôt) : montants, variation du BF, trésorerie nette du
+        bilan (contrôle de ZH) et écart, et leur origine."""
+        plan = self._previous_plan(companies, date_from, date_to, period=True)
+        amounts, treasury_end = {}, 0.0
+        if plan["platform"]:
+            data = self.cash_flow(plan["platform"], plan["date_from"], plan["date_to"])
+            amounts = {line["code"]: line["amount"] for line in data["lines"]}
+            treasury_end = data["treasury_end"]
+        for record in plan["imports"]:
+            values = record.statement_values()
+            for code, amount in values["flux"].items():
+                amounts[code] = amounts.get(code, 0.0) + amount
+            treasury_end += values["actif"].get("BT", {}).get("amount", 0.0) - values["passif"].get("DT", 0.0)
+        return dict(self._previous_meta(plan), amounts=amounts, bf=working_capital_change(amounts),
+                    treasury_end=treasury_end, difference=round(treasury_end - amounts.get("ZH", 0.0), 2))
+
+    @api.model
+    def balance_sheet_compared(self, companies, date_to):
+        """Bilan avec la colonne N-1 (net) de chaque rubrique."""
+        sheet = self.balance_sheet(companies, date_to)
+        previous = self.previous_balance_sheet(companies, date_to)
+        for row in sheet["actif"]:
+            row["previous"] = previous["actif"].get(row["code"], {}).get("amount", 0.0)
+        for row in sheet["passif"]:
+            row["previous"] = previous["passif"].get(row["code"], 0.0)
+        before = previous["actif"].get("BZ", {}).get("amount", 0.0) - previous["passif"].get("DZ", 0.0)
+        sheet["previous"] = {k: v for k, v in previous.items() if k not in ("actif", "passif")}
+        sheet["previous"]["difference"] = round(before, 2)
+        return sheet
+
+    @api.model
+    def add_previous_income(self, statement, companies, date_from, date_to):
+        """Ajoute la colonne N-1 (previous) aux lignes d'un compte de résultat déjà calculé."""
+        previous = self.previous_income(companies, date_from, date_to)
+        for line in statement["lines"]:
+            line["previous"] = previous["amounts"].get(line["code"], 0.0)
+        statement["previous"] = {k: v for k, v in previous.items() if k != "amounts"}
+        return statement
+
+    @api.model
+    def cash_flow_compared(self, companies, date_from, date_to):
+        """Tableau des flux avec la colonne N-1, sa variation du BF et son contrôle de ZH."""
+        flows = self.cash_flow(companies, date_from, date_to)
+        previous = self.previous_cash_flow(companies, date_from, date_to)
+        for line in flows["lines"]:
+            line["previous"] = previous["amounts"].get(line["code"], 0.0)
+        flows["previous"] = {k: v for k, v in previous.items() if k != "amounts"}
+        return flows
 
     # ─── Tableau des flux de trésorerie ───────────────────────────────────
 
@@ -333,19 +602,18 @@ class EguitraSyscohada(models.AbstractModel):
         disposals = _prefix_sum(end, "485") - _prefix_sum(start, "485")
         v["FB"] += disposals
         v["FI"] -= disposals
-        v["ZB"] = sum(v[c] for c in ("FA", "FB", "FC", "FD", "FE"))
-        v["ZC"] = sum(v[c] for c in ("FF", "FG", "FH", "FI", "FJ"))
-        v["ZD"] = sum(v[c] for c in ("FK", "FL", "FM", "FN"))
-        v["ZE"] = sum(v[c] for c in ("FO", "FP", "FQ"))
-        v["ZF"] = v["ZD"] + v["ZE"]
-        v["ZG"] = v["ZB"] + v["ZC"] + v["ZF"]
-        v["ZH"] = v["ZG"] + v["ZA"]
+        for code, formula in TFT_TOTALS:
+            v[code] = sum(v[c] * s for c, s in formula)
         treasury_end = a1["BT"] - p1["DT"]
-        rows = [{"code": code, "label": label, "amount": v[code], "total": total} for code, label, total in TFT_ROWS]
+        rows = [{"code": code, "label": label, "amount": v[code], "total": total, "letter": TFT_LETTERS.get(code)}
+                for code, label, total in TFT_ROWS]
         return {
             "date_from": date_from,
             "date_to": date_to,
             "lines": rows,
+            # Variation du besoin de financement lié aux activités opérationnelles (FB + FC + FD + FE).
+            "bf": working_capital_change(v),
+            # Contrôle de ZH : trésorerie actif moins trésorerie passif du bilan à la fin de la période.
             "treasury_end": treasury_end,
             "difference": round(treasury_end - v["ZH"], 2),
         }
@@ -458,30 +726,51 @@ def _credit_side(balances, prefix):
     return -sum(b for code, b in balances.items() if code.startswith(prefix) and b < 0)
 
 
+# Montants signés : un décaissement ou une hausse de l'actif circulant est négatif, et chaque flux est la somme
+# de ses lignes (« somme FA à FE »). Les signes (-) et (+) des libellés disent le sens habituel de la ligne.
 TFT_ROWS = [
-    ("ZA", "Trésorerie nette au début de la période", True),
+    ("ZA", "Trésorerie nette au début de la période (trésorerie actif - trésorerie passif)", True),
     ("FA", "Capacité d'autofinancement globale (CAFG)", False),
-    ("FB", "Actif circulant HAO (variation)", False),
-    ("FC", "Variation des stocks", False),
-    ("FD", "Variation des créances", False),
-    ("FE", "Variation du passif circulant", False),
-    ("ZB", "Flux de trésorerie provenant des activités opérationnelles", True),
-    ("FF", "Décaissements liés aux acquisitions d'immobilisations incorporelles", False),
-    ("FG", "Décaissements liés aux acquisitions d'immobilisations corporelles", False),
-    ("FH", "Décaissements liés aux acquisitions d'immobilisations financières", False),
-    ("FI", "Encaissements liés aux cessions d'immobilisations incorporelles et corporelles", False),
-    ("FJ", "Encaissements liés aux cessions d'immobilisations financières", False),
-    ("ZC", "Flux de trésorerie provenant des activités d'investissement", True),
-    ("FK", "Augmentations de capital par apports nouveaux", False),
-    ("FL", "Subventions d'investissement reçues", False),
-    ("FM", "Prélèvements sur le capital", False),
-    ("FN", "Dividendes versés", False),
-    ("ZD", "Flux provenant des capitaux propres", True),
-    ("FO", "Emprunts", False),
-    ("FP", "Autres dettes financières", False),
-    ("FQ", "Remboursements des emprunts et autres dettes financières", False),
-    ("ZE", "Flux provenant des capitaux étrangers", True),
-    ("ZF", "Flux de trésorerie provenant des activités de financement", True),
-    ("ZG", "Variation de la trésorerie nette de la période", True),
-    ("ZH", "Trésorerie nette à la fin de la période", True),
+    ("FB", "(-) Variation de l'actif circulant HAO", False),
+    ("FC", "(-) Variation des stocks", False),
+    ("FD", "(-) Variation des créances", False),
+    ("FE", "(+) Variation du passif circulant", False),
+    ("ZB", "Flux de trésorerie provenant des activités opérationnelles (somme FA à FE)", True),
+    ("FF", "(-) Décaissements liés aux acquisitions d'immobilisations incorporelles", False),
+    ("FG", "(-) Décaissements liés aux acquisitions d'immobilisations corporelles", False),
+    ("FH", "(-) Décaissements liés aux acquisitions d'immobilisations financières", False),
+    ("FI", "(+) Encaissements liés aux cessions d'immobilisations incorporelles et corporelles", False),
+    ("FJ", "(+) Encaissements liés aux cessions d'immobilisations financières", False),
+    ("ZC", "Flux de trésorerie provenant des activités d'investissement (somme FF à FJ)", True),
+    ("FK", "(+) Augmentations de capital par apports nouveaux", False),
+    ("FL", "(+) Subventions d'investissement reçues", False),
+    ("FM", "(-) Prélèvements sur le capital", False),
+    ("FN", "(-) Dividendes versés", False),
+    ("ZD", "Flux de trésorerie provenant des capitaux propres (somme FK à FN)", True),
+    ("FO", "(+) Emprunts", False),
+    ("FP", "(+) Autres dettes financières", False),
+    ("FQ", "(-) Remboursements des emprunts et autres dettes financières", False),
+    ("ZE", "Flux de trésorerie provenant des capitaux étrangers (somme FO à FQ)", True),
+    ("ZF", "Flux de trésorerie provenant des activités de financement (D + E)", True),
+    ("ZG", "Variation de la trésorerie nette de la période (B + C + F)", True),
+    ("ZH", "Trésorerie nette à la fin de la période (G + A)", True),
 ]
+TFT_TOTALS = [
+    ("ZB", [("FA", 1), ("FB", 1), ("FC", 1), ("FD", 1), ("FE", 1)]),
+    ("ZC", [("FF", 1), ("FG", 1), ("FH", 1), ("FI", 1), ("FJ", 1)]),
+    ("ZD", [("FK", 1), ("FL", 1), ("FM", 1), ("FN", 1)]),
+    ("ZE", [("FO", 1), ("FP", 1), ("FQ", 1)]),
+    ("ZF", [("ZD", 1), ("ZE", 1)]),
+    ("ZG", [("ZB", 1), ("ZC", 1), ("ZF", 1)]),
+    ("ZH", [("ZG", 1), ("ZA", 1)]),
+]
+# Lettres du modèle (colonne C) : ZH = G + A, ZG = B + C + F, ZF = D + E.
+TFT_LETTERS = {"ZA": "A", "ZB": "B", "ZC": "C", "ZD": "D", "ZE": "E", "ZF": "F", "ZG": "G", "ZH": "H"}
+# Lignes des flux de sens négatif habituel (« (-) » du libellé).
+TFT_OUTFLOWS = {"FB", "FC", "FD", "FF", "FG", "FH", "FM", "FN", "FQ"}
+WORKING_CAPITAL_LABEL = "Variation du BF lié aux activités opérationnelles (FB + FC + FD + FE)"
+
+
+def working_capital_change(amounts):
+    """Variation du besoin de financement lié aux activités opérationnelles : FB + FC + FD + FE."""
+    return sum(amounts.get(code, 0.0) for code in ("FB", "FC", "FD", "FE"))

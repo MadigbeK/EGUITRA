@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Facture des rotations (modèle « Facture transport carburant ») : tableau du transport avant les lignes
+         simples (taxes refacturées, déduction du manquant). Valeurs : models/facture.py. -->
+    <template id="report_invoice_document_transport" inherit_id="eguitra_base.report_invoice_document">
+        <xpath expr="//div[@name='eguitra_lines']" position="before">
+            <table t-if="d.get('transport_rows')" class="o_eg_lines" name="eguitra_transport_lines">
+                <thead>
+                    <tr>
+                        <th class="o_eg_num">N°</th>
+                        <th>N° de BL</th>
+                        <th>N° de bon</th>
+                        <th>N° camion</th>
+                        <th>Départ</th>
+                        <th>Destination</th>
+                        <th class="o_eg_num">Volume (litres)</th>
+                        <th class="o_eg_num" t-out="d['transport_rate_label']"/>
+                        <th class="o_eg_num" t-out="d['amount_label']"/>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr t-foreach="d['transport_rows']" t-as="row">
+                        <td class="o_eg_num" t-out="row['number']"/>
+                        <td t-out="row['delivery_note']"/>
+                        <td t-out="row['voucher']"/>
+                        <td t-out="row['truck']"/>
+                        <td t-out="row['origin']"/>
+                        <td t-out="row['destination']"/>
+                        <td class="o_eg_num" t-out="row['liters']"/>
+                        <td class="o_eg_num" t-out="row['rate']"/>
+                        <td class="o_eg_num" t-out="row['amount']"/>
+                    </tr>
+                </tbody>
+            </table>
+        </xpath>
+    </template>
+</odoo>

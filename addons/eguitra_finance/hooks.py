@@ -27,6 +27,10 @@ FINANCE_AUDITED_MODELS = [
     "account.partial.reconcile",
     "account.full.reconcile",
     "eguitra.reminder",
+    # Comparatifs de l'exercice précédent importés au modèle du système normal (premier exercice) : import,
+    # remplacement et chaque montant tracés.
+    "eguitra.statement.comparative",
+    "eguitra.statement.comparative.line",
 ]
 AUDITED_MODELS = FINANCE_AUDITED_MODELS
 

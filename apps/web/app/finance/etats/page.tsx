@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Download, Printer } from "@/components/icons";
 import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Notice, PageHeader, Select, Tabs, cx } from "@/components/ui";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
@@ -11,7 +11,36 @@ import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtGNF, fmtInt, fmtPct, pluriel } from "@/lib/format";
 
 type Tab = "bilan" | "resultat" | "flux" | "consolide" | "rapports" | "ifrs" | "export";
-interface StatementLine { code: string; label: string; amount: number; total: boolean; previous?: number; month?: number; pct_revenue?: number | null }
+interface StatementLine {
+  code: string;
+  label: string;
+  amount: number;
+  total: boolean;
+  previous?: number;
+  month?: number;
+  pct_revenue?: number | null;
+  /** Numéro de la note annexe du système normal. */
+  note?: string | null;
+  /** Compte de résultat : « + » produit, « - » charge (montants positifs). */
+  sign?: string | null;
+  /** Tableau des flux : lettre du modèle (ZA = A … ZH = H). */
+  letter?: string | null;
+  /** Poste présenté en retrait sous sa rubrique (AE à AH, AJ à AN, AR, AS, BH à BJ). */
+  detail?: boolean;
+  gross?: number;
+  depreciation?: number;
+}
+/** Origine de la colonne N-1 : exercice précédent de la plateforme, ou états importés (premier exercice). */
+interface Previous {
+  date_from: string;
+  date_to: string;
+  source: "platform" | "import" | "mixed";
+  imports: Array<{ id: number; company: string; date_to: string; source: string | null; imported_at: string | null }>;
+  import_available: boolean;
+  difference?: number;
+  bf?: number;
+  treasury_end?: number;
+}
 
 // Jour et début d'exercice à Conakry (le jour UTC changeait de date sur un poste réglé ailleurs).
 const todayIso = aujourdhui;
@@ -37,17 +66,46 @@ function Telecharger({ chemin, nom, children, size = "sm", variant, disabled }: 
   );
 }
 
-/** Boutons d'export d'un état (XLSX et CSV), sur la période affichée. */
-function ExportButtons({ kind, query }: { kind: string; query: string }) {
+/**
+ * Boutons d'export d'un état (XLSX et CSV), sur la période affichée, et les trois états au modèle du
+ * système normal (classeur de l'expert-comptable) à la date d'arrêté.
+ */
+function ExportButtons({ kind, query, modele }: { kind: string; query: string; modele?: { date: string; scope: string } }) {
   return (
-    <div className="no-print flex gap-2">
+    <div className="no-print flex flex-wrap gap-2">
       <Telecharger chemin={`/finance/statements/export?kind=${kind}&format=xlsx&${query}`} nom={`${kind}.xlsx`}>
         <Download className="h-3.5 w-3.5" /> XLSX
       </Telecharger>
       <Telecharger chemin={`/finance/statements/export?kind=${kind}&format=csv&${query}`} nom={`${kind}.csv`}>
         <Download className="h-3.5 w-3.5" /> CSV
       </Telecharger>
+      {modele && (
+        <Telecharger variant="primary" chemin={`/finance/statements/export?kind=modele_syscohada&date_to=${modele.date}&scope=${modele.scope}`} nom={`etats_syscohada_${modele.date}.xlsx`}>
+          <Download className="h-3.5 w-3.5" /> Modèle SYSCOHADA
+        </Telecharger>
+      )}
     </div>
+  );
+}
+
+/** Origine de la colonne N-1, et comparatifs importés que la période choisie ne permet pas d'employer. */
+function PreviousNotice({ previous, quoi }: { previous?: Previous; quoi: string }) {
+  if (!previous) return null;
+  const imports = previous.imports.map((i) => `${i.company}${i.source ? ` (« ${i.source} »)` : ""}`).join(", ");
+  return (
+    <>
+      {previous.source !== "platform" && (
+        <Notice tone="accent">
+          Colonne N-1 ({quoi}) : états de l&apos;exercice précédent importés pour {imports}
+          {previous.source === "mixed" ? ", plateforme pour les autres sociétés" : ""} (Clôtures et contrôles, comparatifs du premier exercice).
+        </Notice>
+      )}
+      {previous.import_available && (
+        <Notice tone="warn">
+          Des états de l&apos;exercice précédent ont été importés : ils valent pour l&apos;exercice entier. Choisissez l&apos;exercice complet (du premier au dernier jour) pour les voir en colonne N-1 ; la colonne affiche ici la même période de l&apos;an dernier dans la plateforme.
+        </Notice>
+      )}
+    </>
   );
 }
 
@@ -95,62 +153,142 @@ export default function StatementsPage() {
   );
 }
 
-function StatementTable({ lines, compare, monthly }: { lines: StatementLine[]; compare?: boolean; monthly?: boolean }) {
+type Colonne = "note" | "sign" | "letter" | "gross" | "depreciation" | "month" | "amount" | "pct" | "previous";
+const ENTETES: Record<Colonne, string> = {
+  note: "Note",
+  sign: "",
+  letter: "",
+  gross: "Brut",
+  depreciation: "Amort. et dépréc.",
+  month: "Mois",
+  amount: "Net",
+  pct: "% du CA",
+  previous: "N-1",
+};
+
+/** Cellule d'un montant : négatif en rouge, colonne N-1 en gris. */
+function CelluleMontant({ value, muted }: { value: number | undefined; muted?: boolean }) {
+  return <td className={cx("px-3 py-1.5 text-right font-mono", muted ? "text-muted" : (value ?? 0) < 0 && "text-danger")}>{fmtInt(value ?? 0)}</td>;
+}
+
+/**
+ * Tableau d'un état au modèle du système normal : colonnes choisies (note, signe, lettre, brut,
+ * amortissements, mois, net, % du CA, N-1), postes en retrait sous leur rubrique, totaux en gras ;
+ * apres : lignes sans référence insérées après une rubrique (variation du BF du tableau des flux).
+ */
+function StatementTable({
+  lines,
+  columns,
+  titres = {},
+  apres = {},
+  pied,
+}: {
+  lines: StatementLine[];
+  columns: Colonne[];
+  titres?: Partial<Record<Colonne, string>>;
+  apres?: Record<string, ReactNode>;
+  pied?: ReactNode;
+}) {
+  const cellule = (l: StatementLine, c: Colonne) => {
+    switch (c) {
+      case "note":
+        return <td key={c} className="px-2 py-1.5 text-center text-xs text-muted">{l.note ?? ""}</td>;
+      case "sign":
+        return <td key={c} className="px-2 py-1.5 text-center font-mono text-muted">{l.sign ?? ""}</td>;
+      case "letter":
+        return <td key={c} className="px-2 py-1.5 text-center font-mono text-xs text-muted">{l.letter ?? ""}</td>;
+      case "gross":
+        return <CelluleMontant key={c} value={l.gross} />;
+      case "depreciation":
+        return <CelluleMontant key={c} value={l.depreciation} />;
+      case "month":
+        return <CelluleMontant key={c} value={l.month} />;
+      case "amount":
+        return <CelluleMontant key={c} value={l.amount} />;
+      case "pct":
+        return <td key={c} className="px-3 py-1.5 text-right font-mono text-muted">{l.pct_revenue === null || l.pct_revenue === undefined ? "–" : fmtPct(l.pct_revenue)}</td>;
+      case "previous":
+        return <CelluleMontant key={c} value={l.previous} muted />;
+    }
+  };
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-line text-[12.5px] font-medium text-muted">
-          <th className="w-14 px-3 py-2 text-left">Réf.</th>
-          <th className="px-3 py-2 text-left">Rubrique</th>
-          {monthly && <th className="px-3 py-2 text-right">Mois</th>}
-          <th className="px-3 py-2 text-right">Exercice</th>
-          {monthly && <th className="px-3 py-2 text-right">% du CA</th>}
-          {compare && <th className="px-3 py-2 text-right">Exercice précédent</th>}
-        </tr>
-      </thead>
-      <tbody className="tabular">
-        {lines.map((l) => (
-          <tr key={l.code} className={cx("border-b border-line/50", l.total && "bg-panel-2 font-semibold")}>
-            <td className="px-3 py-1.5 font-mono text-xs text-muted">{l.code}</td>
-            <td className="px-3 py-1.5">{l.label}</td>
-            {monthly && <td className={cx("px-3 py-1.5 text-right font-mono", (l.month ?? 0) < 0 && "text-danger")}>{fmtInt(l.month)}</td>}
-            <td className={cx("px-3 py-1.5 text-right font-mono", l.amount < 0 && "text-danger")}>{fmtInt(l.amount)}</td>
-            {monthly && <td className="px-3 py-1.5 text-right font-mono text-muted">{l.pct_revenue === null || l.pct_revenue === undefined ? "–" : fmtPct(l.pct_revenue)}</td>}
-            {compare && <td className="px-3 py-1.5 text-right font-mono text-muted">{fmtInt(l.previous)}</td>}
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-sm">
+        <thead>
+          <tr className="border-b border-line text-[12.5px] font-medium text-muted">
+            <th className="w-14 px-3 py-2 text-left">Réf.</th>
+            <th className="px-3 py-2 text-left">Rubrique</th>
+            {columns.map((c) => (
+              <th key={c} className={cx("px-3 py-2", ["note", "sign", "letter"].includes(c) ? "w-12 text-center" : "text-right")}>
+                {titres[c] ?? ENTETES[c]}
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className="tabular">
+          {lines.map((l) => (
+            <Fragment key={l.code}>
+              <tr className={cx("border-b border-line/50", l.total && "bg-panel-2 font-semibold")}>
+                <td className="px-3 py-1.5 font-mono text-xs text-muted">{l.code}</td>
+                <td className={cx("px-3 py-1.5", l.detail && "pl-7 text-ink-2")}>{l.label}</td>
+                {columns.map((c) => cellule(l, c))}
+              </tr>
+              {apres[l.code]}
+            </Fragment>
+          ))}
+          {pied}
+        </tbody>
+      </table>
+    </div>
   );
+}
+
+/** Ligne sans référence d'un état (variation du BF, contrôle de la trésorerie), alignée sur ses colonnes. */
+function LigneLibre({ label, valeurs, colonnesTexte, fort, ton }: { label: string; valeurs: Array<number | undefined>; colonnesTexte: number; fort?: boolean; ton?: "danger" }) {
+  return (
+    <tr className={cx("border-b border-line/50", fort && "font-semibold", ton === "danger" && "text-danger")}>
+      <td className="px-3 py-1.5" />
+      <td className="px-3 py-1.5 italic">{label}</td>
+      {Array.from({ length: colonnesTexte }, (_, i) => <td key={i} />)}
+      {valeurs.map((v, i) => <CelluleMontant key={i} value={v} muted={i === valeurs.length - 1 && ton !== "danger"} />)}
+    </tr>
+  );
+}
+
+interface BalanceSheetData {
+  actif: StatementLine[];
+  passif: StatementLine[];
+  difference: number;
+  unmapped_accounts: Record<string, number>;
+  previous: Previous;
 }
 
 function BalanceSheet({ scope }: { scope: string }) {
   const [date, setDate] = useState(todayIso());
-  const { data, error, mutate } = useApi<{ actif: StatementLine[]; passif: StatementLine[]; difference: number; unmapped_accounts: Record<string, number> }>(
-    `/finance/statements/balance-sheet?date=${date}&scope=${scope}`,
-  );
+  const { data, error, mutate } = useApi<BalanceSheetData>(`/finance/statements/balance-sheet?date=${date}&scope=${scope}`);
+  const n1 = data ? `N-1 (${fmtDate(data.previous.date_to)})` : "N-1";
   return (
     <div className="space-y-4">
-      <div className="no-print flex items-end justify-between gap-3">
+      <div className="no-print flex flex-wrap items-end justify-between gap-3">
         <Field label="Arrêté au">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        <ExportButtons kind="bilan" query={`date_to=${date}&scope=${scope}`} />
+        <ExportButtons kind="bilan" query={`date_to=${date}&scope=${scope}`} modele={{ date, scope }} />
       </div>
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && <Loading />}
       {data && (
         <>
-          {Math.abs(data.difference) >= 0.5 ? <Notice tone="danger">Bilan déséquilibré : écart de {fmtGNF(data.difference)}.</Notice> : <Notice tone="ok">Bilan équilibré au {fmtDate(date)}. Montants nets en GNF.</Notice>}
+          {Math.abs(data.difference) >= 0.5 ? <Notice tone="danger">Bilan déséquilibré : écart de {fmtGNF(data.difference)}.</Notice> : <Notice tone="ok">Bilan équilibré au {fmtDate(date)}. Montants en GNF ; colonne N-1 : bilan à la clôture de l&apos;exercice précédent.</Notice>}
+          {Math.abs(data.previous.difference ?? 0) >= 0.5 && <Notice tone="warn">Bilan N-1 déséquilibré : écart de {fmtGNF(data.previous.difference)}.</Notice>}
+          <PreviousNotice previous={data.previous} quoi={`bilan au ${fmtDate(data.previous.date_to)}`} />
           {Object.keys(data.unmapped_accounts).length > 0 && <Notice tone="warn">Comptes hors états : {Object.keys(data.unmapped_accounts).join(", ")}.</Notice>}
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <Card title="Actif" padded={false}>
-              <StatementTable lines={data.actif} />
-            </Card>
-            <Card title="Passif" padded={false}>
-              <StatementTable lines={data.passif} />
-            </Card>
-          </div>
+          <Card title="Bilan actif" padded={false}>
+            <StatementTable lines={data.actif} columns={["note", "gross", "depreciation", "amount", "previous"]} titres={{ previous: n1 }} />
+          </Card>
+          <Card title="Bilan passif" padded={false}>
+            <StatementTable lines={data.passif} columns={["note", "amount", "previous"]} titres={{ previous: n1 }} />
+          </Card>
         </>
       )}
     </div>
@@ -160,7 +298,7 @@ function BalanceSheet({ scope }: { scope: string }) {
 function IncomeStatement({ scope }: { scope: string }) {
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(todayIso());
-  const { data, error, mutate } = useApi<{ lines: StatementLine[]; unmapped_accounts: Record<string, number> }>(
+  const { data, error, mutate } = useApi<{ lines: StatementLine[]; unmapped_accounts: Record<string, number>; previous?: Previous }>(
     `/finance/statements/income?date_from=${from}&date_to=${to}&compare=previous_year&scope=${scope}`,
   );
   return (
@@ -173,26 +311,39 @@ function IncomeStatement({ scope }: { scope: string }) {
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </Field>
         <div className="ml-auto">
-          <ExportButtons kind="resultat" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
+          <ExportButtons kind="resultat" query={`date_from=${from}&date_to=${to}&scope=${scope}`} modele={{ date: to, scope }} />
         </div>
       </div>
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!data && !error && <Loading />}
       {data && (
-        <Card title="Compte de résultat (système normal)" padded={false}>
-          <StatementTable lines={data.lines} compare monthly />
-        </Card>
+        <>
+          <PreviousNotice previous={data.previous} quoi="compte de résultat" />
+          <Card title="Compte de résultat (système normal)" padded={false}>
+            <StatementTable
+              lines={data.lines}
+              columns={["sign", "note", "month", "amount", "pct", "previous"]}
+              titres={{ amount: "Exercice", previous: data.previous ? `N-1 (${fmtDate(data.previous.date_from)} – ${fmtDate(data.previous.date_to)})` : "Exercice précédent" }}
+            />
+          </Card>
+        </>
       )}
     </div>
   );
 }
 
+interface CashFlowData {
+  lines: StatementLine[];
+  bf: number;
+  treasury_end: number;
+  difference: number;
+  previous: Previous;
+}
+
 function CashFlow({ scope }: { scope: string }) {
   const [from, setFrom] = useState(yearStart());
   const [to, setTo] = useState(todayIso());
-  const { data, error, mutate } = useApi<{ lines: StatementLine[]; treasury_end: number; difference: number }>(
-    `/finance/statements/cash-flow?date_from=${from}&date_to=${to}&scope=${scope}`,
-  );
+  const { data, error, mutate } = useApi<CashFlowData>(`/finance/statements/cash-flow?date_from=${from}&date_to=${to}&scope=${scope}`);
   return (
     <div className="space-y-4">
       <div className="no-print flex flex-wrap items-end gap-3">
@@ -203,7 +354,7 @@ function CashFlow({ scope }: { scope: string }) {
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </Field>
         <div className="ml-auto flex flex-wrap gap-2">
-          <ExportButtons kind="flux" query={`date_from=${from}&date_to=${to}&scope=${scope}`} />
+          <ExportButtons kind="flux" query={`date_from=${from}&date_to=${to}&scope=${scope}`} modele={{ date: to, scope }} />
           <Telecharger chemin={`/finance/statements/export?kind=flux_mensuels&format=xlsx&date_from=${from}&date_to=${to}&scope=${scope}`} nom="flux_mensuels.xlsx">
             <Download className="h-3.5 w-3.5" /> Flux mensuels
           </Telecharger>
@@ -214,15 +365,30 @@ function CashFlow({ scope }: { scope: string }) {
       {data && (
         <>
           {Math.abs(data.difference) < 1 ? (
-            <Notice tone="ok">Le tableau rejoint la trésorerie nette du bilan au {fmtDate(to)} : {fmtGNF(data.treasury_end)}.</Notice>
+            <Notice tone="ok">Le tableau rejoint la trésorerie nette du bilan au {fmtDate(to)} : {fmtGNF(data.treasury_end)} (contrôle de ZH : trésorerie actif moins trésorerie passif).</Notice>
           ) : (
             <Notice tone="warn">
               Écart de {fmtGNF(data.difference)} avec la trésorerie nette du bilan ({fmtGNF(data.treasury_end)}) : écritures de
               reclassement ou intérêts courus à analyser avec l&apos;expert-comptable.
             </Notice>
           )}
+          {Math.abs(data.previous.difference ?? 0) >= 1 && <Notice tone="warn">N-1 : écart de {fmtGNF(data.previous.difference)} entre la trésorerie nette de fin (ZH) et la trésorerie du bilan.</Notice>}
+          <PreviousNotice previous={data.previous} quoi="tableau des flux" />
           <Card title="Tableau des flux de trésorerie (SYSCOHADA révisé)" padded={false}>
-            <StatementTable lines={data.lines} />
+            <StatementTable
+              lines={data.lines}
+              columns={["letter", "amount", "previous"]}
+              titres={{ amount: "Période", previous: `N-1 (${fmtDate(data.previous.date_from)} – ${fmtDate(data.previous.date_to)})` }}
+              apres={{ FE: <LigneLibre key="bf" label="Variation du BF lié aux activités opérationnelles (FB + FC + FD + FE)" valeurs={[data.bf, data.previous.bf]} colonnesTexte={1} /> }}
+              pied={
+                <>
+                  <LigneLibre label="Contrôle : trésorerie actif - trésorerie passif du bilan" valeurs={[data.treasury_end, data.previous.treasury_end]} colonnesTexte={1} fort />
+                  {(Math.abs(data.difference) >= 1 || Math.abs(data.previous.difference ?? 0) >= 1) && (
+                    <LigneLibre label="Écart : contrôle - trésorerie nette de fin (H)" valeurs={[data.difference, data.previous.difference]} colonnesTexte={1} fort ton="danger" />
+                  )}
+                </>
+              }
+            />
           </Card>
         </>
       )}
