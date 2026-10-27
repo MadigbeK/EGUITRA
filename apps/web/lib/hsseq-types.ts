@@ -341,8 +341,11 @@ export interface HsseqNotification {
 /** Délais déclenchés par la criticité (§9.1). */
 export interface EventDeadlines {
   investigation_due: string | null;
+  /** Criticité élevée : information du donneur d'ordre attendue avant cet instant (24 heures par défaut). */
   client_notice_due: string | null;
+  /** Information du donneur d'ordre notée par le Responsable HSSEQ (PATCH client_notified_at), et son auteur. */
   client_notified_at: string | null;
+  client_notified_by: Ref | null;
 }
 
 export interface Event extends EventLine, DeviceStamp, GpsPosition {

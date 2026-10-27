@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from odoo import fields
 from odoo.tests import tagged
 
 from .common import HsseqCase
@@ -121,6 +122,43 @@ class TestCorrectionsCahier(HsseqCase):
         self.assertEqual((status, [a["id"] for a in listing["items"]]), (200, [ten.id, three.id, later.id]))
         status, body = self.api("kadi.hsseq", "GET", f"{base}&sort=-retard")
         self.assertEqual((status, body["error"]), (400, "invalid_parameter"), "Tri inconnu")
+
+    def test_information_du_donneur_d_ordre(self):
+        event = self.event(occurred_at=fields.Datetime.now() - timedelta(hours=5))
+        path = f"/hsseq/events/{event.id}"
+        informed = fields.Datetime.now() - timedelta(hours=1)
+        stamp = informed.isoformat() + "Z"
+        status, body = self.api("ibrahima", "PATCH", path, {"client_notified_at": stamp})
+        self.assertEqual(status, 403, f"Le déclarant corrige sa déclaration, pas l'information du donneur d'ordre : {body}")
+        event.action_classify({"potential_severity": 5, "probability": 4})
+        self.assertTrue(event.client_notice_due, "Criticité élevée : information du donneur d'ordre sous 24 heures")
+        for login in ("ibrahima", "dg.hsseq", "admin.hsseq", "awa.auditrice"):
+            status, body = self.api(login, "PATCH", path, {"client_notified_at": stamp})
+            self.assertEqual(status, 403, f"{login} ne note pas l'information du donneur d'ordre : {body}")
+        status, body = self.api("kadi.hsseq", "PATCH", path, {
+            "client_notified_at": (fields.Datetime.now() + timedelta(hours=2)).isoformat() + "Z"})
+        self.assertEqual((status, body["error"], body["fields"]), (400, "invalid_parameter", ["client_notified_at"]),
+                         "Information datée dans le futur")
+        status, body = self.api("kadi.hsseq", "PATCH", path, {
+            "client_notified_at": (event.occurred_at - timedelta(hours=1)).isoformat() + "Z"})
+        self.assertEqual((status, body["error"]), (400, "invalid_parameter"), "Information antérieure à l'événement")
+        status, detail = self.api("kadi.hsseq", "PATCH", path, {"client_notified_at": stamp})
+        self.assertEqual(status, 200, detail)
+        self.assertEqual((detail["deadlines"]["client_notified_at"], detail["deadlines"]["client_notified_by"]["id"]),
+                         (stamp, self.hsseq.id), detail["deadlines"])
+        entry = self.env["eguitra.hsseq.journal"].search([("model", "=", "event"), ("res_id", "=", event.id),
+                                                           ("field", "=", "client_notified_at")])
+        self.assertEqual((len(entry), entry.user_id, entry.old_value, entry.new_value),
+                         (1, self.hsseq, False, str(informed)), "Journalisée, avec son auteur")
+        # Renvoyée telle quelle par un autre Responsable HSSEQ : rien ne change, l'auteur reste.
+        status, again = self.api("binta.hsseq", "PATCH", path, {"client_notified_at": stamp})
+        self.assertEqual((status, again["deadlines"]["client_notified_by"]["id"]), (200, self.hsseq.id), again)
+        status, cleared = self.api("binta.hsseq", "PATCH", path, {"client_notified_at": None})
+        self.assertEqual((status, cleared["deadlines"]["client_notified_at"], cleared["deadlines"]["client_notified_by"]),
+                         (200, None, None), "Information retirée")
+        self.assertEqual(self.env["eguitra.hsseq.journal"].search_count([
+            ("model", "=", "event"), ("res_id", "=", event.id), ("field", "=", "client_notified_at")]), 2,
+            "Le retrait est journalisé")
 
     def test_exports_refuses_a_l_auditeur(self):
         """L'auditeur lit les événements et les actions de ses sites, sans leurs exports ni le rapport d'enquête

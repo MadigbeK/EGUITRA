@@ -234,7 +234,7 @@ export function FicheEvenement({ id }: { id: string }) {
         onChange={changerOnglet}
       />
 
-      {onglet === "resume" && <Resume e={ev} onRecharger={() => void mutate()} />}
+      {onglet === "resume" && <Resume e={ev} onRecharger={() => void mutate()} onMaj={maj} />}
       {onglet === "classement" && <Classement e={ev} referentiels={referentiels} onMaj={maj} />}
       {onglet === "enquete" && <Enquete e={ev} referentiels={referentiels} onMaj={maj} onOuvrir={() => setOuvrirEnquete(true)} onPlanifier={planifier} envoiPlan={envoi === "plan"} onRapport={rapportPermis ? pdf : undefined} rapport={rapport} />}
       {onglet === "actions" && <ActionsLiees e={ev} onNouvelle={creerAction ? () => setNouvelleAction(true) : undefined} />}

@@ -209,7 +209,8 @@ def event_detail(event):
             "event", event)],
         "deadlines": {"investigation_due": event.investigation_due or None,
                       "client_notice_due": event.client_notice_due or None,
-                      "client_notified_at": event.client_notified_at or None},
+                      "client_notified_at": event.client_notified_at or None,
+                      "client_notified_by": user_ref(event.client_notified_by)},
         "history": [] if field_only else history("event", event),
         "transitions": user_transitions(event),
         "rights": rights(event),
@@ -259,6 +260,23 @@ def declaration_values(data, event=None):
     elif values.get("vehicle_id"):
         values["site_id"] = request.env["eguitra.transport.vehicle"].sudo().browse(values["vehicle_id"]).site_id.id or False
     return values
+
+
+def client_notice(event, data, occurred_at=None):
+    """Information du donneur d'ordre (Responsable HSSEQ) : date et heure, jamais dans le futur (au-delà de cinq
+    minutes de décalage d'horloge) ni avant l'événement ; l'auteur est le compte qui la note ; vide, elle est
+    retirée. Inchangée, rien n'est écrit (l'auteur reste celui qui l'a notée)."""
+    notified = datetime_value(data, "client_notified_at")
+    if notified:
+        if (notified - fields.Datetime.now()).total_seconds() > 300:
+            raise ApiError(400, "invalid_parameter", "Information du donneur d'ordre datée dans le futur.",
+                           fields=["client_notified_at"])
+        if notified < (occurred_at or event.occurred_at):
+            raise ApiError(400, "invalid_parameter", "Information du donneur d'ordre antérieure à l'événement.",
+                           fields=["client_notified_at"])
+    if notified == (event.client_notified_at or False):
+        return {}
+    return {"client_notified_at": notified, "client_notified_by": request.env.uid if notified else False}
 
 
 def people_commands(data):
@@ -392,7 +410,7 @@ class EguitraHsseqEvents(http.Controller):
                 leave_id = int_or_none(data, "leave_id")
                 values["leave_id"] = get("eguitra.rh.leave", leave_id, "Arrêt").id if leave_id else False
             if "client_notified_at" in data:
-                values["client_notified_at"] = datetime_value(data, "client_notified_at")
+                values.update(client_notice(event, data, values.get("occurred_at")))
         elif set(data) & {*NOTE_FIELDS, "lost_time", "days_lost", "leave_id", "client_notified_at"}:
             raise forbidden("Notes, arrêt de travail et information du donneur d'ordre : Responsable HSSEQ.")
         commands = people_commands(data)
