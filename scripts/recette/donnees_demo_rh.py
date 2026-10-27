@@ -132,12 +132,12 @@ for index, emp in enumerate(drivers):
         emp.driver_id = (Driver.search([("company_id", "=", groupe.id), ("name", "=", emp.name)], limit=1)
                          or Driver.create({"company_id": groupe.id, "name": emp.name}))
     if not emp.qualification_ids:
-        plan = {
+        echeances = {
             0: {"PERMIS": 900, "CONDUITE_DEFENSIVE": 400, "MATIERES_DANGEREUSES": 1200, "SECOURISME": 300},
             1: {"PERMIS": 700, "CONDUITE_DEFENSIVE": 20, "MATIERES_DANGEREUSES": 800},
             2: {"PERMIS": 1500, "CONDUITE_DEFENSIVE": 500, "MATIERES_DANGEREUSES": -12, "ACCES_SITE_MINIER": 60},
         }[index]
-        for code, days in plan.items():
+        for code, days in echeances.items():
             env["eguitra.rh.qualification"].create({
                 "employee_id": emp.id, "type_id": QualType[code].id, "obtained_date": TODAY - relativedelta(years=2),
                 "expiry_date": TODAY + timedelta(days=days), "reference": f"{code[:3]}-{emp.matricule}",

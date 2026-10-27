@@ -853,8 +853,10 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self._create_user("admin.associe", "admin", "cabinet", "associe", **cabinet)
         admin = self.open_session("admin.seul", app="axispro")["access_token"]
         admin_associe = self.open_session("admin.associe", app="axispro")["access_token"]
+        # Une seule session du relecteur : une seconde connexion demanderait son code de double authentification.
+        relecteur = self._relecteur()
         status, body = self.call("PATCH", f"/axispro/evaluations/{self.evals['C001'].id}", {"status": "met"},
-                                 token=self._relecteur())
+                                 token=relecteur)
         self.assertEqual(status, 200, body)
         status, review = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/reviews", {"decision": "go"},
                                    token=self.token)
@@ -873,7 +875,7 @@ class TestMethodeDansLaPlateforme(ApiCase):
         self.assertEqual(status, 403, "Administration seule : pas de réouverture")
         status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=admin_associe)
         self.assertEqual(status, 403, "Celui qui a verrouillé ne rouvre pas, même associé (deux personnes)")
-        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=self._relecteur())
+        status, body = self.call("POST", f"/axispro/dossiers/{self.dossier.id}/new-revision", token=relecteur)
         self.assertEqual((status, body["revision"]), (200, 2), body)
 
     def test_associe_seul_auteur_ne_scelle_pas(self):
