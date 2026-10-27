@@ -15,6 +15,9 @@ Chaque montant est arrondi au franc, demi vers le haut.
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
+# Montant en toutes lettres des bulletins (net à payer) : partagé avec les factures, dans eguitra_base.
+from odoo.addons.eguitra_base.lettres import amount_in_words  # noqa: F401
+
 STAGIAIRE_EXEMPTION = 1_200_000
 # Ligne du bulletin qui retire du net un avantage en nature (code de la rubrique suivi de ce suffixe).
 IN_KIND_SUFFIX = "_NAT"
@@ -271,64 +274,3 @@ def base_for_net(params, net_target, build, contract_type="cdi"):
     while base > 0 and net_of(base - 1) >= net_target:
         base -= 1
     return base
-
-
-def amount_in_words(value):
-    """Montant en toutes lettres, en français (francs guinéens entiers)."""
-    value = int(value)
-    if value == 0:
-        return "zéro franc guinéen"
-    if abs(value) == 1:
-        return ("moins " if value < 0 else "") + "un franc guinéen"
-    words = ("moins " if value < 0 else "") + _words(abs(value))
-    # « un million de francs », mais « un million deux cents francs ».
-    joint = " de " if words.endswith(("million", "millions", "milliard", "milliards")) else " "
-    return f"{words}{joint}francs guinéens"
-
-
-_UNITS = ["", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze",
-          "treize", "quatorze", "quinze", "seize", "dix-sept", "dix-huit", "dix-neuf"]
-_TENS = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante", "soixante", "quatre-vingt", "quatre-vingt"]
-
-
-def _below_100(n):
-    if n < 20:
-        return _UNITS[n]
-    tens, unit = divmod(n, 10)
-    if tens in (7, 9):
-        unit += 10
-    word = _TENS[tens]
-    if unit == 0:
-        return word + ("s" if tens == 8 else "")
-    if unit in (1, 11) and tens not in (8, 9):
-        return f"{word} et {_UNITS[unit]}"
-    return f"{word}-{_UNITS[unit]}"
-
-
-def _below_1000(n):
-    hundreds, rest = divmod(n, 100)
-    if hundreds == 0:
-        return _below_100(rest)
-    head = "cent" if hundreds == 1 else f"{_UNITS[hundreds]} cent"
-    if rest == 0:
-        return head + ("s" if hundreds > 1 else "")
-    return f"{head} {_below_100(rest)}"
-
-
-def _words(n):
-    parts = []
-    for size, singular, plural in ((10**9, "milliard", "milliards"), (10**6, "million", "millions"), (1000, "mille", "mille")):
-        count, n = divmod(n, size)
-        if not count:
-            continue
-        if size == 1000:
-            # « cent » et « vingt » restent invariables devant « mille » (deux cent mille).
-            head = _below_1000(count)
-            if head.endswith(("cents", "vingts")):
-                head = head[:-1]
-            parts.append("mille" if count == 1 else f"{head} mille")
-        else:
-            parts.append(f"{_words(count)} {singular if count == 1 else plural}")
-    if n:
-        parts.append(_below_1000(n))
-    return " ".join(parts)
