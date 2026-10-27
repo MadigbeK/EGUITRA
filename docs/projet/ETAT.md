@@ -246,6 +246,12 @@ native, sans solution d'attente dans Rotations web ; conducteurs équipés de t�
   (`SESSION_ROUTES["terrain"]`, seule action `depart` sur une rotation ; tests eguitra_api et
   eguitra_transport écrits, à lancer sur le serveur). `tsc` et `next build` au vert.
   Intégration par la recette après RH et HSSEQ (Local).
+- 27 octobre : version de démonstration préparée (profil de construction `preview`, APK) : bureau
+  simulé embarqué ou adresse d'un bureau saisie à la connexion (https seulement), chaque serveur dans
+  son propre espace sur l'appareil (`src/serveur.ts` : base, coffre, code personnel), rien envoyé au
+  vrai bureau depuis la démonstration, numéros d'urgence fictifs jamais composés. 79 tests,
+  `tsc` et `expo-doctor` au vert. Construction de l'APK (EAS) reportée par le gérant : rien n'a été
+  lancé, aucune connexion au compte Expo.
 - 26 octobre : relecture indépendante du socle, défauts corrigés (renouvellement de session,
   réseau Android, envois concurrents, bord à bord) ; système de conception « terrain » de DESIGN ;
   « Ma journée » par profil, file d'envoi commune, contrôle avant départ, alcootest masqué et
