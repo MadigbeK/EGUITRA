@@ -201,6 +201,14 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 27 octobre 2026, 19 h 30 : Agenda en production (version 20261027-1926) ; Achats et ventes en tests
+
+- En production : version 20261027-1926 (code fc98ac8), sauvegarde prise avant (20261027T1926), carte blanche du gérant. Contenu : module eguitra_agenda (NIMOVA · Agenda, quatorze modules) : agendas personnels, d'équipe et de ressources, récurrence, invitations, partage en trois niveaux, délégation (« par … pour le compte de … »), heures de travail et recherche de créneau, planning d'équipe, absence du bureau, rappels et récapitulatif, échéances des modules bornées aux droits, abonnement iCal et import ICS, prise de rendez-vous (fermée par défaut).
+- Sécurité : deux revues automatiques traitées avant la recette (droits sur les séries et l'import ICS, règles de récurrence bornées, invitation par courriel limitée aux sociétés communes, conflits limités aux disponibilités lisibles, recherche par adresse en égalité, adresse portée par plusieurs comptes traitée en invité externe).
+- Vérifications : 103 tests de l'agenda (trois tests corrigés au premier passage : créneau, absence du bureau, conflits), puis série complète de 895 tests sans erreur ; recette mise à jour (agenda installé, délégation de test.dg à test.daf) ; contrôle des routes par profil (porteur et conducteur refusés) ; répétition réussie ; après la mise en production, quatorze modules, noyau, web et sauvegardes sains.
+- À régler à la mise en service de l'agenda : déclarer les vraies salles, véhicules et équipements (Agenda > Ressources) ; serveur de courrier pour les invitations ICS ; prise de rendez-vous en ligne seulement si le gérant le décide.
+- Achats et ventes (décision du gérant, carte blanche, 27/10) : module à part, eguitra_commerce, écrans dans Finance ; socle sale et purchase d'Odoo sans stock ; offres, commandes et acomptes, offre de travaux vers chantier avec avance de démarrage déduite des situations, bons de commande, réceptions, rapprochement, comparaison de devis. Fusionné (a3aa705e), tests en cours sur la recette. Location de véhicules et stocks reportés.
+
 ### 27 octobre 2026, 13 h : factures et états au modèle du client en production (version 20261027-1301)
 
 - En production : version 20261027-1301 (code 1590b1e), sauvegarde prise avant (20261027T1301), carte blanche du gérant (27/10). Contenu : factures et avoirs au modèle du client (eguitra_base 19.0.1.11.0), états SYSCOHADA au modèle du système normal et comparatifs du premier exercice (eguitra_finance 19.0.1.11.0), tableau des rotations sur la facture et N° de bon (eguitra_transport 19.0.1.7.0), correctifs HSSEQ du cahier de test (eguitra_hsseq 19.0.1.2.3), contrôle des sauvegardes corrigé (conteneur backup sain).
