@@ -51,3 +51,28 @@ Pour échanger entre collègues sans quitter la plateforme (jamais avec les port
 - Les nouveaux messages arrivent d'eux-mêmes en quelques secondes. Ils ne vous gardent pas connecté :
   sans geste de votre part, la déconnexion après inactivité s'applique.
 - Confidentialité : une conversation n'est lue que par ses membres, l'administration comprise.
+
+## Comptes internes : l'agenda
+
+NIMOVA · Agenda (tuile « Agenda » de l'accueil) : un seul agenda par compte, le même dans les deux
+sociétés. Ouvert à tous les comptes internes ; ni le salarié seul, ni le conducteur, ni le porteur
+de projet, ni l'auditeur n'en ont.
+
+- Vues Jour, Semaine, Semaine de travail, Mois, Agenda (liste) et Planning d'équipe. Glisser sur la
+  grille crée un événement ; glisser un événement le déplace, tirer son bas l'allonge. Clavier : t
+  aujourd'hui, j et k période suivante et précédente, n nouvel événement, / recherche.
+- Un événement peut se répéter (chaque jour, semaine, mois ou année) ; une modification vaut pour
+  l'occurrence, celle-ci et les suivantes, ou toute la série. Visibilité : publique, privée (les
+  collègues ne voient que « Occupé ») ou confidentielle (titre seul).
+- Invitations : collègues (obligatoires ou facultatifs, avec leurs disponibilités) et personnes
+  extérieures par adresse électronique. « Trouver un créneau » propose les horaires où chacun est
+  libre dans ses heures de travail. Une salle, un véhicule ou un équipement ne se réserve pas deux
+  fois : le créneau libre le plus proche est proposé.
+- Réglages de l'agenda : heures de travail, rappels, récapitulatif du matin, absence du bureau (avec
+  refus d'office des invitations), partages (disponibilités, lecture, modification), délégation à
+  une assistante (chaque action porte « par … pour le compte de … »), lien d'abonnement pour Outlook
+  ou Google Agenda, import d'un fichier .ics.
+- Les échéances des autres applications (congés, déclarations fiscales, clôtures, HSSEQ, AxisPro,
+  validations) s'affichent à la demande, selon vos droits.
+- Confidentialité : l'administration ne lit pas les agendas des autres ; elle déclare les ressources
+  et pose, avec la direction, la délégation de l'agenda d'un dirigeant.
