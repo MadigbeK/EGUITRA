@@ -5,9 +5,10 @@ import { useSWRConfig } from "swr";
 import { CheckCheck, Pencil, RotateCcw, XCircle } from "@/components/icons";
 import { Button, Etat, Field, FileButton, Input, Loading, Modal, Notice, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { NIVEAU_MAITRISE, STATUT_ACTION, Tampon } from "@/components/hsseq/commun";
+import { CHAMP_ACTION, OPERATION_ACTION, precision, valeurLue } from "@/components/hsseq/journal";
 import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDateTime, fmtGNF, pluriel } from "@/lib/format";
-import type { ActionStatus, ActionTransition, ControlLevel, HsseqAction, Reminder } from "@/lib/hsseq-types";
+import type { ActionTransition, ControlLevel, HistoryEntry, HsseqAction, Reminder } from "@/lib/hsseq-types";
 import { Escaladee, JOURS_ESCALADE, Origine, Retard } from "./elements";
 import { Definitions, FORMATS_PIECE, Panneau, Pieces, Rubrique, aProfil, aujourdhui, codeErreur, decaler, deposerPiece, joursEntre, messageErreur, useMoi, useReferentiels } from "./outils";
 
@@ -271,9 +272,9 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
           <ol className="mt-2 space-y-1.5 text-[12.5px] leading-snug text-ink-2">
             {[...a.history].reverse().map((h, i) => (
               <li key={`${h.at}-${i}`}>
-                <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"} : {h.action}
-                {h.note ? ` (${h.note})` : ""}
-                {h.field === "status" && h.old_value && h.new_value ? ` (de « ${libelleStatut(h.old_value)} » à « ${libelleStatut(h.new_value)} »)` : h.field === "due_date" && h.new_value ? ` (échéance au ${fmtDate(h.new_value)})` : ""}
+                <span className="text-muted">{fmtDateTime(h.at)}</span>, {h.by?.name ?? "Système"} : {OPERATION_ACTION[h.action] ?? h.action}
+                {h.field && <ChampModifie h={h} />}
+                {precision(h) && <span className="text-muted">{` (${precision(h)})`}</span>}
               </li>
             ))}
           </ol>
@@ -304,8 +305,15 @@ export function FicheAction({ id, onFermer }: { id: number; onFermer: () => void
   );
 }
 
-function libelleStatut(v: string): string {
-  return STATUT_ACTION[v as ActionStatus] ?? v;
+/** Champs dont l'historique montre les valeurs avant et après ; les textes longs ne sont que nommés. */
+const VALEURS_MONTREES = new Set(["control_level", "owner_id", "due_date", "estimated_cost", "status", "approved_at", "verification_date", "effective"]);
+
+/** Champ modifié d'une ligne d'historique : « (statut, de « À faire » à « En cours ») », ou son seul nom. */
+function ChampModifie({ h }: { h: HistoryEntry }) {
+  const champ = h.field ?? "";
+  const nom = (CHAMP_ACTION[champ]?.label ?? champ).toLocaleLowerCase("fr");
+  if (!VALEURS_MONTREES.has(champ)) return <>{` (${nom})`}</>;
+  return <>{` (${nom}, de « ${valeurLue(CHAMP_ACTION, champ, h.old_value)} » à « ${valeurLue(CHAMP_ACTION, champ, h.new_value)} »)`}</>;
 }
 
 function Commandes({ children }: { children: ReactNode }) {
