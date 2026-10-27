@@ -26,7 +26,8 @@ la sauvegarde de base qui précède l'instant visé pouvant dater de la veille),
 possible à n'importe quel instant des 14 derniers jours.
 
 Le conteneur `backup` fait le travail (`scheduler.sh`) ; son état de santé (`check.sh`) passe à
-`unhealthy` si l'archivage des WAL échoue ou n'a rien produit depuis 15 minutes, si la dernière
+`unhealthy` si l'archivage des WAL est inactif, échoue ou laisse un segment terminé en attente plus
+de 15 minutes (une base sans écriture ne produit aucun segment : rien à archiver), si la dernière
 sauvegarde de base a plus de 26 heures, si la copie hors site des WAL a plus de 15 minutes de
 retard (une heure pour les pièces jointes), ou si la copie hors site est exigée
 (`OFFSITE_REQUIRED=1` dans `backup.env`, à poser avant la mise en service) sans être configurée.
