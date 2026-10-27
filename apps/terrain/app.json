@@ -1,0 +1,61 @@
+{
+  "expo": {
+    "name": "NIMOVA Terrain",
+    "slug": "nimova-terrain",
+    "scheme": "nimova-terrain",
+    "version": "0.1.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#142f29",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nimovagroup.terrain"
+    },
+    "android": {
+      "package": "com.nimovagroup.terrain",
+      "adaptiveIcon": {
+        "backgroundColor": "#142f29",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "allowBackup": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-sqlite",
+      "expo-font",
+      "expo-background-task",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NIMOVA Terrain prend les photos des non-conformités et des déclarations. Elles restent dans l'application, jamais dans la galerie.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "NIMOVA Terrain relève la position d'une déclaration ou d'un contrôle, au moment de la saisie seulement."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#142f29"
+        }
+      ],
+      "expo-sharing"
+    ]
+  }
+}

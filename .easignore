@@ -1,0 +1,21 @@
+# EAS Build (service d'Expo) : seule l'application mobile (apps/terrain) part dans l'archive de
+# construction. Rien d'autre du dépôt (noyau, application web, documents du client, infrastructure)
+# n'est envoyé chez Expo. Ce fichier remplace .gitignore pour EAS : les exclusions d'apps/terrain
+# sont reprises ici.
+/*
+!/apps/
+/apps/*
+!/apps/terrain/
+/apps/terrain/node_modules/
+/apps/terrain/.expo/
+/apps/terrain/dist/
+/apps/terrain/web-build/
+/apps/terrain/expo-env.d.ts
+/apps/terrain/.env
+/apps/terrain/.env.*
+!/apps/terrain/.env.example
+/apps/terrain/*.jks
+/apps/terrain/*.p8
+/apps/terrain/*.p12
+/apps/terrain/*.key
+/apps/terrain/*.mobileprovision

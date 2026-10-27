@@ -79,6 +79,8 @@ PROFILE_ENTITY = {
 # Rotations, jusqu'à 90 jours sur un téléphone du parc, ne sert qu'à la saisie des rotations et au
 # compte (profil, mot de passe). Elle n'ouvre ni Transport (rentabilité, tarifs) ni Finance dans le même
 # navigateur : il faut s'y connecter.
+# actions : pour une route qui porte son action dans l'adresse (<string:action>), les seules actions
+# ouvertes à la session.
 SESSION_ROUTES = {
     "mobile": {
         "name": "Rotations",
@@ -89,6 +91,50 @@ SESSION_ROUTES = {
             ("GET", "/transport/rotations"),
             ("POST", "/transport/sync"),
         }),
+    },
+    # NIMOVA Terrain (application native, sessions longues sur les téléphones de service et la tablette du
+    # dépôt ; apps/terrain) : les formulaires de terrain d'HSSEQ, la saisie des rotations, le départ en
+    # route et le compte. Ni Finance, ni Transport au-delà, ni l'administration, ni la configuration
+    # d'HSSEQ : il faut se connecter à l'application voulue. Les routes d'un module non installé ne
+    # gênent pas : elles n'existent simplement pas.
+    "terrain": {
+        "name": "NIMOVA Terrain",
+        "routes": frozenset({
+            ("GET", "/auth/me"),
+            ("POST", "/auth/password"),
+            # Rotations, comme l'application web de Rotations, et le départ en route du chef de parc.
+            ("GET", "/transport/referentials"),
+            ("GET", "/transport/rotations"),
+            ("POST", "/transport/sync"),
+            ("POST", "/transport/rotations/<int:rotation_id>/<string:action>"),
+            # HSSEQ : référentiels et grilles en cache, départs du jour et verrou, fiches de terrain,
+            # photos, levée, dérogation, documents à lire, annuaire de crise, espace du conducteur.
+            ("GET", "/hsseq/referentials"),
+            ("GET", "/hsseq/checks/templates"),
+            ("GET", "/hsseq/me"),
+            ("GET", "/hsseq/me/rotations"),
+            ("POST", "/hsseq/lock/evaluate"),
+            ("GET", "/hsseq/checks"),
+            ("GET", "/hsseq/checks/<int:check_id>"),
+            ("POST", "/hsseq/checks"),
+            ("POST", "/hsseq/checks/<int:check_id>/complement"),
+            ("POST", "/hsseq/checks/<int:check_id>/lift"),
+            ("GET", "/hsseq/checks/nonconformities"),
+            ("POST", "/hsseq/breath-tests"),
+            ("POST", "/hsseq/events"),
+            ("POST", "/hsseq/attachments"),
+            ("GET", "/hsseq/attachments/<int:attachment_id>/download"),
+            ("POST", "/hsseq/waivers"),
+            ("GET", "/hsseq/my/documents"),
+            ("POST", "/hsseq/procedures/<int:procedure_id>/acknowledge"),
+            ("POST", "/hsseq/bulletins/<int:bulletin_id>/acknowledge"),
+            ("GET", "/hsseq/my/crisis-contacts"),
+        }),
+        # Sur une rotation, le seul passage en route : la validation, l'annulation et la remise en
+        # brouillon restent au bureau.
+        "actions": {
+            ("POST", "/transport/rotations/<int:rotation_id>/<string:action>"): frozenset({"depart"}),
+        },
     },
 }
 

@@ -139,10 +139,16 @@ def _authenticate():
     return request.env.user, token
 
 
-def _check_session_routes(token, route):
-    """Une session ouverte depuis une application qui n'ouvre que certaines routes (Rotations) s'y tient."""
+def _check_session_routes(token, route, params=None):
+    """Une session ouverte depuis une application qui n'ouvre que certaines routes (Rotations, NIMOVA
+    Terrain) s'y tient ; sur une route qui porte son action dans l'adresse, aux seules actions ouvertes."""
     scope = SESSION_ROUTES.get(token.app)
-    if scope and (request.httprequest.method, route) not in scope["routes"]:
+    if not scope:
+        return
+    key = (request.httprequest.method, route)
+    actions = scope.get("actions", {}).get(key)
+    allowed = key in scope["routes"] and (actions is None or (params or {}).get("action") in actions)
+    if not allowed:
         raise ApiError(403, "session_restricted",
                        f"Cette session, ouverte depuis {scope['name']}, ne sert qu'à cette application : "
                        "connectez-vous à l'application voulue.")
@@ -229,7 +235,7 @@ def api_route(route, methods=("GET",), profiles=None, auth=True, journal=True):
                 if auth:
                     user, token = _authenticate()
                     user_id = user.id
-                    _check_session_routes(token, route)
+                    _check_session_routes(token, route, kwargs)
                     if user.eguitra_password_temporary and route not in TEMPORARY_PASSWORD_ROUTES:
                         raise ApiError(403, "password_change_required",
                                        "Remplacez d'abord votre mot de passe provisoire.")

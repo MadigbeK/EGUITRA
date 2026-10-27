@@ -1,8 +1,10 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from odoo import fields
 from odoo.tests import tagged
 
+from .. import organisation
 from .common import PASSWORD, ApiCase
 
 
@@ -273,6 +275,27 @@ class TestAuth(ApiCase):
         self.assertTrue(Token._find(nouvelle["refresh_token"], "refresh").mfa_passed)
         status, _b = self.call("GET", "/auth/me", token=nouvelle["access_token"])
         self.assertEqual(status, 200)
+
+    def test_session_de_terrain_limitee_a_ses_formulaires(self):
+        """NIMOVA Terrain (application native, sessions longues) n'ouvre que ses routes : le compte, Rotations,
+        le départ en route et les formulaires d'HSSEQ ; jamais l'administration."""
+        self._create_user("kadiatou.admin", "admin")
+        # Application déclarée par le module HSSEQ ; ici sans lui, pour ne tester que le bornage.
+        with patch.dict(organisation.APPS, {"terrain": {"profiles": {"admin", "hsseq", "exploitation", "conducteur"}, "entity": None}}):
+            session = self.open_session("kadiatou.admin", app="terrain")
+            terrain = session["access_token"]
+            status, me = self.call("GET", "/auth/me", token=terrain)
+            self.assertEqual((status, me["session_app"]), (200, "terrain"), me)
+            for path in ("/admin/users", "/support/requests"):
+                status, body = self.call("GET", path, token=terrain)
+                self.assertEqual((status, body.get("error")), (403, "session_restricted"), path)
+            status, body = self.call("POST", "/auth/password", {"old_password": "faux", "new_password": "Nouveau-2026-Mot"},
+                                     token=terrain)
+            self.assertEqual((status, body["error"]), (401, "invalid_credentials"), "Le mot de passe se change depuis Terrain")
+        scope = organisation.SESSION_ROUTES["terrain"]
+        self.assertTrue(set(scope["actions"]) <= scope["routes"], "Une route filtrée par action est d'abord ouverte")
+        self.assertFalse({r for _m, r in scope["routes"] if r.startswith(("/admin", "/finance", "/axispro"))},
+                         "Ni administration, ni Finance, ni AxisPro depuis Terrain")
 
     def test_session_de_rotations_limitee_a_la_saisie(self):
         """Audit du noyau, I-A5 : la session de Rotations (jusqu'à 90 jours) n'ouvre que Rotations."""

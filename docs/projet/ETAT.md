@@ -241,6 +241,55 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Reste à faire : fusionner ces branches ; `infra/test.sh` sur tous les modules ; `-u` en recette ; répétition sur une copie de la production ; `infra/release.sh` ; puis libérer le verrou et prévenir RH (rh-hsseq), TRANSPORT et OTHER (HSSEQ, lot 1).
 - À faire par le gérant : destinations des alertes (`ALERT_NTFY_URL`, `HEARTBEAT_URL` dans infra/.env) ; stockage hors site (infra/backup.env) ; relais SMTP ; double authentification à rétablir avant les données réelles ; disque de 160 Go ou accord écrit du client ; T0 et premier comité de pilotage ; signature du dossier de conception.
 
+**25 octobre : application mobile NIMOVA Terrain, socle** (branche `claude/nimova-terrain`, à fusionner
+après l'audit en cours). Analyse : `docs/projet/mobile/analyse-application-mobile.md`. Décisions du
+gérant : React Native avec Expo, Android d'abord ; formulaires HSSEQ directement dans l'application
+native, sans solution d'attente dans Rotations web ; conducteurs équipés de téléphones de service.
+- Fait : `apps/terrain` (Expo SDK 58), connexion par jetons de l'API avec double authentification et
+  mot de passe provisoire, ouverture hors réseau, Rotations reprises de Rotations web (file d'envoi
+  SQLite, envoi idempotent), mise en page téléphone et tablette, bureau simulé en développement.
+  29 tests, `tsc`, `expo-doctor` et paquet Android au vert ; parcours vérifiés dans l'aperçu web.
+- Entrée native de la passerelle faite le 26/10 au soir sur la branche, après l'audit de Local :
+  `apps/web/app/api/natif` (jeton porté par l'application, routes de session rendant les jetons,
+  seuls les codes terrain et mobile et les routes du compte, de /transport/ et de /hsseq/ ; 9 tests
+  `npm test`) et sessions `terrain` bornées à leurs routes dans le noyau
+  (`SESSION_ROUTES["terrain"]`, seule action `depart` sur une rotation ; tests eguitra_api et
+  eguitra_transport écrits, à lancer sur le serveur). `tsc` et `next build` au vert.
+  Intégration par la recette après RH et HSSEQ (Local).
+- 27 octobre : version de démonstration préparée (profil de construction `preview`, APK) : bureau
+  simulé embarqué ou adresse d'un bureau saisie à la connexion (https seulement), chaque serveur dans
+  son propre espace sur l'appareil (`src/serveur.ts` : base, coffre, code personnel), rien envoyé au
+  vrai bureau depuis la démonstration, numéros d'urgence fictifs jamais composés. 79 tests,
+  `tsc` et `expo-doctor` au vert. Construction de l'APK (EAS) reportée par le gérant : rien n'a été
+  lancé, aucune connexion au compte Expo.
+- 26 octobre : relecture indépendante du socle, défauts corrigés (renouvellement de session,
+  réseau Android, envois concurrents, bord à bord) ; système de conception « terrain » de DESIGN ;
+  « Ma journée » par profil, file d'envoi commune, contrôle avant départ, alcootest masqué et
+  déclaration en un geste, sur le contrat HSSEQ et le noyau de la session OTHER (branche `hsseq`).
+  53 tests au vert, parcours vérifiés dans l'aperçu web avec le bureau simulé.
+- 26 octobre, suite : départ et verrou du jour (jamais « autorisé » sans réponse récente du bureau,
+  passage en route par le chef de parc seul), demande de dérogation, levée des non-conformités avec
+  photo, envoi en arrière-plan, code personnel au réveil et verrouillage de la tablette après
+  2 minutes (revue de sécurité : session reprise toujours verrouillée), signature tracée du contrôle.
+  64 tests au vert ; parcours vérifiés au téléphone et à la tablette sur le bureau simulé.
+- 26 octobre, soir : relecture contradictoire de l'application (49 constats tenus sur 56), tous
+  corrigés : file d'envoi (refus d'une route sans arrêt des autres, erreurs passagères et horloge
+  décalée laissées en attente, correction reçue trop tard signalée), session (renouvellement lié
+  au compte gardé, mot de passe provisoire repris, étapes de connexion qui expirent), verrou (code
+  redemandé avant dérogation et levée, frappe comptée, contenu caché au lecteur d'écran), photos
+  (cliché brut et orphelines supprimés, photo de levée gardée jusqu'à la levée), départ vérifié
+  rotation par rotation, formulaires protégés (confirmation avant abandon, retour Android, messages
+  d'échec), tâche de fond déclarée avant le routeur. Ajouts sur le noyau HSSEQ de la session OTHER
+  (branche `hsseq`, lots 2 et 3) : appels d'urgence depuis la déclaration d'accident (annuaire de
+  crise), « Documents » (procédures et alertes, accusé de lecture même sans réseau), « Mon
+  dossier » du conducteur (habilitations, aptitude en statut seul), contrôle complémentaire d'un
+  contrôle incomplet. 77 tests au vert, `tsc` et paquet Android au vert ; parcours vérifiés sur le
+  bureau simulé.
+- Ensuite : branchement sur la recette dès l'entrée native de la passerelle (Local, après son audit)
+  et l'intégration du module HSSEQ ; compte Expo de l'entreprise (EAS) pour essayer sur de vrais
+  téléphones ; réponses de la Direction générale (départ sans réseau, valeur de la signature par
+  code, V05). Hors offre initiale : avenant à chiffrer avec HSSEQ.
+
 **22 octobre, nuit : portail des porteurs refait de fond en comble**, demandé par le gérant (« un vrai
 portail, complet, carte blanche »). Fait :
 - Module `eguitra_portail` 19.0.1.0.0 (dépend d'`eguitra_axispro` sans modifier ses fichiers), 8 tests au

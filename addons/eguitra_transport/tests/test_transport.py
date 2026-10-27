@@ -1,5 +1,9 @@
+from unittest.mock import patch
+
 from odoo.exceptions import UserError
 from odoo.tests import tagged
+
+from odoo.addons.eguitra_api import organisation
 
 from .common import TransportCase
 
@@ -95,6 +99,27 @@ class TestTransport(TransportCase):
         rot.action_validate()
         alerts = self.env["eguitra.alert.threshold"].active_alerts(self.company, self.today)
         self.assertIn("transport_margin_min", [a["code"] for a in alerts])
+
+    def test_session_terrain_rotations_et_depart_seulement(self):
+        """NIMOVA Terrain : saisie des rotations et passage en route ; ni validation ni rentabilité."""
+        rot = self._rotation()
+        with patch.dict(organisation.APPS, {"terrain": {"profiles": {"admin", "hsseq", "exploitation", "conducteur"}, "entity": "groupe"}}):
+            token = self.open_session("ibrahima", app="terrain")["access_token"]
+            status, refs = self.call("GET", "/transport/referentials", token=token)
+            self.assertEqual(status, 200, refs)
+            status, liste = self.call("GET", "/transport/rotations?limit=30", token=token)
+            self.assertEqual(status, 200, liste)
+            for action in ("validate", "cancel", "reset"):
+                status, refus = self.call("POST", f"/transport/rotations/{rot.id}/{action}", {}, token=token)
+                self.assertEqual((status, refus.get("error")), (403, "session_restricted"), action)
+            statut_depart, depart = self.call("POST", f"/transport/rotations/{rot.id}/depart", {}, token=token)
+            self.assertNotEqual(depart.get("error"), "session_restricted", depart)
+            self.assertIn(statut_depart, (200, 422), depart)
+            for path in ("/transport/profitability", f"/transport/rotations/{rot.id}", "/transport/vehicles"):
+                status, refus = self.call("GET", path, token=token)
+                self.assertEqual((status, refus.get("error")), (403, "session_restricted"), path)
+        rot.invalidate_recordset()
+        self.assertEqual(rot.state, "en_route" if statut_depart == 200 else "draft")
 
     def test_synchronisation_mobile_idempotente(self):
         token = self.open_session("ibrahima", app="mobile")["access_token"]
