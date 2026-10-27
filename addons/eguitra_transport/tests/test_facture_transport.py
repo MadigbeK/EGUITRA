@@ -45,6 +45,34 @@ class TestFactureTransport(RefusParProfil, TransportCase):
         self.assertNotIn("Transport gasoil", page, "Le libellé de la ligne de rotation cède la place au tableau")
         self.assertLess(page.index("BL-DEMO-41"), page.index("Frais de dossier"), "Lignes simples sous le tableau")
 
+    def test_modification_du_brouillon_garde_la_rotation(self):
+        """Modifier le brouillon dans Ventes recrée ses lignes (l'écran les renvoie toutes) : chacune garde sa
+        rotation par source_line_id, et seulement une ligne de la même facture (relevé du cahier 02, 27/10)."""
+        rot = self._rotation(volume_delivered=30, delivery_note="BL-DEMO-51")
+        rot.action_validate()
+        invoice = rot.action_invoice()
+        other = self._rotation(volume_delivered=20, delivery_note="BL-DEMO-52")
+        other.action_validate()
+        foreign = other.action_invoice().invoice_line_ids.filtered("eguitra_rotation_id")
+        self._create_user("ventes.transport", "finance")
+        token = self.open_session("ventes.transport")["access_token"]
+        self.env.flush_all()
+        status, detail = self.call("GET", f"/finance/moves/{invoice.id}", token=token)
+        self.assertEqual(status, 200, detail)
+        lines = [{"name": line["name"], "quantity": line["quantity"], "price_unit": line["price_unit"],
+                  "tax_ids": [t["id"] for t in line["taxes"]], "source_line_id": line["id"]}
+                 for line in detail["lines"] if line.get("display_type") in (None, "", "product")]
+        lines.append({"name": "Frais de dossier", "quantity": 1, "price_unit": 150_000, "tax_ids": [],
+                      "source_line_id": foreign.id})
+        status, body = self.call("PATCH", f"/finance/moves/{invoice.id}", {"lines": lines}, token=token)
+        self.assertEqual(status, 200, body)
+        self.env.invalidate_all()
+        linked = invoice.invoice_line_ids.filtered("eguitra_rotation_id")
+        self.assertEqual(linked.eguitra_rotation_id, rot, "La ligne recréée reste celle de sa rotation")
+        self.assertFalse(invoice.invoice_line_ids.filtered(lambda line: line.eguitra_rotation_id == other),
+                         "Une ligne d'une autre facture ne prête jamais sa rotation")
+        self.assertIn("BL-DEMO-51", self._text(invoice), "Le tableau du transport reste sur la facture")
+
     def test_numero_de_bon_de_la_rotation(self):
         agent = self.open_session("ibrahima")["access_token"]
         status, rot = self.call("POST", "/transport/rotations", {

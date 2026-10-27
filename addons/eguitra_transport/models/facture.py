@@ -31,6 +31,14 @@ class AccountMoveLine(models.Model):
     eguitra_rotation_id = fields.Many2one("eguitra.transport.rotation", "Rotation", readonly=True, copy=False,
                                           index="btree_not_null", ondelete="set null")
 
+    def _eguitra_kept_on_edit(self):
+        """Modification du brouillon dans Ventes : la ligne recréée reste celle de sa rotation (tableau du
+        transport sur la facture)."""
+        kept = super()._eguitra_kept_on_edit()
+        for line in self.filtered("eguitra_rotation_id"):
+            kept[line.id]["eguitra_rotation_id"] = line.eguitra_rotation_id.id
+        return kept
+
 
 class AccountMove(models.Model):
     _inherit = "account.move"

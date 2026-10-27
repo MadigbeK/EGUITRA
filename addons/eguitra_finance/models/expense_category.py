@@ -141,3 +141,9 @@ class AccountMoveLine(models.Model):
 
     eguitra_expense_category_id = fields.Many2one("eguitra.expense.category", "Catégorie de dépense",
                                                   index="btree_not_null", copy=True)
+
+    def _eguitra_kept_on_edit(self):
+        """Valeurs qu'une ligne garde quand la modification d'un brouillon recrée ses lignes (l'écran renvoie
+        toutes les lignes) : {identifiant de la ligne : valeurs}. Les modules qui relient une ligne à son
+        origine (rotation du transport…) y ajoutent ce lien, que l'écran ne connaît pas."""
+        return {line.id: {} for line in self}

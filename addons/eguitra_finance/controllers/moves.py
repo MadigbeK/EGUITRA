@@ -158,7 +158,7 @@ def _default_journal(data, sale, company):
         [("company_id", "=", company.id), ("type", "=", "sale" if sale else "purchase")], limit=1)
 
 
-def _invoice_lines(data, move_type, partner=None):
+def _invoice_lines(data, move_type, partner=None, kept=None):
     """Lignes d'une facture ou d'une pièce d'achat. Compte : celui saisi (droit « Saisie libre des
     comptes »), sinon le compte de la catégorie de dépense (achats) ou du produit, sinon le compte de
     produit de l'activité (ventes), sinon le compte par défaut du journal ; sans ce droit, une ligne
@@ -166,7 +166,9 @@ def _invoice_lines(data, move_type, partner=None):
     la taxe par défaut. Analytique : la répartition saisie, complétée par les imputations automatiques
     pour les axes laissés vides. Profil Achats : taxes d'achat de la société seulement, compte jamais
     choisi (free_accounts). Unité : uom_id (m³, m², forfait…), imprimée quand elle n'est pas « Unité ».
-    Rubriques et notes (display_type line_section, line_note) : libellé seul, entre les lignes chiffrées."""
+    Rubriques et notes (display_type line_section, line_note) : libellé seul, entre les lignes chiffrées.
+    kept : modification d'un brouillon, {ligne d'origine : valeurs gardées} (_eguitra_kept_on_edit) ; une ligne
+    renvoyée avec source_line_id reprend celles de sa ligne d'origine (lien vers la rotation…)."""
     lines = data.get("lines") or []
     if not isinstance(lines, list) or not any(
             isinstance(line, dict) and line.get("display_type") not in DISPLAY_LINES for line in lines):
@@ -229,6 +231,8 @@ def _invoice_lines(data, move_type, partner=None):
         dist = with_rules(dist, account, partner, company) if (account or dist) else dist
         if dist:
             values["analytic_distribution"] = dist
+        if kept and line.get("source_line_id"):
+            values.update(kept.get(as_int(line["source_line_id"], "source_line_id"), {}))
         commands.append(Command.create(values))
     return commands
 
@@ -544,8 +548,11 @@ class EguitraFinanceMoves(http.Controller):
                     raise ApiError(422, "business_rule", "Ces catégories font de la dépense une opération diverse : "
                                                          "supprimez ce brouillon et ressaisissez la pièce.")
                 partner = _partner(values["partner_id"]) if values.get("partner_id") else move.partner_id
+                # Lignes recréées : chacune garde ce que l'écran ne renvoie pas (lien vers sa rotation…), par
+                # l'identifiant de sa ligne d'origine, cherché parmi les lignes de cette pièce seulement.
+                kept = move.sudo().invoice_line_ids._eguitra_kept_on_edit()
                 values["invoice_line_ids"] = [Command.clear()] + _invoice_lines(
-                    dict(data, journal_id=move.journal_id.id), move.move_type, partner)
+                    dict(data, journal_id=move.journal_id.id), move.move_type, partner, kept=kept)
         move.write(values)
         return _detail(move)
 

@@ -29,6 +29,8 @@ interface LineDraft {
   withholding: string;
   /** Répartition analytique de la ligne relue d'un brouillon, renvoyée telle quelle tant que ses axes ne changent pas. */
   original?: Record<string, number>;
+  /** Ligne du brouillon d'où vient cette ligne : le noyau lui garde ce que l'écran ne connaît pas (rotation…). */
+  source_id?: number;
 }
 
 const emptyLine = (kind: LineKind = "product"): LineDraft => ({ kind, name: "", uom_id: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
@@ -60,6 +62,7 @@ function linesOf(move: MoveDetail): LineDraft[] {
         axes: {},
         withholding: withholding ? String(withholding.id) : "none",
         original: l.analytic_distribution && Object.keys(l.analytic_distribution).length ? l.analytic_distribution : undefined,
+        source_id: l.id,
       };
     });
 }
@@ -203,6 +206,7 @@ export function MoveForm({
         tax_ids: tax === "none" ? [] : [Number(tax)],
         withholding_tax_ids: l.withholding === "" ? undefined : l.withholding === "none" ? [] : [Number(l.withholding)],
         analytic_distribution: l.original ?? toDistribution(l.axes),
+        source_line_id: l.source_id,
       };
     });
 
