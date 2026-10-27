@@ -1,5 +1,6 @@
 """Moteur de l'agenda (moteur.py), sans base : règles de récurrence, fuseaux, créneaux, iCalendar."""
 
+import time
 from datetime import date, datetime, timedelta
 
 from odoo.tests import TransactionCase, tagged
@@ -94,6 +95,33 @@ class TestMoteurRecurrence(TransactionCase):
                 m.check_rrule(text)
         self.assertEqual(m.normalize_rrule("FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T090000Z;WKST=MO", PARIS),
                          "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T100000")
+
+    def test_regles_pathologiques_refusees_vite(self):
+        """Une règle qui ne tomberait jamais (le 31 février, un 6e lundi) ferait tourner le calcul jusqu'à
+        l'an 9999 : elle est refusée avant toute itération ; une règle admise reste bornée (vingt ans)."""
+        debut = time.monotonic()
+        for text in ("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=31", "FREQ=YEARLY;BYMONTH=2,4;BYMONTHDAY=31",
+                     "FREQ=MONTHLY;BYDAY=MO;BYSETPOS=6", "FREQ=MONTHLY;BYDAY=6MO", "FREQ=DAILY;BYMONTH=2;BYMONTHDAY=31",
+                     "FREQ=WEEKLY;BYDAY=2MO", "FREQ=MONTHLY;BYMONTHDAY=13;BYDAY=FR", "FREQ=MONTHLY;BYMONTHDAY=32"):
+            with self.assertRaises(m.RuleError, msg=text):
+                m.check_rrule(text)
+        with self.assertRaises(m.RuleError):
+            m.build_rrule({"freq": "yearly", "monthly": "date", "month_day": 31, "month": 2}, at(2026, 11, 2, 9))
+        start = at(2026, 11, 2, 9)
+        self.assertEqual(m.occurrences(start, start + timedelta(hours=1), "FREQ=DAILY", m.DEFAULT_TZ,
+                                       at(9000, 1, 1), at(9000, 2, 1)), [], "Au-delà de l'horizon, rien")
+        self.assertFalse(m.is_occurrence(start, "FREQ=DAILY", m.DEFAULT_TZ, at(9000, 1, 1, 9)))
+        self.assertIsNone(m.last_occurrence(start, "FREQ=DAILY;UNTIL=20991231T235959", m.DEFAULT_TZ),
+                          "Fin au-delà de l'horizon : traitée comme sans fin")
+        self.assertLess(time.monotonic() - debut, 2, "Refus et calculs rapides")
+        self.assertEqual(m.check_rrule("FREQ=MONTHLY;BYDAY=TU;BYSETPOS=2"), "FREQ=MONTHLY;BYDAY=TU;BYSETPOS=2")
+        self.assertEqual(m.first_occurrences(at(2026, 11, 1, 9), "FREQ=MONTHLY;BYDAY=TU;BYSETPOS=2", m.DEFAULT_TZ, 1),
+                         [at(2026, 11, 10, 9)])
+        text = "\r\n".join(["BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:fev@ex", "DTSTART:20270210T090000Z",
+                            "DTEND:20270210T100000Z", "RRULE:FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=31", "SUMMARY:Impossible",
+                            "END:VEVENT", "END:VCALENDAR"])
+        ev = m.parse_ics(text)[0]
+        self.assertEqual((ev["rrule"], ev["rrule_dropped"]), (None, True), "Importé une fois, règle écartée")
 
 
 @tagged("post_install", "-at_install")

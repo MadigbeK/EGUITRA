@@ -30,8 +30,10 @@ RANK_LABELS = {1: "1er", 2: "2e", 3: "3e", 4: "4e", -1: "dernier"}
 MAX_COUNT = 730
 MAX_INTERVAL = 99
 MAX_YEARS = 10
-# Bornes de sécurité d'une expansion : une règle valide n'en approche jamais.
+# Bornes de sécurité d'une expansion : une règle valide n'en approche jamais. Au-delà de vingt ans après
+# son début, une série n'est plus calculée.
 MAX_EXPANSION = 5000
+MAX_HORIZON_DAYS = 366 * 20
 # Heures de travail par défaut : du lundi au vendredi, de 8 h 00 à 17 h 00.
 DEFAULT_WORK_HOURS = {str(d): [[8 * 60, 17 * 60]] for d in range(5)}
 
@@ -250,11 +252,55 @@ def check_rrule(text):
         raise RuleError("Règle de récurrence illisible.") from e
     if "UNTIL" in parts and parts["UNTIL"].upper().endswith("Z"):
         raise RuleError("Règle non normalisée : la date de fin s'écrit à l'heure locale.")
+    _check_shape(parts)
     try:
         du.rrulestr(text, dtstart=datetime(2026, 1, 5, 9, 0))
     except (ValueError, TypeError) as e:
         raise RuleError("Règle de récurrence illisible.") from e
     return text
+
+
+DAY_RE = re.compile(r"([+-]?[1-5])?(MO|TU|WE|TH|FR|SA|SU)")
+MONTH_DAYS = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+UNSUPPORTED = "Récurrence non prise en charge : quotidienne, hebdomadaire sur certains jours, mensuelle ou annuelle par date ou par rang."
+
+
+def _check_shape(parts):
+    """Formes de règles admises, celles des grands agendas : quotidienne (éventuellement certains jours),
+    hebdomadaire sur certains jours, mensuelle ou annuelle par date (le 12) ou par rang (le 2e mardi,
+    le dernier vendredi). Chacune revient au moins une fois tous les quatre ans : le calcul des occurrences
+    reste borné. Une règle qui ne tomberait jamais (le 31 février, un 6e lundi) est refusée ici, avant
+    toute itération."""
+    freq = parts["FREQ"]
+    byday = [d for d in (parts.get("BYDAY") or "").split(",") if d]
+    for d in byday:
+        if not DAY_RE.fullmatch(d):
+            raise RuleError(UNSUPPORTED)
+    ranked = [d for d in byday if d[:-2]]
+    try:
+        months = [int(m) for m in parts["BYMONTH"].split(",")] if parts.get("BYMONTH") else []
+        monthdays = [int(m) for m in parts["BYMONTHDAY"].split(",")] if parts.get("BYMONTHDAY") else []
+        setpos = [int(p) for p in parts["BYSETPOS"].split(",")] if parts.get("BYSETPOS") else []
+    except ValueError as e:
+        raise RuleError("Règle de récurrence illisible.") from e
+    if any(not 1 <= m <= 12 for m in months):
+        raise RuleError("Mois de la récurrence invalide.")
+    if freq in ("DAILY", "WEEKLY"):
+        if ranked or months or monthdays or setpos:
+            raise RuleError(UNSUPPORTED)
+        return
+    if len(monthdays) > 1 or len(setpos) > 1 or (monthdays and byday):
+        raise RuleError(UNSUPPORTED)
+    if ranked and (len(byday) > 1 or int(ranked[0][:-2]) not in (1, 2, 3, 4, -1)):
+        raise RuleError("Rang du jour : 1er, 2e, 3e, 4e ou dernier.")
+    if setpos and (not byday or ranked or setpos[0] not in (1, 2, 3, 4, -1)):
+        raise RuleError("Rang du jour : 1er, 2e, 3e, 4e ou dernier.")
+    if monthdays:
+        day = monthdays[0]
+        if not (1 <= day <= 31 or day == -1):
+            raise RuleError("Le quantième du mois va de 1 à 31.")
+        if months and day > 0 and all(day > MONTH_DAYS[m - 1] for m in months):
+            raise RuleError("Cette récurrence ne donne aucune occurrence (le 31 février, par exemple).")
 
 
 def parse_rrule(text, start_local=None):
@@ -346,30 +392,46 @@ def _rule(text, start_local):
     return du.rrulestr(text, dtstart=start_local, cache=False)
 
 
+def _bounded(rule, start_local, high=None):
+    """Occurrences (heure murale) de la règle, dans l'horizon de la série et au plus jusqu'à `high`, avec un
+    garde d'itérations. Les formes admises (_check_shape) reviennent régulièrement : chaque pas de la boucle
+    rend une occurrence, la boucle est bornée par la date comme par le nombre."""
+    ceiling = start_local + timedelta(days=MAX_HORIZON_DAYS)
+    high = min(high, ceiling) if high else ceiling
+    for n, local in enumerate(rule.xafter(start_local, inc=True)):
+        if local > high or n >= MAX_EXPANSION * 4:
+            return
+        yield local
+
+
 def occurrences(start, stop, text, tz, range_start, range_end, limit=MAX_EXPANSION):
-    """Débuts (UTC) des occurrences d'une série qui chevauchent [range_start, range_end[.
+    """Débuts (UTC) des occurrences d'une série qui chevauchent [range_start, range_end[, dans l'horizon de
+    la série (vingt ans après son début).
 
     start, stop : première occurrence (UTC) ; la durée de chaque occurrence est la sienne."""
     duration = stop - start
     start_local = to_local(start, tz)
+    if range_start - duration > start + timedelta(days=MAX_HORIZON_DAYS):
+        return []
     rule = _rule(text, start_local)
     low = to_local(range_start - duration, tz) - timedelta(days=1)
     high = to_local(range_end, tz) + timedelta(days=1)
     found = []
-    for n, local in enumerate(rule.between(low, high, inc=True)):
-        if n >= limit:
-            break
+    for local in _bounded(rule, start_local, high):
+        if local < low:
+            continue
         utc = to_utc(local, tz)
         if utc < range_end and utc + duration > range_start:
             found.append(utc)
+            if len(found) >= limit:
+                break
     return found
 
 
 def first_occurrences(start, text, tz, count):
-    """Débuts (UTC) des `count` premières occurrences d'une série."""
-    rule = _rule(text, to_local(start, tz))
+    """Débuts (UTC) des `count` premières occurrences d'une série (dans son horizon)."""
     found = []
-    for local in rule:
+    for local in _bounded(_rule(text, to_local(start, tz)), to_local(start, tz)):
         found.append(to_utc(local, tz))
         if len(found) >= count:
             break
@@ -377,35 +439,41 @@ def first_occurrences(start, text, tz, count):
 
 
 def is_occurrence(start, text, tz, when):
-    """L'instant `when` (UTC) est-il le début d'une occurrence de la série ?"""
+    """L'instant `when` (UTC) est-il le début d'une occurrence de la série ? Hors de l'horizon de la série
+    (avant son début, vingt ans après), non, sans rien calculer."""
+    if when < start or when > start + timedelta(days=MAX_HORIZON_DAYS):
+        return False
     local = to_local(when, tz)
-    rule = _rule(text, to_local(start, tz))
-    return bool(rule.between(local, local, inc=True))
+    for occurrence in _bounded(_rule(text, to_local(start, tz)), to_local(start, tz), local):
+        if occurrence == local:
+            return True
+    return False
 
 
 def count_before(start, text, tz, split):
     """Nombre d'occurrences qui commencent avant l'instant `split` (UTC)."""
-    rule = _rule(text, to_local(start, tz))
     limit = to_local(split, tz)
     n = 0
-    for local in rule:
-        if local >= limit or n >= MAX_EXPANSION:
+    for local in _bounded(_rule(text, to_local(start, tz)), to_local(start, tz), limit):
+        if local >= limit:
             break
         n += 1
     return n
 
 
 def last_occurrence(start, text, tz):
-    """Début (UTC) de la dernière occurrence d'une série finie, None si elle est sans fin."""
+    """Début (UTC) de la dernière occurrence d'une série finie ; None si elle est sans fin, ou si sa fin
+    dépasse l'horizon calculé (traitée alors comme sans fin : jamais écartée d'une lecture à tort)."""
     parts = rule_parts(text)
     if "COUNT" not in parts and "UNTIL" not in parts:
         return None
-    rule = _rule(text, to_local(start, tz))
+    start_local = to_local(start, tz)
+    ceiling = start_local + timedelta(days=MAX_HORIZON_DAYS)
     last = None
-    for n, local in enumerate(rule):
+    for n, local in enumerate(_rule(text, start_local).xafter(start_local, inc=True)):
+        if local > ceiling or n >= MAX_EXPANSION:
+            return None
         last = local
-        if n >= MAX_EXPANSION:
-            break
     return to_utc(last, tz) if last else None
 
 

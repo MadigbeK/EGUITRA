@@ -66,6 +66,8 @@ NOTIFY_FIELDS = ("start", "stop", "allday", "location", "video_url", "rrule")
 SERIES_FIELDS = ("name", "location", "video_url", "description", "allday", "tz", "privacy", "show_as", "calendar_id",
                  "organizer_id", "res_model", "res_id", "alarms", "ical_uid")
 RESOURCE_LOCK = 4242
+REFUSED_IMPORT = ("Ce fichier met à jour un événement de l'agenda que vous ne pouvez pas modifier (privé ou confidentiel) : "
+                  "import refusé.")
 
 
 def iso(value):
@@ -266,6 +268,31 @@ class AgendaEvent(models.Model):
         if level == "write":
             return ev.privacy == "public"
         return False
+
+    def _check_series_rights(self, viewer, since=None):
+        """Modifier ou supprimer toute la série (ou sa partie à partir de `since`) : le compte doit pouvoir
+        modifier le maître et chacune des exceptions touchées. Une occurrence qu'il peut modifier (rendue
+        publique dans une série privée, par exemple) ne lui ouvre jamais le reste de la série."""
+        self.ensure_one()
+        master = self.sudo()._master()
+        domain = [("series_id", "=", master.id)]
+        if since:
+            domain.append(("recurrence_date", ">=", since))
+        if any(not r._can_edit(viewer) for r in master | self.sudo().search(domain)):
+            raise AccessError("Vous ne pouvez pas modifier toute cette série : la série ou certaines de ses occurrences "
+                              "ne vous sont pas ouvertes. Modifiez cette occurrence seulement.")
+
+    @api.model
+    def _check_privacy(self, calendar, viewer, privacy):
+        """Visibilité qu'un compte peut donner dans un agenda : un délégué sans le droit de voir les
+        événements privés n'en crée ni n'en rend privé ; un partage en modification ne crée et ne garde que
+        des événements publics (il ne modifie qu'eux)."""
+        level = calendar._level_of(viewer)
+        if level == "manage" and privacy == "private" and not calendar._delegation_for(viewer).see_private:
+            raise AccessError("Sans le droit de voir les événements privés, vous ne créez pas d'événement privé pour "
+                              f"{calendar.sudo().owner_id.name}.")
+        if level == "write" and privacy and privacy != "public":
+            raise AccessError("Un partage en modification n'ajoute que des événements publics.")
 
     @api.model
     def _get_for_user(self, event_id, need="busy"):
@@ -738,9 +765,7 @@ class AgendaEvent(models.Model):
         vals, times, attendees, resources, recurrence = self._parse(data, tz, partial=False)
         start, stop, allday = times
         on_behalf = organizer if organizer != me else self.env["res.users"]
-        if vals.get("privacy") == "private" and level == "manage" and not cal._delegation_for(me).see_private:
-            raise AccessError("Sans le droit de voir les événements privés, vous ne créez pas d'événement privé pour "
-                              f"{organizer.name}.")
+        self._check_privacy(cal, me, vals.get("privacy") or "public")
         resource_records = self._resource_records(resources or [])
         rule = self._rule_from(recurrence, start, tz)
         if rule:
@@ -810,9 +835,8 @@ class AgendaEvent(models.Model):
                 raise UserError("Fuseau horaire inconnu.")
             tz = data["tz"]
         vals, times, attendees, resources, recurrence = self._parse(data, tz, partial=True, base=ev)
-        if vals.get("privacy") == "private" and master.calendar_id._level_of(me) == "manage" \
-                and not master.calendar_id._delegation_for(me).see_private:
-            raise AccessError("Sans le droit de voir les événements privés, vous ne rendez pas un événement privé.")
+        if "privacy" in vals:
+            self._check_privacy(master.calendar_id, me, vals["privacy"])
         on_behalf = ev._on_behalf(me)
         if resources is not None:
             self._resource_records(resources)
@@ -828,6 +852,10 @@ class AgendaEvent(models.Model):
                 raise MissingError("Occurrence introuvable.")
             if scope == "following" and occ is not None and occ <= master.start:
                 scope = "all"
+            if scope == "following":
+                master._check_series_rights(me, since=occ)
+            elif scope == "all":
+                master._check_series_rights(me)
             if scope == "this":
                 exception = ev if ev.series_id else master._exception_for(occ)
                 result = exception._apply(vals, times, attendees, resources, None, tz)
@@ -1019,6 +1047,10 @@ class AgendaEvent(models.Model):
                 raise MissingError("Occurrence introuvable.")
             if scope == "following" and occ <= master.start:
                 scope = "all"
+            if scope == "following":
+                master._check_series_rights(me, since=occ)
+            elif scope == "all":
+                master._check_series_rights(me)
             if scope == "this":
                 x = ev if ev.series_id else master._exception_for(occ)
                 mail = x._notify_cancel(occurrence=occ)
@@ -1437,7 +1469,10 @@ class AgendaEvent(models.Model):
     @api.model
     def import_ics(self, calendar, content):
         """Import d'un fichier iCalendar dans un agenda que le compte gère : événements créés ou mis à jour
-        (même identifiant), sans inviter personne. Rend {created, updated, skipped, warnings}."""
+        (même identifiant), sans inviter personne, aux mêmes règles qu'une saisie : visibilité permise au
+        compte, durée, récurrence admise et qui donne une occurrence ; un événement déjà présent n'est mis à
+        jour que si le compte peut le modifier, sinon l'import est refusé. Rend {created, updated, skipped,
+        warnings}."""
         me = self.env.user
         if calendar._level_of(me) not in ("owner", "manage", "write"):
             raise AccessError("Vous ne pouvez pas importer dans cet agenda.")
@@ -1469,14 +1504,19 @@ class AgendaEvent(models.Model):
             }
             if item.get("rrule_dropped"):
                 result["warnings"].append(f"« {values['name']} » : récurrence non prise en charge, importé une fois.")
+            self._check_privacy(calendar, me, values["privacy"])
+            if values["stop"] - values["start"] > timedelta(days=MAX_DURATION_DAYS):
+                raise UserError(f"« {values['name']} » dure plus d'un an : import refusé.")
             if item.get("recurrence_id"):
                 master = masters.get(uid)
-                if not master:
+                if not master or not master._is_occurrence(item["recurrence_id"]):
                     result["skipped"] += 1
                     continue
                 existing = Event.search([("series_id", "=", master.id), ("recurrence_date", "=", item["recurrence_id"])],
                                         limit=1)
                 if existing:
+                    if not existing._can_edit(me):
+                        raise AccessError(REFUSED_IMPORT)
                     existing.write(dict(values, cancelled=False))
                 else:
                     Event.create(dict(values, series_id=master.id, recurrence_date=item["recurrence_id"],
@@ -1484,9 +1524,18 @@ class AgendaEvent(models.Model):
                                       created_by_id=me.id))
                 continue
             values["rrule"] = item.get("rrule") or False
+            if values["rrule"]:
+                # Même règle qu'une saisie : la série commence à sa première occurrence, et en a au moins une.
+                try:
+                    values["start"], values["stop"] = self._align_to_rule(values["start"], values["stop"],
+                                                                          values["rrule"], values["tz"])
+                except UserError as e:
+                    raise UserError(f"« {values['name']} » : {e.args[0]}") from e
             existing = Event.search([("calendar_id", "=", calendar.id), ("ics_uid", "=", uid), ("series_id", "=", False)],
                                     limit=1) if uid else Event.browse()
             if existing:
+                if not existing._can_edit(me):
+                    raise AccessError(REFUSED_IMPORT)
                 existing.write(dict(values, last_actor_id=me.id))
                 ev = existing
                 result["updated"] += 1
