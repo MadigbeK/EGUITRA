@@ -229,8 +229,9 @@ def mail_server_ready(env):
 
 def send_mail(env, email_to, subject, title, lines, company=None, ics=None, ics_name="invitation.ics", res=None):
     """Courriel par la file d'envoi du noyau, avec un fichier iCalendar joint ; rien sans serveur paramétré.
-    lines : paragraphes (texte brut, échappé ici). Rend le courriel créé, ou None."""
-    if not email_to or not mail_server_ready(env):
+    lines : paragraphes (texte brut, échappé ici). Rend le courriel créé, ou None. Le contexte agenda_no_mail
+    (données de démonstration de la recette) n'envoie rien."""
+    if not email_to or env.context.get("agenda_no_mail") or not mail_server_ready(env):
         return None
     company = company or env.company
     couleur = company.primary_color or "#0a6e86"
