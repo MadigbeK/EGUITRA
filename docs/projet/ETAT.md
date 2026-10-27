@@ -211,7 +211,8 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Cahiers de test : neuf cahiers, 308 scénarios (cahier 09 HSSEQ, 55 scénarios, ajouté). Cahiers 02 Finance et 03 Transport en cours de mise à jour pour les factures et les états.
 - HSSEQ, anomalies relevées en rédigeant le cahier (création d'une action depuis un événement, modification d'une action par son responsable, tri par retard, codes anglais dans les journaux, textes périmés, boutons refusés à l'auditeur, cible cumulée du rapport mensuel, information du donneur d'ordre sous 24 heures) : en correction, prochaine mise en production.
 - Agenda (demande du gérant du 27/10 : agenda par personne, partage, délégation à une assistante, planification automatique, échéances des modules) : module eguitra_agenda en développement.
-- À décider par le gérant : double authentification encore désactivée en production (alerte de la surveillance), à rétablir avant les données réelles ; copie hors site des sauvegardes (stockage objet) ; format de numérotation des factures de MB AxisPro (proposé : MBAX/2026/0027).
+- Décisions du gérant (27/10) : double authentification maintenue désactivée en production pour le moment ; numérotation des factures : MB AxisPro Consulting au format MBAX/AAAA/NNNN (compteur annuel, continuant le compteur 2026 de l'ancien système : MBAX/2026/0027), EGUITRA GROUP SARLU garde sa suite EG (dernier numéro EG24137, puis EG24138). Le réglage est propre à chaque journal de vente (Finance > Administration > Factures et journaux).
+- À décider par le gérant : copie hors site des sauvegardes (stockage objet).
 
 ### 27 octobre 2026, 1 h : RH habilitations et profil associé en production (version 20261027-0104)
 
