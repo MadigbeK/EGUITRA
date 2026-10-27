@@ -611,16 +611,18 @@ class AgendaEvent(models.Model):
     @api.model
     def _internal_user_by_email(self, email):
         """Compte interne actif dont l'adresse, mise en minuscules, est égale à celle saisie (déjà nettoyée et
-        en minuscules) : comparaison en égalité, sans motif (« % » et « _ » n'y sont que des caractères)."""
+        en minuscules) : comparaison en égalité, sans motif (« % » et « _ » n'y sont que des caractères).
+        Une adresse portée par plusieurs comptes actifs est ambiguë : aucun compte (invité externe), pour
+        qu'une adresse partagée ne fasse jamais entrer l'invitation dans l'agenda du mauvais compte."""
         Users = self.env["res.users"].sudo()
         Users.flush_model(["partner_id", "share", "active"])
         self.env["res.partner"].sudo().flush_model(["email"])
         self.env.cr.execute(
             "SELECT u.id FROM res_users u JOIN res_partner p ON p.id = u.partner_id "
-            "WHERE lower(p.email) = %s AND u.share IS NOT TRUE AND u.active ORDER BY u.id LIMIT 1",
+            "WHERE lower(p.email) = %s AND u.share IS NOT TRUE AND u.active ORDER BY u.id LIMIT 2",
             (email,))
-        row = self.env.cr.fetchone()
-        return Users.browse(row[0]) if row else Users
+        rows = self.env.cr.fetchall()
+        return Users.browse(rows[0][0]) if len(rows) == 1 else Users
 
     def _attendee_commands(self, items, organizer):
         """Participants saisis -> commandes de la liste, en gardant les réponses déjà reçues. Rend

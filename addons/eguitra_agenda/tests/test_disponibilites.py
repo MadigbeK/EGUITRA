@@ -44,7 +44,8 @@ class TestDisponibilites(AgendaCase):
     def test_trouver_un_creneau(self):
         # Alice : 8 h - 10 h ; Bruno : 10 h 30 - 11 h ; Carla (facultative) : tout l'après-midi.
         self.create(self.alice, "Clôture", hour=8, minutes=120)
-        self.create(self.bruno, "Parc", hour=10, minutes=30)
+        self.ok("POST", "/agenda/events", self.bruno, {"name": "Parc", "start": z(self.at(0, 10, 30)),
+                                                       "stop": z(self.at(0, 11))})
         self.ok("POST", "/agenda/events", self.carla, {"name": "Formation", "start": z(self.at(0, 13)),
                                                        "stop": z(self.at(0, 17))})
         body = self.find(self.alice, {"user_ids": [self.bruno.id], "optional_user_ids": [self.carla.id], "duration": 60,
@@ -96,9 +97,10 @@ class TestDisponibilites(AgendaCase):
         self.assertEqual((line["state"], line["auto_declined"], line["comment"]),
                          ("declined", True, "En mission à Boké, de retour lundi."))
         self.assertIn("refusée d'office", body["warnings"][0]["message"])
-        self.assertTrue(self.env["eguitra.agenda.notification"].sudo().search([("user_id", "=", self.alice.id),
-                                                                              ("kind", "=", "ooo")]),
-                        "L'organisatrice est prévenue")
+        # L'organisatrice l'apprend dans la réponse (avertissement) : jamais de notification à l'auteur lui-même.
+        self.assertFalse(self.env["eguitra.agenda.notification"].sudo().search([("user_id", "=", self.alice.id),
+                                                                               ("kind", "=", "ooo")]),
+                         "Pas de notification à l'autrice de l'invitation")
         self.assertFalse(self.env["eguitra.agenda.notification"].sudo().search(
             [("user_id", "=", self.bruno.id), ("kind", "=", "invitation")]), "Pas d'invitation pendant l'absence")
         person = self.ok("POST", "/agenda/freebusy", self.alice, {"user_ids": [self.bruno.id], "start": z(self.at(0, 0)),

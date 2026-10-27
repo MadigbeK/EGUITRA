@@ -158,7 +158,8 @@ class TestSecurite(AgendaCase):
         body = self.create(self.alice, "Point exploitation", hour=10, attendees=[{"user_id": self.bruno.id}])
         self.assertEqual(body["conflicts"], [], "Disponibilités fermées : aucune occupation révélée")
         self.ok("PATCH", "/agenda/preferences", self.bruno, {"freebusy_visible": True})
-        body = self.create(self.alice, "Point exploitation 2", hour=10, attendees=[{"user_id": self.bruno.id}])
+        # 9 h - 10 h : chevauche la tournée de Bruno, pas le premier point d'Alice (10 h - 11 h).
+        body = self.create(self.alice, "Point exploitation 2", hour=9, attendees=[{"user_id": self.bruno.id}])
         self.assertEqual([c["user_id"] for c in body["conflicts"]], [self.bruno.id])
 
     def test_recherche_par_adresse_en_egalite_sans_motif(self):
@@ -167,3 +168,6 @@ class TestSecurite(AgendaCase):
             [line] = body["event"]["attendees"]
             self.assertEqual((line["kind"], line["user_id"]), ("email", None), f"{motif} ne désigne aucun compte")
         self.assertEqual(self.env["eguitra.agenda.event"]._internal_user_by_email("alice@eguitra.test"), self.alice)
+        # Adresse portée par deux comptes actifs : ambiguë, aucun compte (invité externe).
+        self.carla.partner_id.email = "ALICE@eguitra.test"
+        self.assertFalse(self.env["eguitra.agenda.event"]._internal_user_by_email("alice@eguitra.test"))
