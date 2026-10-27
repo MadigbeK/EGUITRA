@@ -121,3 +121,19 @@ class TestCorrectionsCahier(HsseqCase):
         self.assertEqual((status, [a["id"] for a in listing["items"]]), (200, [ten.id, three.id, later.id]))
         status, body = self.api("kadi.hsseq", "GET", f"{base}&sort=-retard")
         self.assertEqual((status, body["error"]), (400, "invalid_parameter"), "Tri inconnu")
+
+    def test_exports_refuses_a_l_auditeur(self):
+        """L'auditeur lit les événements et les actions de ses sites, sans leurs exports ni le rapport d'enquête
+        (les écrans masquent ces boutons) ; le chef de parc les obtient."""
+        event = self.event()
+        self.env["eguitra.hsseq.action"].create({
+            "origin": "event", "event_id": event.id, "description": "Former les agents au balisage",
+            "owner_id": self.parc.id, "due_date": self.day + timedelta(days=10)})
+        for path in ("/hsseq/events", f"/hsseq/events/{event.id}", "/hsseq/actions"):
+            status, body = self.api("awa.auditrice", "GET", path)
+            self.assertEqual(status, 200, f"Auditeur : {path} lu ({body})")
+        for path in ("/hsseq/events/export.xlsx", f"/hsseq/events/{event.id}/report.pdf", "/hsseq/actions/export.xlsx"):
+            status, _body = self.api("awa.auditrice", "GET", path)
+            self.assertEqual(status, 403, f"Auditeur : {path} refusé")
+            status, _body = self.api("ibrahima", "GET", path)
+            self.assertEqual(status, 200, f"Chef de parc : {path} servi")

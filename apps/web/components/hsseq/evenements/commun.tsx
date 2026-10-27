@@ -10,7 +10,7 @@ import { useId } from "react";
 import { cx } from "@/components/ui";
 import { ApiError, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtInt } from "@/lib/format";
-import type { CriticalityLevel, CriticalityThreshold, InvestigationMethod, Referentials, Score } from "@/lib/hsseq-types";
+import type { CriticalityLevel, CriticalityThreshold, HsseqProfile, InvestigationMethod, Referentials, Score } from "@/lib/hsseq-types";
 import { METHODE_ENQUETE, NIVEAUX, NOTES, ORDRE_NIVEAUX, niveauCriticite, texteErreur } from "@/components/hsseq/commun";
 
 export { newUuid } from "@/lib/offline-store";
@@ -25,6 +25,17 @@ export function useReferentiels() {
 /** Le compte connecté porte-t-il le profil Responsable HSSEQ ? Faux tant que les référentiels ne sont pas lus. */
 export function estResponsableHsseq(ref: Referentials | undefined): boolean {
   return Boolean(ref?.me.profiles.includes("hsseq"));
+}
+
+/**
+ * Profils qui obtiennent les exports du registre des événements et du plan d'actions, et le rapport
+ * d'enquête en PDF (profils du cockpit) : jamais l'auditeur, qui lit sans exporter.
+ */
+export const PROFILS_EXPORT: readonly HsseqProfile[] = ["admin", "direction", "hsseq", "exploitation"];
+
+/** Le compte connecté obtient-il ces exports ? Faux tant que les référentiels ne sont pas lus. */
+export function peutExporter(ref: Referentials | undefined): boolean {
+  return Boolean(ref?.me.profiles.some((p) => PROFILS_EXPORT.includes(p)));
 }
 
 /** Sites ouverts au compte : ceux de `me.site_ids`, ou tous quand la liste est vide. */

@@ -4,8 +4,9 @@
  * Fiche d'un événement de NIMOVA · HSSEQ (GET /hsseq/events/{id}, §5) : en-tête (référence, type,
  * criticité, statut), frise du cycle déclaré, classé, enquête, actions, clôturé, commandes, onglets.
  * Les commandes ne s'affichent que selon `rights` et `transitions` renvoyés par la fiche et les
- * profils du compte (création d'une action : Responsable HSSEQ, fiche pas encore close) ; le noyau
- * refuse le reste, et ses refus s'écrivent en clair sous l'en-tête.
+ * profils du compte (création d'une action : Responsable HSSEQ, fiche pas encore close ; rapport
+ * d'enquête : profils du cockpit, jamais l'auditeur) ; le noyau refuse le reste, et ses refus
+ * s'écrivent en clair sous l'en-tête.
  */
 
 import Link from "next/link";
@@ -17,7 +18,7 @@ import { CYCLE_EVENEMENT, Criticite, DOMAINE, STATUT_EVENEMENT, TYPE_EVENEMENT, 
 import { FenetreAction } from "@/components/hsseq/conformite/fenetres";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import type { Event as Evenement, EventStatus, EventTransition } from "@/lib/hsseq-types";
-import { SOURCE, estResponsableHsseq, fmtJourHeure, messageRefus, useReferentiels } from "./commun";
+import { SOURCE, estResponsableHsseq, fmtJourHeure, messageRefus, peutExporter, useReferentiels } from "./commun";
 import { Declaration } from "./Declaration";
 import { Classement } from "./Classement";
 import { Couts } from "./Couts";
@@ -109,9 +110,10 @@ export function FicheEvenement({ id }: { id: string }) {
 
   const peut = (t: EventTransition) => ev.transitions.includes(t);
   // Création d'une action d'origine « événement » (POST /hsseq/actions) : Responsable HSSEQ, fiche pas
-  // encore close.
+  // encore close ; le rapport d'enquête : profils du cockpit (refusé à l'auditeur).
   const creerAction = estResponsableHsseq(referentiels) && ev.status !== "closed";
-  const commandes = ev.rights.can_edit || ev.transitions.length > 0 || enqueteOuverte(ev) || creerAction;
+  const rapportPermis = peutExporter(referentiels) && enqueteOuverte(ev);
+  const commandes = ev.rights.can_edit || ev.transitions.length > 0 || creerAction || rapportPermis;
 
   return (
     <div>
@@ -194,7 +196,7 @@ export function FicheEvenement({ id }: { id: string }) {
                 <Pencil className="h-4 w-4" /> Corriger la déclaration
               </Button>
             )}
-            {enqueteOuverte(ev) && (
+            {rapportPermis && (
               <Button variant="ghost" loading={rapport} onClick={pdf}>
                 <FileText className="h-4 w-4" /> Rapport d'enquête (PDF)
               </Button>
@@ -234,7 +236,7 @@ export function FicheEvenement({ id }: { id: string }) {
 
       {onglet === "resume" && <Resume e={ev} onRecharger={() => void mutate()} />}
       {onglet === "classement" && <Classement e={ev} referentiels={referentiels} onMaj={maj} />}
-      {onglet === "enquete" && <Enquete e={ev} referentiels={referentiels} onMaj={maj} onOuvrir={() => setOuvrirEnquete(true)} onPlanifier={planifier} envoiPlan={envoi === "plan"} onRapport={pdf} rapport={rapport} />}
+      {onglet === "enquete" && <Enquete e={ev} referentiels={referentiels} onMaj={maj} onOuvrir={() => setOuvrirEnquete(true)} onPlanifier={planifier} envoiPlan={envoi === "plan"} onRapport={rapportPermis ? pdf : undefined} rapport={rapport} />}
       {onglet === "actions" && <ActionsLiees e={ev} onNouvelle={creerAction ? () => setNouvelleAction(true) : undefined} />}
       {onglet === "couts" && <Couts e={ev} referentiels={referentiels} onMaj={maj} />}
       {onglet === "notifications" && <Notifications e={ev} />}
