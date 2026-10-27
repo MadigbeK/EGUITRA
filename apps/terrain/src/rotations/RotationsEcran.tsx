@@ -3,9 +3,8 @@ import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
 import { ApiError } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
-import { ENVIRONNEMENT } from "../config";
-import { enSimulation } from "../serveur";
 import { pluriel } from "../format";
+import { enSimulation, environnement } from "../serveur";
 import { Bandeau, EnTete, Ecran, PastilleReseau, Segment, Texte, demanderConfirmation, type EtatReseau } from "../ui/elements";
 import { espaces, LARGEUR_TABLETTE, marque, mesures, traits } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
@@ -79,7 +78,7 @@ function Contenu({ user, onRetour }: { user: Utilisateur; onRetour?: () => void 
     <Ecran>
       <EnTete
         titre="Rotations"
-        sousTitre={`${user.name}${ENVIRONNEMENT ? `, ${ENVIRONNEMENT}` : ""}`}
+        sousTitre={`${user.name}${environnement() ? `, ${environnement()}` : ""}`}
         gauche={onRetour ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Retour à Ma journée" onPress={onRetour} style={styles.cible}>
             <Texte variante="libelle" style={{ color: c.enteteEncre }}>‹</Texte>

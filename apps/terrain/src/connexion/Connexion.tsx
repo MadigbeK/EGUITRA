@@ -4,8 +4,7 @@ import { AppState, KeyboardAvoidingView, ScrollView, StyleSheet, View, type Text
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ApiError, DelaiDepasse } from "../api/errors";
 import { useSession } from "../auth/session";
-import { ENVIRONNEMENT } from "../config";
-import { enSimulation } from "../serveur";
+import { enSimulation, environnement } from "../serveur";
 import { Bandeau, Bouton, Champ, Feuille, Texte } from "../ui/elements";
 import { ChoixDuServeur } from "./choixServeur";
 import { espaces, marque } from "../ui/terrain";
@@ -67,7 +66,7 @@ export function Connexion() {
       <ScrollView contentContainerStyle={[styles.page, { paddingTop: insets.top + espaces[8] }]} keyboardShouldPersistTaps="handled">
         <View style={styles.marque}>
           <Texte variante="titreFort" style={{ color: "#ffffff" }}>NIMOVA</Texte>
-          <Texte variante="libelle" style={{ color: marque.menthe }}>Terrain{ENVIRONNEMENT ? `, ${ENVIRONNEMENT}` : ""}</Texte>
+          <Texte variante="libelle" style={{ color: marque.menthe }}>Terrain{environnement() ? `, ${environnement()}` : ""}</Texte>
         </View>
         <Feuille style={styles.carte}>
           {enSimulation() ? (

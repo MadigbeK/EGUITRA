@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from "react";
 import { View } from "react-native";
-import { adresseValide, CHOIX_SERVEUR, enSimulation, libelleServeur, type Serveur } from "../serveur";
+import { adresseValide, CHOIX_SERVEUR, enSimulation, estActif, libelleServeur, RECETTE, type Serveur } from "../serveur";
 import { Bandeau, Bouton, Champ, Texte } from "../ui/elements";
 import { espaces } from "../ui/terrain";
 
@@ -34,6 +34,7 @@ export function ChoixDuServeur() {
   }
 
   const valide = adresseValide(adresse);
+  const recette = RECETTE;
   return (
     <View style={{ gap: espaces[3] }}>
       <Texte variante="service" ton="second">Serveur : {libelleServeur()}</Texte>
@@ -44,6 +45,9 @@ export function ChoixDuServeur() {
           {erreur ? <Bandeau ton="danger" texte={erreur} /> : null}
           {!enSimulation() ? (
             <Bouton titre="Démonstration (bureau simulé)" variante="secondaire" chargement={travail} onPress={() => void utiliser({ mode: "simulation" })} />
+          ) : null}
+          {recette && !estActif(recette) ? (
+            <Bouton titre={`Recette (${libelleServeur(recette)})`} variante="secondaire" chargement={travail} onPress={() => void utiliser(recette)} />
           ) : null}
           <Champ
             libelle="Adresse d'un bureau"

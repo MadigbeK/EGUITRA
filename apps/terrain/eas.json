@@ -7,7 +7,10 @@
     "preview": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_DEMONSTRATION": "1", "EXPO_PUBLIC_ENVIRONMENT": "Démonstration" }
+      "env": {
+        "EXPO_PUBLIC_DEMONSTRATION": "1",
+        "EXPO_PUBLIC_RECETTE_URL": "https://recette.178-33-206-212.sslip.io/api/natif"
+      }
     },
     "recette": {
       "distribution": "internal",

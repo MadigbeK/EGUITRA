@@ -95,6 +95,22 @@ publiée sans adresse d'API refuse de démarrer.
 
 Configuration : copier `.env.example` en `.env` (jamais versionné).
 
+### Version de démonstration (APK)
+
+Profil `preview` d'`eas.json` : APK installable directement. L'application s'ouvre sur le bureau
+simulé (mêmes règles qu'en développement) ; « Changer de serveur », à l'écran de connexion, passe sur
+la recette en un geste ou sur une autre adresse saisie (https seulement). Chaque serveur garde sa
+base, sa session et son code personnel à part sur l'appareil (`src/serveur.ts`). Rien ne part du
+bureau simulé vers un vrai bureau, et ses numéros d'urgence fictifs ne sont jamais composés.
+
+Construction dans le nuage d'Expo (EAS Build), sur le compte Expo du gérant, qui s'y connecte
+lui-même :
+
+    npx eas-cli@latest login
+    npx eas-cli@latest build -p android --profile preview
+
+Seul `apps/terrain` est envoyé à Expo (`.easignore` à la racine du dépôt).
+
 ## Organisation
 
 | Dossier | Rôle |

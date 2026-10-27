@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { API_URL, DEMONSTRATION } from "./config";
+import { API_URL, DEMONSTRATION, ENVIRONNEMENT, RECETTE_URL } from "./config";
 
 /**
  * Serveur de travail de l'application.
@@ -22,6 +22,14 @@ let memoire: string | null = null;
 
 /** Choix du serveur offert à l'écran de connexion : version de démonstration seulement. */
 export const CHOIX_SERVEUR = DEMONSTRATION;
+
+/** Recette proposée en un geste, si son adresse est fixée à la construction et valide. */
+export const RECETTE: Serveur | null = RECETTE_URL && adresseValide(RECETTE_URL) ? { mode: "bureau", url: adresseValide(RECETTE_URL)! } : null;
+
+/** Le serveur actif est-il celui-ci ? */
+export function estActif(s: Serveur): boolean {
+  return s.mode === "simulation" ? actif.mode === "simulation" : actif.mode === "bureau" && actif.url === s.url;
+}
 
 function parDefaut(): Serveur {
   return API_URL ? { mode: "bureau", url: API_URL } : { mode: "simulation" };
@@ -116,6 +124,17 @@ export function cleDeLEspace(cle: string): string {
 export function baseLocale(): string {
   const e = espace();
   return e ? `terrain-${e}.db` : "terrain.db";
+}
+
+/**
+ * Nom de l'environnement affiché sous le titre : celui de la construction, ou, en version de
+ * démonstration, celui du serveur actif (« Démonstration », « Recette » ou l'hôte saisi).
+ */
+export function environnement(): string {
+  if (!CHOIX_SERVEUR) return ENVIRONNEMENT;
+  if (actif.mode === "simulation") return "Démonstration";
+  if (RECETTE && estActif(RECETTE)) return "Recette";
+  return libelleServeur();
 }
 
 /** Libellé du serveur pour l'écran : « Démonstration » ou l'hôte. */

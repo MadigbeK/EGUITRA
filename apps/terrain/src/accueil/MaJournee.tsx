@@ -4,13 +4,12 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { ApiError } from "../api/errors";
 import type { Utilisateur } from "../auth/coffre";
 import { useSession } from "../auth/session";
-import { ENVIRONNEMENT } from "../config";
 import { heure, pluriel, quand } from "../format";
 import { PHOTO_REFUSEE } from "../hsseq/envoi";
 import { useContactsCrise, useMesDocuments } from "../hsseq/useHsseq";
 import type { QueuedItem } from "../store/types";
 import { useEnvoi } from "../sync/Envoi";
-import { enSimulation } from "../serveur";
+import { enSimulation, environnement } from "../serveur";
 import { RECUE_AVANT_CORRECTION } from "../sync/outbox";
 import { Bandeau, Bouton, EnTete, Ecran, Feuille, PastilleReseau, Tampon, Texte, demanderConfirmation, type EtatReseau } from "../ui/elements";
 import { espaces, marque, mesures, modules, rayons, traits } from "../ui/terrain";
@@ -102,7 +101,7 @@ export function MaJournee({ user }: { user: Utilisateur }) {
     <Ecran>
       <EnTete
         titre="Ma journée"
-        sousTitre={`${user.name}${ENVIRONNEMENT ? `, ${ENVIRONNEMENT}` : ""}`}
+        sousTitre={`${user.name}${environnement() ? `, ${environnement()}` : ""}`}
         droite={(
           <>
             <View style={styles.cible} accessibilityLabel={aEnvoyer ? pluriel(aEnvoyer, "saisie à envoyer", "saisies à envoyer") : "Rien à envoyer"}>

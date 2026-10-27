@@ -15,6 +15,12 @@ export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "
  */
 export const DEMONSTRATION = process.env.EXPO_PUBLIC_DEMONSTRATION === "1";
 
+/**
+ * Entrée native de la recette, proposée en un geste à l'écran de connexion d'une version de
+ * démonstration (EXPO_PUBLIC_RECETTE_URL) ; jamais dans une version publiée.
+ */
+export const RECETTE_URL = DEMONSTRATION ? (process.env.EXPO_PUBLIC_RECETTE_URL ?? "").replace(/\/+$/, "") : "";
+
 /** Nom de l'environnement affiché sous le titre hors production (« Recette »), vide en production. */
 export const ENVIRONNEMENT = process.env.EXPO_PUBLIC_ENVIRONMENT ?? "";
 
