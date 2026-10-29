@@ -37,6 +37,8 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const app = await appOf(await searchParams);
   // Le portail est celui du cabinet : ni le nom ni le monogramme de la marque interne.
   if (app === "portail") return { title: { absolute: "Connexion · MB AxisPro Consulting" }, description: "Portail des porteurs de projets de MB AxisPro Consulting : dossier, pièces et échanges avec le cabinet.", icons: { icon: "/icons/portail.svg" } };
+  // L'espace client sert les clients des deux sociétés : leurs noms, pas la marque interne.
+  if (app === "espace-client") return { title: { absolute: "Connexion · Espace client" }, description: "Espace client d'EGUITRA GROUP SARLU et de MB AxisPro Consulting : vos demandes et leur suivi." };
   return { title: "Connexion" };
 }
 
@@ -51,6 +53,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const next = safeNext(params.next) ?? (isEspaceCode(app) ? "/accueil" : APPS[app].home);
   const message = (params.error && MESSAGES[params.error]) || (params.message && MESSAGES[params.message]) || null;
   const portail = app === "portail";
+  const client = app === "espace-client";
 
   return (
     <div data-app={app} className="min-h-screen bg-panel text-ink lg:grid lg:grid-cols-[minmax(0,10fr)_minmax(0,13fr)]">
@@ -58,6 +61,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <div className="n-entree" style={{ "--i": 0 } as CSSProperties}>
           {portail ? (
             <MarqueCabinet className="h-10" />
+          ) : client ? (
+            <span className="inline-flex flex-wrap items-center gap-4">
+              <LogoSociete entite="groupe" variante="complet" className="h-9" />
+              <span aria-hidden className="h-7 w-px bg-line" />
+              <LogoSociete entite="cabinet" variante="complet" className="h-7" />
+            </span>
           ) : (
             <span className="inline-flex items-center gap-3">
               <Monogramme tuile={false} className="h-11 w-11" />
@@ -74,7 +83,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </div>
         </div>
         <div className="n-entree space-y-4" style={{ "--i": 3 } as CSSProperties}>
-          {!portail && (
+          {!portail && !client && (
             <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
               <LogoSociete entite="groupe" variante="complet" className="h-9" />
               <span aria-hidden className="h-7 w-px bg-line" />
@@ -84,7 +93,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="text-[12px] leading-relaxed text-muted">Accès réservé. Connexions journalisées, double authentification obligatoire.</p>
         </div>
       </main>
-      {portail ? <ScenePortail /> : <SceneNimova />}
+      {portail ? <ScenePortail /> : client ? <SceneClient /> : <SceneNimova />}
     </div>
   );
 }
@@ -147,6 +156,44 @@ function SceneNimova() {
         </div>
 
         <div className="n-entree hidden items-center gap-6 lg:flex" style={{ "--i": 4 } as CSSProperties}>
+          <LogoSociete entite="groupe" variante="complet" clair className="h-10 opacity-90" />
+          <span aria-hidden className="h-8 w-px bg-white/20" />
+          <LogoSociete entite="cabinet" variante="complet" clair className="h-8 opacity-90" />
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+/** Scène de l'espace client : sobre, aux noms des deux sociétés, sans la marque interne. */
+function SceneClient() {
+  return (
+    <aside className="sur-dos relative order-first overflow-hidden bg-foret text-white lg:order-2 lg:min-h-screen">
+      <div className="relative z-10 flex h-full flex-col justify-between gap-10 px-6 py-8 sm:px-12 lg:px-14 lg:py-12">
+        <p className="n-entree text-[13px] font-medium text-menthe/80" style={{ "--i": 1 } as CSSProperties}>
+          EGUITRA GROUP SARLU · MB AxisPro Consulting
+        </p>
+        <div className="n-entree max-w-[460px]" style={{ "--i": 2 } as CSSProperties}>
+          <p className="font-display text-[40px] font-bold leading-[1.08] sm:text-[52px]">Espace client</p>
+          <ul className="mt-7 space-y-3 text-[16px] text-white/90">
+            {[
+              [FileText, "Vos demandes et réclamations, et leur suivi"],
+              [Mail, "Vos échanges avec le service client"],
+              [FolderOpen, "Vos pièces jointes, en toute confidentialité"],
+            ].map(([I, texte], k) => {
+              const Icone = I as typeof FolderOpen;
+              return (
+                <li key={k} className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 flex-none place-items-center rounded-xl bg-white/10 text-menthe">
+                    <Icone className="h-[18px] w-[18px]" />
+                  </span>
+                  {texte as string}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        <div className="flex items-center gap-6">
           <LogoSociete entite="groupe" variante="complet" clair className="h-10 opacity-90" />
           <span aria-hidden className="h-8 w-px bg-white/20" />
           <LogoSociete entite="cabinet" variante="complet" clair className="h-8 opacity-90" />
