@@ -87,7 +87,7 @@ export function TableauDeBord({ lire, ecrire, droits }: VueProps) {
         <Field label="Type" className="w-full sm:w-52">
           <Select value={type ?? ""} onChange={(e) => ecrire({ type: e.target.value || null })} placeholder="Tous les types" options={ORDRE_TYPES.map((t) => ({ value: t, label: TYPE_DOCUMENT[t].pluriel }))} />
         </Field>
-        {sites.length > 1 && (
+        {sites.length > 0 && (
           <Field label="Site" className="w-full sm:w-44">
             <Select value={site ?? ""} onChange={(e) => ecrire({ site: e.target.value || null })} placeholder="Tous" options={sites.map((s) => ({ value: s.id, label: s.name }))} />
           </Field>

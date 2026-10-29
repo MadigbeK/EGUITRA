@@ -200,7 +200,7 @@ export function Procedures({ lire, ecrire, droits }: VueProps) {
         <Field label="Domaine" className="w-full sm:w-40">
           <Select value={domaine ?? ""} onChange={(e) => ecrire({ domaine: e.target.value || null })} placeholder="Tous" options={(Object.keys(DOMAINE) as Domain[]).map((d) => ({ value: d, label: DOMAINE[d] }))} />
         </Field>
-        {sites.length > 1 && (
+        {sites.length > 0 && (
           <Field label="Site" className="w-full sm:w-44">
             <Select value={site ?? ""} onChange={(e) => ecrire({ site: e.target.value || null })} placeholder="Tous" options={sites.map((s) => ({ value: s.id, label: s.name }))} />
           </Field>
