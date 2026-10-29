@@ -51,7 +51,13 @@ type Nombres =
   | "verification_min_criticality"
   | "verification_days"
   | "escalation_days"
-  | "costly_action_threshold";
+  | "costly_action_threshold"
+  | "review_months_policy"
+  | "review_months_procedure"
+  | "review_months_work_instruction"
+  | "review_months_instruction"
+  | "review_months_form"
+  | "document_review_alert_days";
 
 const DATES: Array<{ cle: Dates; label: string; aide: string }> = [
   { cle: "lock_start_date", label: "Verrou de départ en service à partir du", aide: "Rotations chargées à partir de cette date : départ soumis au verrou, validation après le passage « en route ». Vide : pas encore en service." },
@@ -92,6 +98,18 @@ const GROUPES: Array<{ titre: string; texte: string; champs: Array<{ cle: Nombre
       { cle: "costly_action_threshold", label: "Action coûteuse à partir de", unite: "GNF" },
     ],
   },
+  {
+    titre: "Politiques et procédures",
+    texte: "Revue périodique proposée par type de document (un document peut avoir sa propre périodicité), et alerte au Responsable HSSEQ, au responsable du document et, pour une politique, à la direction avant l'échéance.",
+    champs: [
+      { cle: "review_months_policy", label: "Revue d'une politique", unite: "mois" },
+      { cle: "review_months_procedure", label: "Revue d'une procédure", unite: "mois" },
+      { cle: "review_months_work_instruction", label: "Revue d'une instruction de travail", unite: "mois" },
+      { cle: "review_months_instruction", label: "Revue d'une consigne", unite: "mois" },
+      { cle: "review_months_form", label: "Revue d'un formulaire", unite: "mois" },
+      { cle: "document_review_alert_days", label: "Alerte avant l'échéance", unite: "jours" },
+    ],
+  },
 ];
 
 /** Brouillon du formulaire : textes saisis, comparés aux valeurs lues pour n'envoyer que les changements. */
@@ -100,6 +118,8 @@ interface Brouillon {
   nombres: Record<Nombres, string>;
   director_id: string;
   targets: Partial<Record<IndicatorCode, string>>;
+  /** Procédures approuvées par une seconde personne du profil HSSEQ (une politique l'est toujours par la direction). */
+  document_four_eyes: boolean;
 }
 
 function depuis(s: HsseqSettings): Brouillon {
@@ -109,7 +129,7 @@ function depuis(s: HsseqSettings): Brouillon {
   for (const g of GROUPES) for (const c of g.champs) nombres[c.cle] = s[c.cle] === null || s[c.cle] === undefined ? "" : String(s[c.cle]);
   const targets: Partial<Record<IndicatorCode, string>> = {};
   for (const [code, v] of Object.entries(s.targets ?? {})) if (v !== null && v !== undefined) targets[code as IndicatorCode] = String(v);
-  return { dates, nombres, director_id: s.director ? String(s.director.id) : "", targets };
+  return { dates, nombres, director_id: s.director ? String(s.director.id) : "", targets, document_four_eyes: Boolean(s.document_four_eyes) };
 }
 
 /** Nombre saisi (virgule décimale acceptée), nul s'il n'est pas lisible. */
@@ -164,6 +184,7 @@ function Formulaire({ s, onEnregistre }: { s: HsseqSettings; onEnregistre: (s: H
     for (const d of DATES) if (b.dates[d.cle] !== initial.dates[d.cle]) c[d.cle] = b.dates[d.cle] || null;
     for (const k of Object.keys(b.nombres) as Nombres[]) if (b.nombres[k] !== initial.nombres[k]) c[k] = nombre(b.nombres[k]) ?? 0;
     if (b.director_id !== initial.director_id) c.director_id = b.director_id ? Number(b.director_id) : null;
+    if (b.document_four_eyes !== initial.document_four_eyes) c.document_four_eyes = b.document_four_eyes;
     if (JSON.stringify(b.targets) !== JSON.stringify(initial.targets)) {
       const t: Partial<Record<IndicatorCode, number>> = {};
       for (const [k, v] of Object.entries(b.targets)) {
@@ -231,6 +252,16 @@ function Formulaire({ s, onEnregistre }: { s: HsseqSettings; onEnregistre: (s: H
           </div>
         </Card>
       ))}
+
+      <Card title="Approbation des documents HSE">
+        <p className="mb-3 max-w-[90ch] text-[13px] leading-relaxed text-muted">
+          Une politique entre en vigueur approuvée par la direction, jamais par ses rédacteurs ni par la personne qui l&apos;a soumise. Les autres documents sont approuvés par le Responsable HSSEQ.
+        </p>
+        <label className="inline-flex cursor-pointer items-center gap-2.5 text-[13.5px] text-ink">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent)]" checked={b.document_four_eyes} onChange={(e) => setB({ ...b, document_four_eyes: e.target.checked })} />
+          Procédures, instructions, consignes et formulaires approuvés par un autre Responsable HSSEQ que leurs rédacteurs
+        </label>
+      </Card>
 
       <Card title="Notifications de la direction">
         <Field label="Directeur général" hint="Criticité élevée, dérogation activée, escalade d'une action. Sans choix : les comptes Direction générale de la société." className="max-w-md">

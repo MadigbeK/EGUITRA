@@ -20,7 +20,7 @@ import { AvecFiche, Bascule, ChampSite, Pages, aProfil, aujourdhui, joursEntre, 
  */
 interface Source {
   param: string;
-  cle: "event_id" | "risk_id" | "finding_id" | "complaint_id" | "drill_id" | "review_id";
+  cle: "event_id" | "risk_id" | "finding_id" | "complaint_id" | "drill_id" | "review_id" | "document_id";
   origine: string;
   de: string;
   lien: ((id: number) => string) | null;
@@ -34,6 +34,7 @@ const SOURCES: readonly Source[] = [
   // Écrans du lot 3 en cours d'écriture : la fiche d'origine est nommée, sans lien retour.
   { param: "reclamation", cle: "complaint_id", origine: "complaint", de: "de la réclamation", lien: null },
   { param: "exercice", cle: "drill_id", origine: "drill", de: "de l'exercice d'urgence", lien: null },
+  { param: "document", cle: "document_id", origine: "document", de: "du document HSE", lien: (id) => `/hsseq/documents?vue=procedures&statut=toutes&procedure=${id}` },
 ];
 
 /** Paramètres de toutes les fiches d'origine, retirés ensemble pour revenir à tout le registre. */

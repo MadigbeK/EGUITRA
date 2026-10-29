@@ -4,10 +4,12 @@
                "d'actions, contrôles avant départ des citernes et des bennes, alcootests, verrou de départ (V01 à V09) et "
                "dérogations, registre des risques, habilitations reliées à RH, audits et exigences, profil auditeur, "
                "rapport mensuel au format d'un donneur d'ordre, cockpit des indicateurs ; environnement et qualité "
-               "(déversements, déchets, émissions, poussières, écarts de livraison, réclamations), procédures et "
-               "alertes avec accusé de lecture, plans d'urgence et exercices, annuaire de crise, revue de direction, "
-               "import des violations de la télématique",
-    "version": "19.0.1.2.3",
+               "(déversements, déchets, émissions, poussières, écarts de livraison, réclamations), référentiel "
+               "documentaire HSE (politiques signées par la direction, procédures, instructions, consignes, "
+               "formulaires ; revue périodique, document à afficher, tableau de bord) et alertes avec accusé de "
+               "lecture, plans d'urgence et exercices, annuaire de crise, revue de direction, import des violations "
+               "de la télématique",
+    "version": "19.0.1.3.0",
     "category": "Human Resources",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",
@@ -23,6 +25,7 @@
         "report/investigation_report.xml",
         "report/monthly_report.xml",
         "report/review_report.xml",
+        "report/policy_report.xml",
     ],
     "post_init_hook": "post_init_hook",
     "installable": True,

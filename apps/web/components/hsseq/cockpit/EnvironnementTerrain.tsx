@@ -69,8 +69,12 @@ export function EnvironnementTerrain({ c }: { c: Cockpit }) {
           </ul>
         </Card>
 
-        <Card title="Documents" actions={lien("/hsseq/documents", "Procédures")}>
-          <Chiffre valeur={d.procedures_published}>{d.procedures_published > 1 ? "procédures en vigueur" : "procédure en vigueur"}</Chiffre>
+        <Card title="Documents" actions={lien("/hsseq/documents?vue=procedures", "Politiques et procédures")}>
+          <Chiffre valeur={d.procedures_published}>{d.procedures_published > 1 ? "documents HSE en vigueur" : "document HSE en vigueur"}</Chiffre>
+          {(d.reviews_overdue ?? 0) > 0 && (
+            <p className="mt-1.5 text-[12.5px] font-semibold text-danger">{pluriel(d.reviews_overdue ?? 0, "revue de document en retard", "revues de documents en retard")}</p>
+          )}
+          {(d.pending_approval ?? 0) > 0 && <p className="mt-1 text-[12.5px] text-muted">{pluriel(d.pending_approval ?? 0, "version à approuver", "versions à approuver")}</p>}
           {d.targets > 0 && (
             <>
               <div className="mt-4 flex items-center gap-3">

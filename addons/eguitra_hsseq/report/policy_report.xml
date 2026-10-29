@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Document HSE à afficher sur les sites (politique, consigne…), au gabarit de la société : en-tête et
+         logo de la mise en page des documents (web.external_layout), couleur principale de la société (à
+         défaut le vert de la charte). Les valeurs sont préparées par controllers/policies.py (poster_context) ;
+         le gabarit ne fait que les disposer, en A4 portrait. Un projet non approuvé porte sa mention. -->
+
+    <template id="report_policy_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="report"/>
+            <div class="page pol">
+                <style>
+                    .pol { font-family: "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; color: #1d2320; }
+                    .pol .kind { font-size: 9pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+                    .pol h1 { font-size: 22pt; line-height: 1.15; margin: 1mm 0 2mm 0; }
+                    .pol .ref { font-size: 9pt; color: #5b6662; margin: 0 0 6mm 0; }
+                    .pol .draft { border: 1.5pt solid #b42318; color: #b42318; font-weight: 700; text-align: center; padding: 2mm; margin-bottom: 5mm; font-size: 11pt; }
+                    .pol .body { white-space: pre-wrap; font-size: 11.5pt; line-height: 1.5; margin-bottom: 6mm; }
+                    .pol h2 { font-size: 12pt; margin: 6mm 0 2mm 0; padding-bottom: 1mm; }
+                    .pol ul.obj { margin: 0; padding-left: 5mm; }
+                    .pol ul.obj li { margin-bottom: 2mm; font-size: 11pt; }
+                    .pol .muted { color: #5b6662; }
+                    .pol .scope { white-space: pre-wrap; }
+                    .pol .sign { margin-top: 12mm; width: 100%; border-collapse: collapse; }
+                    .pol .sign td { vertical-align: top; padding: 0; }
+                    .pol .sign .box { border-top: 1pt solid #c9d3cf; padding-top: 2mm; width: 80mm; }
+                    .pol .foot { margin-top: 10mm; font-size: 8.5pt; color: #5b6662; border-top: 1px solid #e3e8e6; padding-top: 2mm; }
+                </style>
+                <div t-if="r['draft']" class="draft">PROJET NON APPROUVÉ : ne pas afficher</div>
+                <div t-if="r['superseded']" class="draft">VERSION REMPLACÉE : ne plus afficher</div>
+                <p class="kind" t-att-style="'color: %s;' % r['color']" t-esc="r['type_label']"/>
+                <h1 t-esc="r['title']"/>
+                <p class="ref">
+                    <t t-esc="r['code']"/>, version <t t-esc="r['version']"/>, en vigueur le <t t-esc="r['effective_date']"/>.
+                    <t t-esc="r['company']"/>.<t t-if="r['domain']"> Domaine : <t t-esc="r['domain']"/>.</t>
+                </p>
+
+                <div class="body" t-esc="r['body']"/>
+
+                <t t-if="r['objectives']">
+                    <h2 t-att-style="'border-bottom: 1.5pt solid %s;' % r['color']">Nos objectifs</h2>
+                    <ul class="obj">
+                        <li t-foreach="r['objectives']" t-as="o">
+                            <strong t-esc="o['label']"/>
+                            <t t-if="o['target']"><br/><span class="muted"><t t-esc="o['target']"/> (<t t-esc="o['indicator']"/>)</span></t>
+                        </li>
+                    </ul>
+                </t>
+
+                <t t-if="r['scope']">
+                    <h2 t-att-style="'border-bottom: 1.5pt solid %s;' % r['color']">Domaine d'application</h2>
+                    <p class="scope" t-esc="r['scope']"/>
+                </t>
+                <p t-if="r['parent']" class="muted">Met en œuvre : <t t-esc="r['parent']"/>.</p>
+
+                <table class="sign">
+                    <tr>
+                        <td style="width: 50%;"/>
+                        <td>
+                            <div class="box">
+                                <strong t-esc="r['signatory']"/><br/>
+                                <t t-if="r['approver']">
+                                    <t t-esc="r['approver']"/><br/>
+                                    <span class="muted">Approuvé le <t t-esc="r['approved_on']"/></span>
+                                </t>
+                                <span t-else="" class="muted">Approbation à venir</span>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+
+                <p class="foot">
+                    <t t-esc="r['code']"/>, version <t t-esc="r['version']"/>, en vigueur le <t t-esc="r['effective_date']"/>.
+                    Document à afficher, établi par NIMOVA · HSSEQ le <t t-esc="r['printed_at']"/> ; la version en
+                    vigueur se lit dans NIMOVA.
+                </p>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_policy">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_hsseq.report_policy_document"/>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_policy" model="ir.actions.report">
+        <field name="name">Document HSE à afficher</field>
+        <field name="model">eguitra.hsseq.procedure</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_hsseq.report_policy</field>
+        <field name="report_file">eguitra_hsseq.report_policy</field>
+    </record>
+</odoo>

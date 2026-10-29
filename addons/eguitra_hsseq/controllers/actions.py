@@ -49,10 +49,11 @@ RESERVED = ("owner_id", "due_date", "estimated_cost")
 # de l'audit (origin_id : le constat).
 ORIGIN_SOURCES = {"event": ("event", "event_id"), "check": ("check", "check_id"), "risk": ("risk", "risk_id"),
                   "audit": ("finding", "finding_id"), "complaint": ("complaint", "complaint_id"),
-                  "drill": ("drill", "drill_id"), "review": ("review", "review_id")}
+                  "drill": ("drill", "drill_id"), "review": ("review", "review_id"),
+                  "document": ("procedure", "document_id")}
 # Fiche d'origine close (statut, ou état d'une revue) : plus d'action tant qu'elle n'est pas rouverte.
 CLOSED_SOURCES = {"event": ("closed",), "risk": ("archived",), "complaint": ("closed",), "drill": ("cancelled",),
-                  "review": ("closed",)}
+                  "review": ("closed",), "document": ("archived",)}
 TRANSITIONS = ("start", "close", "verify", "approve", "cancel", "reopen")
 
 
@@ -149,10 +150,13 @@ def action_line(action):
         origin_label = f"{action.drill_id.reference} {action.drill_id.plan_id.title}"
     elif action.review_id:
         origin_label = f"{action.review_id.reference} {action.review_id.title}"
+    elif action.document_id:
+        origin_label = f"{action.document_id.code} {action.document_id.title}"
     return {
         "id": action.id, "reference": action.reference, "description": action.description, "origin": action.origin,
         "origin_id": action.origin_id or action.event_id.id or action.check_id.id or action.risk_id.id
-        or action.finding_id.id or action.complaint_id.id or action.drill_id.id or action.review_id.id or None,
+        or action.finding_id.id or action.complaint_id.id or action.drill_id.id or action.review_id.id
+        or action.document_id.id or None,
         "origin_label": origin_label,
         "event": {"id": action.event_id.id, "reference": action.event_id.reference} if action.event_id else None,
         "control_level": action.control_level or None, "owner": owner_ref(action.owner_id), "due_date": action.due_date,
@@ -241,7 +245,7 @@ def list_domain(kw):
     if kw.get("due_before"):
         domain.append(("due_date", "<=", date_value(kw, "due_before")))
     # Actions d'une fiche d'origine.
-    for key in ("event_id", "risk_id", "finding_id", "complaint_id", "drill_id", "review_id"):
+    for key in ("event_id", "risk_id", "finding_id", "complaint_id", "drill_id", "review_id", "document_id"):
         if kw.get(key):
             domain.append((key, "=", int_or_none(kw, key)))
     if str(kw.get("approval_pending", "")) in ("1", "true"):
@@ -418,7 +422,7 @@ class EguitraHsseqActions(http.Controller):
             "rows": [[a.reference, origins.get(a.origin), (a.event_id.reference or a.check_id.reference
                                                            or a.risk_id.reference or a.finding_id.reference
                                                            or a.complaint_id.reference or a.drill_id.reference
-                                                           or a.review_id.reference or ""),
+                                                           or a.review_id.reference or a.document_id.code or ""),
                       a.description, levels.get(a.control_level, ""), a.owner_id.name, a.due_date,
                       statuses.get(a.status), a._days_overdue(day), a.verification_date or None,
                       ("Oui" if a.effective else "Non") if a.verified_at else "", a.estimated_cost, a.site_id.name or ""]

@@ -20,6 +20,8 @@ export function lienOrigine(a: Pick<ActionLine, "origin" | "origin_id">): string
   if (a.origin === "risk") return `/hsseq/risques?risque=${a.origin_id}`;
   if (a.origin === "drill") return `/hsseq/documents?vue=urgences&exercice=${a.origin_id}`;
   if (a.origin === "complaint") return `/hsseq/environnement?vue=reclamations&statut=toutes&reclamation=${a.origin_id}`;
+  // Document HSE (politique, procédure…) : origin_id est le document, ouvert dans le référentiel.
+  if (a.origin === "document") return `/hsseq/documents?vue=procedures&statut=toutes&procedure=${a.origin_id}`;
   return null;
 }
 

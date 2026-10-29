@@ -1,9 +1,21 @@
-"""Documents et urgences (spécification §3, §9.4, lot 3).
+"""Documents et urgences (spécification §3, §9.4, lot 3), référentiel documentaire HSE (29/10).
 
-- Procédures versionnées : référence, titre, versions datées (date d'effet, pièce jointe, résumé des
-  changements), public visé par profils et par sites. Publier une version la met en vigueur (la précédente
-  est remplacée) et demande sa lecture aux comptes visés : accusé de lecture par version, taux de lecture,
-  relance des comptes qui ne l'ont pas lue (à la demande et à l'intervalle des paramètres).
+- Référentiel documentaire HSE (modèle eguitra.hsseq.procedure, nom historique gardé) : politique,
+  procédure, instruction de travail ou mode opératoire, consigne, formulaire ou modèle ; référence proposée
+  par type (POL-HSE-001, PR-HSE-001, IT-HSE-001, CS-HSE-001, FO-HSE-001) ; hiérarchie : une procédure met en
+  œuvre une politique, une instruction de travail sa procédure, une consigne ou un formulaire une procédure
+  ou une instruction de travail.
+- Versions datées (date d'effet, pièce jointe ou texte, résumé des changements) : brouillon, soumise à
+  l'approbation, en vigueur, remplacée. Une politique (texte de l'engagement de la direction, objectifs
+  chiffrés reliés aux indicateurs du cockpit) n'entre en vigueur qu'approuvée par la direction (profil
+  Direction hors administration), jamais par son rédacteur ni par la personne qui l'a soumise (quatre yeux) ;
+  les autres types, par le Responsable HSSEQ (une seconde personne si les réglages l'exigent). La mise en
+  vigueur remplace la version précédente et demande la lecture aux comptes visés (profils et sites) :
+  accusé de lecture par version, taux de lecture, relance des comptes qui ne l'ont pas lue.
+- Revue périodique : prochaine revue fixée à la mise en vigueur (périodicité des réglages par type, annuelle
+  pour une politique, réglable par document), alerte avant l'échéance au Responsable HSSEQ, au responsable
+  du document et, pour une politique, à la direction, puis chaque semaine de retard ; revue tracée
+  (reconduit sans changement, ou nouvelle version à rédiger), qui peut tirer une action du plan d'actions.
 - Alertes flash et retours d'expérience diffusés aux conducteurs, toujours anonymisés (§9.4) : à la
   diffusion, le noyau refuse un texte qui cite un nom de personne (conducteurs, salariés, comptes, personnes
   de l'événement d'origine) ou une immatriculation (ou le code d'un ensemble). Accusé de lecture comme une
@@ -21,22 +33,50 @@ auditeur à son périmètre).
 
 import re
 import unicodedata
+from datetime import timedelta
+
+from dateutil.relativedelta import relativedelta
 
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
+from .cockpit import INDICATORS, WATCH_RATIO, month_start, months_back
 from .common import (
+    ADMIN_GROUP,
     AUDIENCE_PROFILES,
     BULLETIN_KINDS,
     BULLETIN_STATUSES,
+    DIRECTION_GROUP,
+    DOC_PARENT_TYPES,
+    DOC_REVIEW_OUTCOMES,
+    DOC_TYPE_PREFIX,
+    DOC_TYPES,
     DOMAINS,
     DRILL_STATUSES,
+    HSSEQ_GROUP,
     PROCEDURE_STATUSES,
     SCENARIOS,
     VERSION_STATUSES,
     HsseqError,
+    indicator_status,
     today,
+    users_in_group,
 )
+
+# Indicateurs du cockpit auxquels un objectif de politique peut se relier : code -> (libellé, unité, sens).
+INDICATOR_INFO = {code: (label, unit, direction) for code, label, unit, direction, *_rest in INDICATORS}
+INDICATOR_CHOICES = [(code, label) for code, (label, _u, _d) in INDICATOR_INFO.items()]
+# Relance d'une revue de document en retard : chaque semaine tant qu'elle n'est pas faite.
+REVIEW_REMINDER_DAYS = 7
+# Champs du contenu d'une version : qui les modifie compte parmi ses rédacteurs (quatre yeux).
+CONTENT_FIELDS = ("version", "effective_date", "change_summary", "body", "objective_ids")
+PARENT_RULE = ("Une procédure se rattache à une politique ; une instruction de travail, à une procédure ; une "
+               "consigne ou un formulaire, à une procédure ou à une instruction de travail ; une politique, à "
+               "aucun document.")
+
+
+def doc_label(doc_type):
+    return dict(DOC_TYPES).get(doc_type, "Document")
 
 # Forme d'une immatriculation écrite d'un bloc ou avec des tirets (« RC-1234-A », « RC1234A ») ; les plaques
 # écrites avec des espaces sont reconnues quand elles sont celles d'un ensemble enregistré.
@@ -123,20 +163,30 @@ class EguitraHsseqAudience(models.AbstractModel):
 
 
 class EguitraHsseqProcedure(models.Model):
+    """Document HSE du référentiel : politique, procédure, instruction de travail ou mode opératoire, consigne,
+    formulaire ou modèle (nom technique historique « procedure », gardé pour l'API et NIMOVA Terrain)."""
+
     _name = "eguitra.hsseq.procedure"
     _inherit = ["eguitra.hsseq.journaled", "eguitra.hsseq.audience"]
-    _description = "Procédure HSSEQ"
+    _description = "Document HSE (politique, procédure, instruction, consigne, formulaire)"
     _order = "code, id"
     _check_company_auto = True
     _journal_key = "procedure"
-    _journal_fields = ("code", "title", "domain", "description", "audience_profiles", "site_ids", "owner_id",
-                       "status", "current_version_id")
+    _journal_fields = ("doc_type", "code", "title", "domain", "description", "parent_id", "audience_profiles",
+                       "site_ids", "owner_id", "status", "current_version_id", "review_months", "next_review_date")
 
     company_id = fields.Many2one("res.company", required=True, default=lambda self: self.env.company, index=True)
-    code = fields.Char("Référence", required=True, index=True, help="Par exemple PR-HSE-001.")
+    doc_type = fields.Selection(DOC_TYPES, "Type", required=True, default="procedure", index=True)
+    code = fields.Char("Référence", required=True, index=True,
+                       help="Proposée selon le type : POL-HSE-001, PR-HSE-001, IT-HSE-001, CS-HSE-001, FO-HSE-001.")
     title = fields.Char("Titre", required=True)
     domain = fields.Selection(DOMAINS, "Domaine")
     description = fields.Text("Objet et domaine d'application")
+    parent_id = fields.Many2one("eguitra.hsseq.procedure", "Document de rattachement", index=True,
+                                ondelete="restrict", check_company=True,
+                                help="Politique mise en œuvre par une procédure ; procédure d'une instruction de "
+                                     "travail ; procédure ou instruction d'une consigne ou d'un formulaire.")
+    child_ids = fields.One2many("eguitra.hsseq.procedure", "parent_id", "Documents rattachés")
     site_ids = fields.Many2many("eguitra.hsseq.site", "eguitra_hsseq_procedure_site_rel", "procedure_id", "site_id",
                                 "Sites visés", check_company=True, help="Vide : tous les sites.")
     owner_id = fields.Many2one("res.users", "Responsable du document", default=lambda self: self.env.uid)
@@ -144,17 +194,81 @@ class EguitraHsseqProcedure(models.Model):
     version_ids = fields.One2many("eguitra.hsseq.procedure.version", "procedure_id", "Versions")
     current_version_id = fields.Many2one("eguitra.hsseq.procedure.version", "Version en vigueur", readonly=True)
     archive_reason = fields.Text("Motif de l'archivage", readonly=True)
+    # Revue périodique.
+    review_months = fields.Integer("Revue tous les (mois)", default=0,
+                                   help="0 : la périodicité des réglages pour ce type de document.")
+    next_review_date = fields.Date("Prochaine revue le", index=True)
+    last_review_date = fields.Date("Dernière revue le", readonly=True)
+    review_reminded_on = fields.Date("Dernière alerte de revue", readonly=True)
+    review_ids = fields.One2many("eguitra.hsseq.document.review", "document_id", "Revues")
 
     _code_company_unique = models.Constraint("unique(code, company_id)",
-                                             "Cette référence de procédure existe déjà dans la société.")
+                                             "Cette référence de document existe déjà dans la société.")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        """Référence proposée selon le type quand elle n'est pas saisie (suite propre à chaque société)."""
+        taken = {}
+        for vals in vals_list:
+            if not (vals.get("code") or "").strip():
+                company = self.env["res.company"].browse(vals.get("company_id") or self.env.company.id)
+                doc_type = vals.get("doc_type") or "procedure"
+                key = (company.id, doc_type)
+                vals["code"] = self._next_code(company, doc_type, taken.get(key, ()))
+                taken.setdefault(key, []).append(vals["code"])
+        return super().create(vals_list)
+
+    def write(self, vals):
+        """Le type ne change plus une fois une version mise en vigueur : il décide de qui l'approuve. Une
+        nouvelle date de revue rouvre ses alertes."""
+        if "doc_type" in vals and self.filtered(
+                lambda d: d.doc_type != vals["doc_type"]
+                and d.version_ids.filtered(lambda v: v.status in ("published", "superseded"))):
+            raise HsseqError("invalid_transition", "Type d'un document déjà mis en vigueur : il ne change plus "
+                                                   "(créez un nouveau document).", fields=["doc_type"])
+        if "next_review_date" in vals and "review_reminded_on" not in vals:
+            vals = dict(vals, review_reminded_on=False)
+        return super().write(vals)
+
+    @api.model
+    def _next_code(self, company, doc_type, taken=()):
+        """Référence suivante du type dans la société : préfixe du type et numéro sur trois chiffres, après le
+        plus grand déjà pris (références saisies à la main comprises)."""
+        prefix = DOC_TYPE_PREFIX.get(doc_type, DOC_TYPE_PREFIX["procedure"])
+        codes = self.sudo().search([("company_id", "=", company.id), ("code", "=like", f"{prefix}%")]).mapped("code")
+        numbers = [int(c[len(prefix):]) for c in [*codes, *taken] if c[len(prefix):].isdigit()]
+        return f"{prefix}{(max(numbers) + 1) if numbers else 1:03d}"
+
+    @api.constrains("parent_id", "doc_type", "company_id")
+    def _check_parent(self):
+        """Hiérarchie : une procédure se rattache à une politique, une instruction de travail à une procédure,
+        une consigne ou un formulaire à une procédure ou à une instruction ; une politique à aucun document."""
+        for doc in self:
+            parent = doc.parent_id
+            if parent:
+                if parent == doc or parent.company_id != doc.company_id:
+                    raise HsseqError("invalid_parent", "Document de rattachement invalide.", fields=["parent_id"])
+                if parent.doc_type not in DOC_PARENT_TYPES[doc.doc_type]:
+                    raise HsseqError("invalid_parent", f"Rattachement refusé ({doc_label(doc.doc_type).lower()} sous "
+                                                       f"{doc_label(parent.doc_type).lower()}). {PARENT_RULE}",
+                                     fields=["parent_id"])
+            wrong = doc.child_ids.filtered(lambda c, d=doc: d.doc_type not in DOC_PARENT_TYPES[c.doc_type])
+            if wrong:
+                raise HsseqError("invalid_parent", f"Les documents rattachés ({', '.join(wrong.mapped('code'))}) ne "
+                                                   f"peuvent pas dépendre d'un document de ce type : {PARENT_RULE}",
+                                 fields=["doc_type"])
+
+    # ─── Cycle ────────────────────────────────────────────────────────────
 
     def _draft_version(self):
+        """Version en préparation : en brouillon ou soumise à l'approbation (une seule à la fois)."""
         self.ensure_one()
-        return self.version_ids.filtered(lambda v: v.status == "draft")[:1]
+        return self.version_ids.filtered(lambda v: v.status in ("draft", "submitted"))[:1]
 
     def _transitions(self):
         self.ensure_one()
-        return {"draft": ["archive"], "published": ["remind", "archive"], "archived": ["reactivate"]}[self.status]
+        return {"draft": ["archive"], "published": ["remind", "review", "archive"],
+                "archived": ["reactivate"]}[self.status]
 
     def _require(self, transition):
         if transition not in self._transitions():
@@ -177,53 +291,379 @@ class EguitraHsseqProcedure(models.Model):
         self._journal("reactivate", note=reason)
         return True
 
+    # ─── Approbation ──────────────────────────────────────────────────────
+
+    def _approver_profile(self):
+        """Profil qui approuve les versions : la direction pour une politique, hsseq pour les autres types."""
+        self.ensure_one()
+        return "direction" if self.doc_type == "policy" else "hsseq"
+
+    def _approvers(self, exclude=None):
+        """Comptes à prévenir d'une version à approuver : la direction de la société (hors administration)
+        pour une politique, les Responsables HSSEQ pour les autres, sans les comptes exclus."""
+        self.ensure_one()
+        if self.doc_type == "policy":
+            users = users_in_group(self.env, DIRECTION_GROUP, self.company_id).filtered(
+                lambda u: not u.has_group(ADMIN_GROUP))
+        else:
+            users = users_in_group(self.env, HSSEQ_GROUP, self.company_id)
+        return users - (exclude or self.env["res.users"])
+
+    def _can_approve(self, user=None):
+        """Le compte porte-t-il le profil qui approuve ce document (sans regarder les quatre yeux) ?"""
+        self.ensure_one()
+        user = (user or self.env.user).sudo()
+        if self.company_id not in user.company_ids:
+            return False
+        if self.doc_type == "policy":
+            # L'administration porte la direction : seule, elle n'approuve pas une politique.
+            return user.has_group(DIRECTION_GROUP) and not user.has_group(ADMIN_GROUP)
+        return user.has_group(HSSEQ_GROUP)
+
+    # ─── Revue périodique ─────────────────────────────────────────────────
+
+    def _settings(self):
+        self.ensure_one()
+        return self.env["eguitra.hsseq.settings"]._get(self.company_id)
+
+    def _review_period(self):
+        """Périodicité de revue en mois : celle du document, à défaut celle des réglages pour son type."""
+        self.ensure_one()
+        return self.review_months or self._settings()._review_months(self.doc_type)
+
+    def _review_state(self, day=None):
+        """État de la revue d'un document en vigueur : overdue (échue), due (dans le délai d'alerte),
+        scheduled (à venir) ; None hors vigueur ou sans date."""
+        self.ensure_one()
+        if self.status != "published" or not self.next_review_date:
+            return None
+        day = day or today(self.env)
+        if self.next_review_date < day:
+            return "overdue"
+        if (self.next_review_date - day).days <= self._settings().document_review_alert_days:
+            return "due"
+        return "scheduled"
+
+    def _review_in_progress(self):
+        """Dernière revue « nouvelle version à rédiger » dont la version n'est pas encore en vigueur : le retard
+        ne se relance plus, la nouvelle version est en préparation."""
+        self.ensure_one()
+        last = self.review_ids.sorted(lambda r: (r.reviewed_on, r.id), reverse=True)[:1]
+        return bool(last and last.outcome == "revised" and last.new_version_id.status in ("draft", "submitted"))
+
+    def _review_recipients(self):
+        """Prévenus d'une revue à faire : les Responsables HSSEQ, le responsable du document et, pour une
+        politique, la direction de la société (hors administration)."""
+        self.ensure_one()
+        users = users_in_group(self.env, HSSEQ_GROUP, self.company_id) | self.owner_id
+        if self.doc_type == "policy":
+            users |= self._settings()._directors()
+        return users
+
+    def _next_version_label(self):
+        """Numéro de la version suivante : le plus grand numéro entier plus un, à défaut le rang suivant."""
+        self.ensure_one()
+        labels = set(self.version_ids.mapped("version"))
+        numbers = [int(v) for v in labels if v.isdigit()]
+        candidate = (max(numbers) + 1) if numbers else len(labels) + 1
+        while str(candidate) in labels:
+            candidate += 1
+        return str(candidate)
+
+    def action_review(self, outcome, comment, reviewed_on=None, next_review_date=None, version_label=None):
+        """Revue périodique d'un document en vigueur, tracée : reconduit sans changement (prochaine revue à la
+        périodicité, ou à la date donnée) ou nouvelle version à rédiger (brouillon repris de la version en
+        vigueur, la prochaine revue se fixant à sa mise en vigueur). Renvoie la revue."""
+        self.ensure_one()
+        self._require("review")
+        day = today(self.env)
+        if outcome not in dict(DOC_REVIEW_OUTCOMES):
+            raise HsseqError("invalid_parameter", "Conclusion de la revue : renewed ou revised.", fields=["outcome"],
+                             status=400)
+        comment = (comment or "").strip()
+        if not comment:
+            raise HsseqError("missing_fields", "Notez les constats et la conclusion de la revue.", fields=["comment"],
+                             status=400)
+        reviewed_on = reviewed_on or day
+        if reviewed_on > day:
+            raise HsseqError("invalid_parameter", "Une revue se note à une date passée ou du jour.",
+                             fields=["reviewed_on"], status=400)
+        values = {"document_id": self.id, "version_id": self.current_version_id.id, "reviewed_on": reviewed_on,
+                  "reviewer_id": self.env.uid, "outcome": outcome, "comment": comment}
+        if outcome == "renewed":
+            following = next_review_date or reviewed_on + relativedelta(months=self._review_period())
+            if following <= day:
+                raise HsseqError("invalid_parameter", "La prochaine revue est postérieure à aujourd'hui.",
+                                 fields=["next_review_date"], status=400)
+            values["next_review_date"] = following
+            self.write({"next_review_date": following, "last_review_date": reviewed_on, "review_reminded_on": False})
+        else:
+            pending = self._draft_version()
+            if not pending:
+                label = (version_label or "").strip() or self._next_version_label()
+                if label in self.version_ids.mapped("version"):
+                    raise HsseqError("conflict", f"La version {label} de ce document existe déjà.", fields=["version"],
+                                     status=409)
+                pending = self.env["eguitra.hsseq.procedure.version"].sudo().create({
+                    "procedure_id": self.id, "version": label, "effective_date": day,
+                    "change_summary": f"Revue du {reviewed_on:%d/%m/%Y} : {comment}"[:4000]})
+                pending._copy_content(self.current_version_id)
+            values["new_version_id"] = pending.id
+            self.write({"last_review_date": reviewed_on, "review_reminded_on": False})
+        review = self.env["eguitra.hsseq.document.review"].sudo().create(values)
+        self._journal("review", note=f"{dict(DOC_REVIEW_OUTCOMES)[outcome]} : {comment[:300]}")
+        return review
+
+    @api.model
+    def _cron_review_alerts(self):
+        """Chaque jour : revue d'un document en vigueur à faire dans le délai d'alerte des réglages (une fois),
+        puis en retard (chaque semaine, sauf nouvelle version déjà en préparation)."""
+        day = today(self.env)
+        Notification = self.env["eguitra.hsseq.notification"]
+        for doc in self.sudo().search([("status", "=", "published"), ("next_review_date", "!=", False)]):
+            due = doc.next_review_date
+            alert_days = doc._settings().document_review_alert_days
+            reminded = doc.review_reminded_on
+            label = doc_label(doc.doc_type)
+            if due < day:
+                if doc._review_in_progress() or (reminded and reminded >= due
+                                                 and (day - reminded).days < REVIEW_REMINDER_DAYS):
+                    continue
+                kind, subject = "document_review_overdue", f"Revue en retard : {doc.code}"
+                body = (f"{label} {doc.code} : {doc.title}\nRevue prévue le {due:%d/%m/%Y}, en retard de "
+                        f"{(day - due).days} jours. Notez la revue : reconduit sans changement, ou nouvelle version.")
+            elif (due - day).days <= alert_days:
+                if reminded and reminded >= due - timedelta(days=alert_days):
+                    continue
+                kind, subject = "document_review_due", f"Revue à faire avant le {due:%d/%m/%Y} : {doc.code}"
+                body = (f"{label} {doc.code} : {doc.title}\nRevue prévue le {due:%d/%m/%Y} (dans "
+                        f"{(due - day).days} jours). Responsable du document : {doc.owner_id.name or 'aucun'}.")
+            else:
+                continue
+            Notification._notify(doc._review_recipients(), kind, subject, body, doc, "procedure")
+            doc.review_reminded_on = day
+        return True
+
+    # ─── Objectifs reliés au cockpit ──────────────────────────────────────
+
+    @api.model
+    def _indicator_values(self, company, codes, sites=None):
+        """Valeur des indicateurs du cockpit sur les douze derniers mois, mois en cours compris (situation du
+        jour pour les habilitations) : {code: valeur}. sites : la portée du lecteur, comme au cockpit (None :
+        toute la société, pour un profil de lecture complète)."""
+        codes = {c for c in codes if c in INDICATOR_INFO}
+        if not codes:
+            return {}
+        Cockpit = self.env["eguitra.hsseq.cockpit"]
+        months = months_back(month_start(today(self.env)), 12)
+        comps, _frozen = Cockpit._components(company, months, sites or None)
+        total = Cockpit._sum(comps, company, months)
+        if "qualifications_valid" in codes:
+            total["drivers"], total["drivers_valid"] = Cockpit._qualifications(company, sites or None)
+        return {code: Cockpit._value(code, total) for code in codes}
+
 
 class EguitraHsseqProcedureVersion(models.Model):
     _name = "eguitra.hsseq.procedure.version"
     _inherit = ["eguitra.hsseq.journaled"]
-    _description = "Version d'une procédure HSSEQ"
+    _description = "Version d'un document HSE"
     _order = "procedure_id, id desc"
     _journal_key = "procedure_version"
-    _journal_fields = ("version", "effective_date", "change_summary", "status")
+    _journal_fields = ("version", "effective_date", "change_summary", "body", "status")
 
-    procedure_id = fields.Many2one("eguitra.hsseq.procedure", "Procédure", required=True, ondelete="cascade",
+    procedure_id = fields.Many2one("eguitra.hsseq.procedure", "Document", required=True, ondelete="cascade",
                                    index=True)
     company_id = fields.Many2one(related="procedure_id.company_id", store=True, index=True)
     version = fields.Char("Version", required=True)
     effective_date = fields.Date("Date d'effet", required=True)
     change_summary = fields.Text("Changements apportés")
+    body = fields.Text("Texte", help="Politique : l'engagement de la direction ; consigne : la consigne elle-même. "
+                                     "Les autres documents se lisent dans leur pièce jointe.")
+    objective_ids = fields.One2many("eguitra.hsseq.policy.objective", "version_id", "Objectifs")
     status = fields.Selection(VERSION_STATUSES, "État", required=True, default="draft", index=True)
+    submitted_at = fields.Datetime("Soumise le", readonly=True)
+    submitted_by = fields.Many2one("res.users", "Soumise par", readonly=True)
+    approved_at = fields.Datetime("Approuvée le", readonly=True)
+    approved_by = fields.Many2one("res.users", "Approuvée par", readonly=True)
+    # Quatre yeux : tout compte qui a modifié le contenu (texte, objectifs, numéro, date, changements, pièce
+    # jointe) compte parmi les rédacteurs et n'approuve pas la version.
+    edited_by = fields.Many2many("res.users", "eguitra_hsseq_procedure_version_editor_rel", "version_id", "user_id",
+                                 "Modifiée par", readonly=True)
+    reject_reason = fields.Text("Motif du dernier refus", readonly=True)
     published_at = fields.Datetime("Publiée le", readonly=True)
     published_by = fields.Many2one("res.users", "Publiée par", readonly=True)
     superseded_at = fields.Datetime("Remplacée le", readonly=True)
     reminded_on = fields.Date("Dernière relance des lectures", readonly=True)
     acknowledgment_ids = fields.One2many("eguitra.hsseq.acknowledgment", "version_id", "Accusés de lecture")
 
-    _version_unique = models.Constraint("unique(procedure_id, version)", "Cette version de la procédure existe déjà.")
+    _version_unique = models.Constraint("unique(procedure_id, version)", "Cette version du document existe déjà.")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        uid = self.env.uid
+        return super().create([dict(vals, edited_by=[(4, uid)]) for vals in vals_list])
+
+    def write(self, vals):
+        """Une modification du contenu inscrit son auteur parmi les rédacteurs de la version (quatre yeux)."""
+        if set(vals) & set(CONTENT_FIELDS):
+            vals = dict(vals, edited_by=[(4, self.env.uid)])
+        return super().write(vals)
+
+    def _mark_edited(self):
+        """Contenu modifié hors des champs de la version (objectif, pièce jointe) : son auteur est inscrit
+        parmi les rédacteurs."""
+        if self:
+            self.sudo().write({"edited_by": [(4, self.env.uid)]})
 
     def _document(self):
         return self.env["eguitra.hsseq.attachment"]._for("procedure_version", self)
 
-    def action_publish(self):
-        """Mise en vigueur : document joint, la version précédente est remplacée, les comptes visés sont
-        prévenus et invités à accuser lecture."""
+    def _copy_content(self, source, body=True, objectives=True):
+        """Reprend le texte et les objectifs d'une autre version (nouvelle version d'une politique)."""
+        self.ensure_one()
+        if not source:
+            return
+        if body:
+            self.write({"body": source.body or False})
+        if objectives:
+            self.env["eguitra.hsseq.policy.objective"].sudo().create([
+                {"version_id": self.id, "sequence": o.sequence, "label": o.label, "indicator_code": o.indicator_code,
+                 "target": o.target} for o in source.objective_ids])
+
+    def _content_error(self):
+        """Contenu manquant pour soumettre la version (HsseqError), ou None : le texte de l'engagement pour une
+        politique ; pour les autres types, le document joint (ou, pour une consigne courte, son texte)."""
+        self.ensure_one()
+        if self.procedure_id.doc_type == "policy":
+            if not (self.body or "").strip():
+                return HsseqError("text_missing", "Rédigez le texte de l'engagement de la direction avant de soumettre "
+                                                  "la politique.", fields=["body"])
+            return None
+        if not self._document() and not (self.body or "").strip():
+            return HsseqError("document_missing", "Joignez le document de la version avant de la publier.",
+                              fields=["attachment_ids"])
+        return None
+
+    def _authors(self):
+        """Rédacteurs (création et chaque modification du contenu) et auteur de la soumission : jamais
+        l'approbateur d'une politique (quatre yeux)."""
+        self.ensure_one()
+        return (self.create_uid | self.submitted_by | self.edited_by).filtered(lambda u: u.id)
+
+    def _check_approver(self, four_eyes=True):
+        """Profil de l'approbateur (refus 403) et quatre yeux (refus 422) : la direction, ni rédacteur ni auteur
+        de la soumission, pour une politique ; un Responsable HSSEQ pour les autres types (autre que le
+        rédacteur si les réglages l'exigent)."""
+        self.ensure_one()
+        procedure = self.procedure_id
+        user = self.env.user
+        if not procedure._can_approve(user):
+            raise HsseqError("forbidden", "Une politique est approuvée par la direction générale (profil Direction, "
+                                          "hors administration)." if procedure.doc_type == "policy" else
+                                          "Ce document est approuvé par le Responsable HSSEQ.", status=403)
+        if not four_eyes:
+            return
+        if user in self._authors() and (procedure.doc_type == "policy" or procedure._settings().document_four_eyes):
+            raise HsseqError("four_eyes", "Quatre yeux : la version est approuvée par une autre personne que ses "
+                                          "rédacteurs (création ou modification du contenu) et que celle qui l'a "
+                                          "soumise.")
+
+    def action_submit(self, notify=True):
+        """Soumission à l'approbation : contenu complet (texte d'une politique, document des autres types) ;
+        les approbateurs sont prévenus."""
         self.ensure_one()
         procedure = self.procedure_id
         if self.status != "draft":
-            raise HsseqError("invalid_transition", "Seule une version en brouillon se publie.")
+            raise HsseqError("invalid_transition", "Seule une version en brouillon se soumet à l'approbation.")
         if procedure.status == "archived":
-            raise HsseqError("invalid_transition", "Procédure archivée : réactivez-la avant de publier une version.")
-        if not self._document():
-            raise HsseqError("document_missing", "Joignez le document de la version avant de la publier.",
-                             fields=["attachment_ids"])
+            raise HsseqError("invalid_transition", "Document archivé : réactivez-le avant de publier une version.")
+        error = self._content_error()
+        if error:
+            raise error
+        self.write({"status": "submitted", "submitted_at": fields.Datetime.now(), "submitted_by": self.env.uid,
+                    "reject_reason": False})
+        self._journal("submit")
+        procedure._journal("submit", note=f"Version {self.version}")
+        if notify:
+            label = doc_label(procedure.doc_type)
+            self.env["eguitra.hsseq.notification"]._notify(
+                procedure._approvers(exclude=self.env.user), "document_submitted",
+                f"{label} à approuver : {procedure.code}",
+                f"{procedure.code} : {procedure.title}\nVersion {self.version}, soumise par {self.env.user.name}. "
+                f"Relisez-la, puis approuvez-la ou refusez-la avec un motif.", procedure, "procedure")
+        return True
+
+    def action_withdraw(self):
+        """Retrait d'une version soumise, rendue à la rédaction (le Responsable HSSEQ la corrige)."""
+        self.ensure_one()
+        if self.status != "submitted":
+            raise HsseqError("invalid_transition", "Seule une version soumise se retire de l'approbation.")
+        self.write({"status": "draft", "submitted_at": False, "submitted_by": False})
+        self._journal("withdraw")
+        self.procedure_id._journal("withdraw", note=f"Version {self.version}")
+        return True
+
+    def action_reject(self, reason):
+        """Refus motivé de l'approbateur : la version retourne en brouillon, son rédacteur est prévenu."""
+        self.ensure_one()
+        if self.status != "submitted":
+            raise HsseqError("invalid_transition", "Seule une version soumise se refuse.")
+        self._check_approver(four_eyes=False)
+        reason = require_reason(reason, "du refus")
+        submitter = self.submitted_by
+        self.write({"status": "draft", "reject_reason": reason, "submitted_at": False, "submitted_by": False})
+        self._journal("reject", note=reason)
+        procedure = self.procedure_id
+        procedure._journal("reject", note=f"Version {self.version} : {reason}")
+        self.env["eguitra.hsseq.notification"]._notify(
+            submitter | self.create_uid, "document_rejected", f"Version refusée : {procedure.code}",
+            f"{procedure.code} : {procedure.title}\nVersion {self.version} refusée par {self.env.user.name} : {reason}",
+            procedure, "procedure")
+        return True
+
+    def action_approve(self):
+        """Approbation (direction pour une politique, quatre yeux) : date et nom de l'approbateur, imprimés sur
+        le document à afficher ; la version entre en vigueur."""
+        self.ensure_one()
+        if self.status != "submitted":
+            raise HsseqError("invalid_transition", "Seule une version soumise s'approuve.")
+        self._check_approver()
+        self.write({"approved_at": fields.Datetime.now(), "approved_by": self.env.uid})
+        self._journal("approve")
+        self.procedure_id._journal("approve", note=f"Version {self.version}, approuvée par {self.env.user.name}")
+        return self._put_in_force()
+
+    def action_publish(self):
+        """Mise en vigueur directe par le Responsable HSSEQ (soumission et approbation d'un même geste), pour
+        tout document sauf une politique, qui attend l'approbation de la direction."""
+        self.ensure_one()
+        procedure = self.procedure_id
+        if procedure.doc_type == "policy":
+            raise HsseqError("direction_approval_required", "Une politique entre en vigueur après l'approbation de "
+                                                            "la direction : soumettez-la.")
+        if self.status not in ("draft", "submitted"):
+            raise HsseqError("invalid_transition", "Seule une version en brouillon se publie.")
+        if self.status == "draft":
+            self.action_submit(notify=False)
+        return self.action_approve()
+
+    def _put_in_force(self):
+        """Mise en vigueur : la version précédente est remplacée, la prochaine revue fixée à la périodicité du
+        document, les comptes visés sont prévenus et invités à accuser lecture."""
+        self.ensure_one()
+        procedure = self.procedure_id
+        if procedure.status == "archived":
+            raise HsseqError("invalid_transition", "Document archivé : réactivez-le avant de publier une version.")
         now = fields.Datetime.now()
         procedure.version_ids.filtered(lambda v: v.status == "published").write(
             {"status": "superseded", "superseded_at": now})
         self.write({"status": "published", "published_at": now, "published_by": self.env.uid})
-        procedure.write({"status": "published", "current_version_id": self.id})
+        procedure.write({"status": "published", "current_version_id": self.id, "review_reminded_on": False,
+                         "next_review_date": today(self.env) + relativedelta(months=procedure._review_period())})
         self._journal("publish")
+        label = doc_label(procedure.doc_type)
         self.env["eguitra.hsseq.notification"]._notify(
-            procedure._audience_users(), "procedure_published", f"Procédure à lire : {procedure.code}",
+            procedure._audience_users(), "procedure_published", f"{label} à lire : {procedure.code}",
             f"{procedure.code} : {procedure.title}\nVersion {self.version}, en vigueur le "
             f"{self.effective_date:%d/%m/%Y}.\nLisez-la et accusez lecture.", procedure, "procedure")
         return True
@@ -251,11 +691,93 @@ class EguitraHsseqProcedureVersion(models.Model):
         procedure = self.procedure_id
         if users:
             self.env["eguitra.hsseq.notification"]._notify(
-                users, "read_reminder", f"Rappel : procédure à lire, {procedure.code}",
+                users, "read_reminder", f"Rappel : {doc_label(procedure.doc_type).lower()} à lire, {procedure.code}",
                 f"{procedure.code} : {procedure.title}\nVersion {self.version}, publiée le "
                 f"{self.published_at:%d/%m/%Y}. Lisez-la et accusez lecture.", procedure, "procedure")
         self.write({"reminded_on": today(self.env)})
         return users
+
+    def _objectives(self, values=None):
+        """Objectifs de la version, avec, pour ceux reliés au cockpit, la valeur des douze derniers mois et son
+        état au regard de la cible (values : valeurs déjà calculées, sinon calculées ici)."""
+        self.ensure_one()
+        if values is None:
+            values = self.env["eguitra.hsseq.procedure"]._indicator_values(
+                self.company_id, self.objective_ids.mapped("indicator_code"))
+        rows = []
+        for o in self.objective_ids:
+            info = INDICATOR_INFO.get(o.indicator_code)
+            value = values.get(o.indicator_code) if info else None
+            rows.append({"id": o.id, "label": o.label, "indicator_code": o.indicator_code or None,
+                         "indicator_label": info[0] if info else None, "unit": info[1] if info else None,
+                         "direction": info[2] if info else None, "target": o.target if info else None,
+                         "value": value,
+                         "status": indicator_status(value, o.target, info[2], watch_ratio=WATCH_RATIO) if info else None})
+        return rows
+
+
+class EguitraHsseqPolicyObjective(models.Model):
+    _name = "eguitra.hsseq.policy.objective"
+    _description = "Objectif chiffré d'une politique HSE"
+    _order = "version_id, sequence, id"
+
+    version_id = fields.Many2one("eguitra.hsseq.procedure.version", "Version", required=True, ondelete="cascade",
+                                 index=True)
+    company_id = fields.Many2one(related="version_id.company_id", store=True, index=True)
+    sequence = fields.Integer("Ordre", default=10)
+    label = fields.Char("Objectif", required=True, help="Par exemple « Zéro accident du travail avec arrêt ».")
+    indicator_code = fields.Selection(INDICATOR_CHOICES, "Indicateur du cockpit",
+                                      help="Facultatif : l'objectif se lit alors avec la valeur de l'indicateur sur "
+                                           "les douze derniers mois.")
+    target = fields.Float("Cible", digits=(16, 2), help="Cible de l'indicateur relié, dans son unité.")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        objectives = super().create(vals_list)
+        objectives.version_id._mark_edited()
+        return objectives
+
+    def write(self, vals):
+        result = super().write(vals)
+        self.version_id._mark_edited()
+        return result
+
+    def unlink(self):
+        versions = self.version_id
+        result = super().unlink()
+        versions.exists()._mark_edited()
+        return result
+
+
+class EguitraHsseqDocumentReview(models.Model):
+    _name = "eguitra.hsseq.document.review"
+    _inherit = ["eguitra.hsseq.journaled"]
+    _description = "Revue périodique d'un document HSE"
+    _order = "reviewed_on desc, id desc"
+    _journal_key = "document_review"
+    _journal_fields = ("outcome", "comment", "next_review_date")
+
+    document_id = fields.Many2one("eguitra.hsseq.procedure", "Document", required=True, ondelete="cascade",
+                                  index=True)
+    company_id = fields.Many2one(related="document_id.company_id", store=True, index=True)
+    version_id = fields.Many2one("eguitra.hsseq.procedure.version", "Version revue", ondelete="set null")
+    reviewed_on = fields.Date("Revue le", required=True, index=True)
+    reviewer_id = fields.Many2one("res.users", "Revue par", required=True, default=lambda self: self.env.uid)
+    outcome = fields.Selection(DOC_REVIEW_OUTCOMES, "Conclusion", required=True)
+    comment = fields.Text("Constats et conclusion", required=True)
+    next_review_date = fields.Date("Prochaine revue fixée au", readonly=True)
+    new_version_id = fields.Many2one("eguitra.hsseq.procedure.version", "Nouvelle version", ondelete="set null")
+    action_ids = fields.One2many("eguitra.hsseq.action", "document_review_id", "Actions")
+
+    def _create_action(self, values):
+        """Action du plan d'actions (origine « document HSE ») tirée de la revue."""
+        self.ensure_one()
+        document = self.document_id
+        action = self.env["eguitra.hsseq.action"].sudo().create(dict(
+            values, origin="document", origin_id=document.id, document_id=document.id, document_review_id=self.id,
+            company_id=document.company_id.id))
+        document._journal("review_action", note=f"{action.reference} : {action.description[:200]}")
+        return action
 
 
 class EguitraHsseqBulletin(models.Model):

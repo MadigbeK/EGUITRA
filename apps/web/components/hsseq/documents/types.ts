@@ -7,7 +7,7 @@
  * de docs/design/hsseq-contrat.md) ; libellés français dans ./libelles.tsx.
  */
 
-import type { ActionLine, Attachment, ControlLevel, Domain, Ref, Rights } from "@/lib/hsseq-types";
+import type { ActionLine, Attachment, ControlLevel, Domain, IndicatorCode, IndicatorStatus, IndicatorUnit, Ref, Rights } from "@/lib/hsseq-types";
 
 /* ─── Communs ─────────────────────────────────────────────────────────── */
 
@@ -55,86 +55,205 @@ export interface LigneJournal {
 /** Fiche d'une pièce de cet écran (champ `model` de POST /hsseq/attachments) ; seul le Responsable HSSEQ y dépose. */
 export type ObjetPiece = "procedure_version" | "emergency_plan" | "drill";
 
-/* ─── Procédures ──────────────────────────────────────────────────────── */
+/* ─── Politiques et procédures (référentiel documentaire HSE) ─────────── */
+
+/**
+ * Type d'un document du référentiel (29/10) : politique, procédure, instruction de travail ou mode
+ * opératoire, consigne, formulaire ou modèle. Le modèle du noyau garde son nom historique
+ * (« procedure », routes /hsseq/procedures).
+ */
+export type DocType = "policy" | "procedure" | "work_instruction" | "instruction" | "form";
 
 /** En rédaction (aucune version publiée), en vigueur, archivée (motif écrit). */
 export type ProcedureStatus = "draft" | "published" | "archived";
 
-/** Brouillon, en vigueur, remplacée par une version publiée ensuite. */
-export type VersionStatus = "draft" | "published" | "superseded";
+/** Brouillon, soumise à l'approbation, en vigueur, remplacée par une version publiée ensuite. */
+export type VersionStatus = "draft" | "submitted" | "published" | "superseded";
 
-/** Transitions d'une procédure (POST /hsseq/procedures/{id}/{transition}, hsseq). */
-export type ProcedureTransition = "remind" | "archive" | "reactivate";
+/** Transitions d'un document (POST /hsseq/procedures/{id}/{transition}, hsseq) ; « review » : POST …/reviews. */
+export type ProcedureTransition = "remind" | "review" | "archive" | "reactivate";
 
-/** Version d'une procédure ; `document` : la pièce jointe (PDF), exigée avant la publication. */
+/**
+ * Gestes sur la version en préparation : soumettre, publier d'un geste (hors politique, sans quatre yeux),
+ * retirer de l'approbation (hsseq) ; approuver ou refuser (direction pour une politique, hsseq pour les autres).
+ */
+export type VersionAction = "submit" | "publish" | "withdraw" | "approve" | "reject";
+
+/** État de la revue d'un document en vigueur : échue, dans le délai d'alerte, à venir. */
+export type ReviewState = "overdue" | "due" | "scheduled";
+
+/** Conclusion d'une revue : reconduit sans changement, ou nouvelle version à rédiger. */
+export type ReviewOutcome = "renewed" | "revised";
+
+/**
+ * Objectif d'une version (politique surtout) : libellé et, s'il est relié au cockpit, son indicateur, sa
+ * cible et, sur la fiche, la valeur des douze derniers mois et son état.
+ */
+export interface Objective {
+  id: number;
+  label: string;
+  indicator_code: IndicatorCode | null;
+  indicator_label: string | null;
+  unit: IndicatorUnit | null;
+  direction: "up" | "down" | null;
+  target: number | null;
+  value: number | null;
+  status: IndicatorStatus | null;
+}
+
+/** Objectif saisi : libellé, et facultativement l'indicateur du cockpit et sa cible (à défaut, celle des réglages). */
+export interface ObjectiveInput {
+  label: string;
+  indicator_code?: IndicatorCode | null;
+  target?: number | null;
+}
+
+/**
+ * Version d'un document ; `document` : la pièce jointe (PDF), exigée avant la publication sauf pour un texte
+ * (politique, consigne courte). Soumission et approbation : nom et date de l'approbateur, imprimés sur le
+ * document à afficher. `body` et `objectives` : sur la fiche seulement.
+ */
 export interface ProcedureVersion {
   id: number;
   version: string;
   effective_date: string;
   change_summary: string | null;
   status: VersionStatus;
+  submitted_at: string | null;
+  submitted_by: Ref | null;
+  approved_at: string | null;
+  approved_by: Ref | null;
+  /** Rédacteurs (création et chaque modification du contenu) : aucun n'approuve la version (quatre yeux). */
+  edited_by: Ref[];
+  /** Motif du dernier refus de l'approbateur, gardé jusqu'à la soumission suivante. */
+  reject_reason: string | null;
   published_at: string | null;
   published_by: Ref | null;
+  has_text: boolean;
   document: Attachment[];
+  body?: string | null;
+  objectives?: Objective[];
+}
+
+/** Document cité : rattachement, documents rattachés. */
+export interface DocRef {
+  id: number;
+  doc_type: DocType;
+  code: string;
+  title: string;
+  status: ProcedureStatus;
+}
+
+/** Revue périodique du document : périodicité propre (nulle : celle du type) et appliquée, dates, état du jour. */
+export interface ReviewBlock {
+  months: number | null;
+  period_months: number;
+  next_review_date: string | null;
+  last_review_date: string | null;
+  state: ReviewState | null;
+  /** Revue « nouvelle version » dont la version n'est pas encore en vigueur : le retard n'est plus relancé. */
+  in_progress: boolean;
+}
+
+/** Revue tracée d'un document : conclusion, constats, prochaine revue fixée, nouvelle version, actions. */
+export interface DocumentReview {
+  id: number;
+  reviewed_on: string;
+  reviewer: (Ref & { function?: string }) | null;
+  outcome: ReviewOutcome;
+  comment: string;
+  next_review_date: string | null;
+  version: { id: number; version: string } | null;
+  new_version: { id: number; version: string; status: VersionStatus } | null;
+  actions: ActionLine[];
 }
 
 /** Ligne de GET /hsseq/procedures. `read` : nul tant qu'aucune version n'est en vigueur. */
 export interface ProcedureLine {
   id: number;
+  doc_type: DocType;
   code: string;
   title: string;
   domain: Domain | null;
+  parent: DocRef | null;
   audience: Audience;
   status: ProcedureStatus;
   owner: Ref | null;
   current_version: ProcedureVersion | null;
-  /** Version en brouillon, une seule à la fois. */
+  /** Version en préparation (brouillon ou soumise), une seule à la fois. */
   draft_version: ProcedureVersion | null;
   read: ReadStats | null;
-  /** can_edit : modifier, nouvelle version (hsseq, procédure non archivée) ; can_approve : publier le brouillon ; can_close : archiver. */
+  review: ReviewBlock;
+  /** can_edit : modifier, nouvelle version (hsseq, document non archivé) ; can_approve : approuver ou publier la version en préparation ; can_close : archiver. */
   rights: Rights;
 }
 
-/** Comptes par statut aux autres filtres de la liste (domaine, recherche), sans celui du statut : ceux des onglets. */
-export interface ProcedureCounts {
-  by_status: Record<ProcedureStatus, number>;
+/** Nœud de GET /hsseq/procedures/tree : un document et ce qui le met en œuvre. */
+export interface ProcedureNode extends ProcedureLine {
+  children: ProcedureNode[];
 }
 
-/** Fiche d'une procédure (GET /hsseq/procedures/{id}) ; chaque écriture renvoie la même. */
+/**
+ * Compteurs aux autres filtres de la liste : par état sans celui de l'état, par type sans celui du type ;
+ * versions soumises (dont celles que le compte peut approuver), revues échues et proches.
+ */
+export interface ProcedureCounts {
+  by_status: Record<ProcedureStatus, number>;
+  by_type: Record<DocType, number>;
+  pending_approval: number;
+  to_approve: number;
+  reviews_overdue: number;
+  reviews_due: number;
+}
+
+/** Fiche d'un document (GET /hsseq/procedures/{id}) ; chaque écriture renvoie la même. */
 export interface Procedure extends ProcedureLine {
   company: Ref;
   description: string | null;
+  children: DocRef[];
   /** Toutes les versions, la plus récente d'abord. */
   versions: ProcedureVersion[];
   /** Nuls pour l'auditeur (le taux, sans les noms) ou sans version en vigueur. */
   readers: Reader[] | null;
   unread: Ref[] | null;
   archive_reason: string | null;
+  reviews: DocumentReview[];
+  version_actions: VersionAction[];
+  /** Document à afficher (GET …/poster.pdf) : la version en vigueur a un texte. */
+  poster: boolean;
   history: LigneJournal[];
   transitions: ProcedureTransition[];
   /** Réponse de POST …/remind : comptes relancés. */
   reminded?: number;
 }
 
-/** Champs d'une procédure (PATCH /hsseq/procedures/{id}, champs à modifier seulement). */
+/** Champs d'un document (PATCH /hsseq/procedures/{id}, champs à modifier seulement). */
 export interface ProcedureInput {
+  doc_type?: DocType;
   code?: string;
   title?: string;
   domain?: Domain | null;
   description?: string | null;
+  parent_id?: number | null;
   owner_id?: number | null;
   audience_profiles?: AudienceProfile[];
   /** Remplace la liste ; vide : tous les sites. */
   site_ids?: number[];
+  /** 0 : la périodicité des réglages pour le type. */
+  review_months?: number;
+  /** Postérieure à aujourd'hui. */
+  next_review_date?: string | null;
 }
 
-/** Corps de POST /hsseq/procedures : la procédure et sa première version, en brouillon. */
+/** Corps de POST /hsseq/procedures : le document et sa première version, en brouillon ; sans référence, le noyau la propose. */
 export interface NewProcedure extends ProcedureInput {
-  code: string;
+  doc_type: DocType;
   title: string;
   version: string;
   effective_date: string;
   change_summary?: string | null;
+  body?: string | null;
+  objectives?: ObjectiveInput[];
 }
 
 /** Corps de POST /hsseq/procedures/{id}/versions et de PATCH …/versions/{id} (brouillon seulement). */
@@ -142,6 +261,42 @@ export interface VersionInput {
   version?: string;
   effective_date?: string;
   change_summary?: string | null;
+  body?: string | null;
+  /** Remplace la liste ; absente à la création : les objectifs de la version en vigueur sont repris. */
+  objectives?: ObjectiveInput[];
+}
+
+/** Corps de POST /hsseq/procedures/{id}/reviews (hsseq) : revue d'un document en vigueur, et son action. */
+export interface ReviewInput {
+  outcome: ReviewOutcome;
+  comment: string;
+  reviewed_on?: string;
+  /** Reconduit : prochaine revue choisie (à défaut, la périodicité). */
+  next_review_date?: string | null;
+  /** Nouvelle version : son numéro (à défaut, le suivant). */
+  version?: string | null;
+  action?: { description: string; owner_id: number; due_date: string; expected_evidence?: string | null; control_level?: ControlLevel | null; estimated_cost?: number | null };
+}
+
+/** Document du tableau de bord : référence, version, revue, responsable. */
+export interface DashboardDoc extends DocRef {
+  version: string | null;
+  next_review_date: string | null;
+  review_state: ReviewState | null;
+  owner: Ref | null;
+}
+
+/** GET /hsseq/procedures/dashboard : `missing_by_person` nul pour l'auditeur. */
+export interface DocumentDashboard {
+  date: string;
+  site: Ref | null;
+  totals: { documents: number; in_force: number; pending_approval: number; reviews_overdue: number; reviews_due: number; targets: number; read: number; rate: number | null };
+  by_type: Array<{ doc_type: DocType; published: number; draft: number; pending_approval: number; archived: number }>;
+  reviews: DashboardDoc[];
+  pending_approval: Array<DashboardDoc & { pending_version: string; submitted_at: string | null; submitted_by: Ref | null }>;
+  read_by_document: Array<DashboardDoc & { targets: number; read: number; rate: number | null }>;
+  read_by_site: Array<{ site: Ref | null; targets: number; read: number; rate: number | null }>;
+  missing_by_person: Array<{ user: Ref; sites: Ref[]; count: number; documents: Array<{ id: number; doc_type: DocType; code: string; title: string; version: string; published_at: string | null; days: number | null }> }> | null;
 }
 
 /* ─── Alertes flash et retours d'expérience ───────────────────────────── */
@@ -215,13 +370,19 @@ export interface BulletinInput {
 
 /* ─── Mes documents (tout compte interne) ─────────────────────────────── */
 
-/** Procédure en vigueur qui vise le compte, avec son accusé de la version en vigueur. */
+/**
+ * Document en vigueur qui vise le compte (politique, procédure…), avec son accusé de la version en vigueur ;
+ * le texte d'une politique ou d'une consigne et ses objectifs (sans valeur du cockpit), son approbation.
+ */
 export interface MyProcedure {
   id: number;
+  doc_type: DocType;
   code: string;
   title: string;
   domain: Domain | null;
-  version: { id: number; version: string; effective_date: string; published_at: string | null; change_summary: string | null };
+  version: { id: number; version: string; effective_date: string; published_at: string | null; change_summary: string | null; approved_at: string | null; approved_by: Ref | null };
+  body: string | null;
+  objectives: Array<{ label: string; indicator_label: string | null; unit: IndicatorUnit | null; target: number | null }>;
   document: Attachment[];
   read: boolean;
   read_at: string | null;

@@ -2,7 +2,8 @@
 
 /**
  * Documents et urgences de NIMOVA · HSSEQ (lot 3, §3 et §9.4) : documents à lire du compte et leur
- * accusé, procédures versionnées et leur lecture, alertes flash et retours d'expérience anonymisés,
+ * accusé, politiques et procédures (référentiel documentaire HSE du 29/10 : types, arbre, approbation,
+ * revue périodique) et leur tableau de bord, alertes flash et retours d'expérience anonymisés,
  * plans d'intervention d'urgence et exercices, annuaire de crise. Onglet, filtres et fiche ouverte
  * portés par l'adresse (`vue`, puis les paramètres propres à chaque onglet) : un lien partage la fiche
  * d'une procédure, d'une alerte, d'un plan ou d'un exercice. Procédures et alertes ne sont pas ouvertes
@@ -20,13 +21,14 @@ import { Annuaire } from "./Annuaire";
 import { messageDocument, useDroits } from "./libelles";
 import { MesDocuments } from "./MesDocuments";
 import { Procedures, filtresExportProcedures } from "./Procedures";
+import { TableauDeBord } from "./TableauDeBord";
 import type { MyDocuments } from "./types";
 import { Urgences, filtresExportUrgences } from "./Urgences";
 
-type Vue = "a-lire" | "procedures" | "alertes" | "urgences" | "annuaire";
+type Vue = "a-lire" | "procedures" | "tableau" | "alertes" | "urgences" | "annuaire";
 
 /** Paramètres propres à un onglet, retirés de l'adresse quand on change d'onglet. */
-const PARAMETRES_VUE = ["nonlus", "statut", "domaine", "q", "procedure", "nature", "alerte", "liste", "site", "scenario", "archives", "annee", "plan", "exercice", "retires"];
+const PARAMETRES_VUE = ["nonlus", "statut", "domaine", "q", "procedure", "type", "affichage", "nature", "alerte", "liste", "site", "scenario", "archives", "annee", "plan", "exercice", "retires"];
 
 export function Documents() {
   const { lire, ecrire } = useAdresse();
@@ -40,7 +42,8 @@ export function Documents() {
     ...(droits.aLire ? [{ key: "a-lire" as const, label: "À lire", count: mes?.unread_count }] : []),
     ...(droits.documents
       ? [
-          { key: "procedures" as const, label: "Procédures" },
+          { key: "procedures" as const, label: "Politiques et procédures" },
+          { key: "tableau" as const, label: "Tableau de bord" },
           { key: "alertes" as const, label: "Alertes et retours d'expérience" },
         ]
       : []),
@@ -70,6 +73,8 @@ export function Documents() {
         <MesDocuments nonLus={lire("nonlus") === "1"} onNonLus={(v) => ecrire({ nonlus: v ? "1" : null })} />
       ) : vue === "procedures" ? (
         <Procedures {...props} />
+      ) : vue === "tableau" ? (
+        <TableauDeBord {...props} />
       ) : vue === "alertes" ? (
         <Alertes {...props} />
       ) : vue === "urgences" ? (

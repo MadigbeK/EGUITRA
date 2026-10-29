@@ -1,10 +1,12 @@
-"""API des documents et des urgences (spécification §3, §9.4, lot 3) : procédures versionnées et leurs accusés
-de lecture, alertes flash et retours d'expérience anonymisés, plans d'intervention d'urgence et exercices,
-annuaire de crise ; espace « mes documents » du compte (NIMOVA Terrain pour le conducteur).
+"""API des documents et des urgences (spécification §3, §9.4, lot 3) : référentiel documentaire HSE (politiques,
+procédures, instructions de travail, consignes, formulaires ; 29/10) versionné et ses accusés de lecture,
+alertes flash et retours d'expérience anonymisés, plans d'intervention d'urgence et exercices, annuaire de
+crise ; espace « mes documents » du compte (NIMOVA Terrain pour le conducteur). Approbation, revue
+périodique, document à afficher et tableau de bord du référentiel : controllers/policies.py.
 
-Droits : hsseq rédige, publie, relance et archive. Lecture de gestion (taux de lecture, comptes en retard) :
-administration, direction, hsseq ; l'auditeur lit les procédures et les alertes diffusées qui se rapportent à
-ses sites, sans les noms des lecteurs. Plans, exercices et annuaire : administration, direction, hsseq, chef
+Droits : hsseq rédige, publie, relance et archive ; la direction approuve les politiques. Lecture de gestion
+(taux de lecture, comptes en retard) : administration, direction, hsseq ; l'auditeur lit les documents et les
+alertes diffusées qui se rapportent à ses sites, sans les noms des lecteurs. Plans, exercices et annuaire : administration, direction, hsseq, chef
 de parc et auditeur pour leurs sites (un contact sans site vaut pour tous les sites). Tout compte interne lit
 et accuse lecture des procédures en vigueur et des alertes diffusées qui le visent, et lit l'annuaire de
 crise de ses sites (GET /hsseq/my/…)."""
@@ -21,14 +23,17 @@ from ..models.common import (
     AUDIENCE_PROFILES,
     BULLETIN_KINDS,
     BULLETIN_STATUSES,
+    DOC_TYPES,
     DOMAINS,
     DRILL_STATUSES,
     PROCEDURE_STATUSES,
     SCENARIOS,
 )
+from ..models.documents import INDICATOR_INFO
 from .actions import action_line
 from .common import (
     HSSEQ,
+    actor_ref,
     attachments_rows,
     companies,
     company_ref,
@@ -42,8 +47,10 @@ from .common import (
     in_scope,
     int_or_none,
     internal_only,
+    is_auditor,
     is_hsseq,
     my_sites,
+    number,
     page,
     page_args,
     personal_data_hidden,
@@ -52,6 +59,7 @@ from .common import (
     scope_domain,
     sheet_filters,
     site_ref,
+    site_scope,
     terrain_source,
     text,
     user_ref,
@@ -60,6 +68,11 @@ from .common import (
 DOC_READ = ("admin", "direction", "hsseq", "auditeur")
 PLAN_READ = ("admin", "direction", "hsseq", "exploitation", "auditeur")
 PROCEDURE_TRANSITIONS = ("remind", "archive", "reactivate")
+# Ordre des types dans les listes et l'arbre : la politique, puis ce qui la met en œuvre.
+TYPE_ORDER = {code: rank for rank, (code, _label) in enumerate(DOC_TYPES)}
+# Public visé proposé : tout le personnel pour une politique, les conducteurs pour les autres documents.
+DEFAULT_AUDIENCE = {"policy": list(AUDIENCE_PROFILES)}
+MAX_OBJECTIVES = 20
 BULLETIN_TRANSITIONS = ("publish", "remind", "archive")
 DRILL_TRANSITIONS = ("perform", "cancel", "reopen")
 EXPORT_LIMIT = 10000
@@ -116,14 +129,56 @@ def readers(record, targets):
 # ─── Procédures ───────────────────────────────────────────────────────────
 
 
-def version_row(version):
+def version_row(version, detail=False, values=None):
+    """Version d'un document : dates, état, soumission et approbation (nom et date de l'approbateur, imprimés
+    sur le document à afficher), document joint ; en détail, le texte et les objectifs (values : valeurs des
+    indicateurs du cockpit déjà calculées)."""
     if not version:
         return None
     version = version.sudo()
-    return {"id": version.id, "version": version.version, "effective_date": version.effective_date,
-            "change_summary": version.change_summary or None, "status": version.status,
-            "published_at": version.published_at or None, "published_by": user_ref(version.published_by),
-            "document": attachments_rows("procedure_version", version)}
+    # Noms du personnel interne servis à tous, comme l'approbateur imprimé sur le document affiché.
+    row = {"id": version.id, "version": version.version, "effective_date": version.effective_date,
+           "change_summary": version.change_summary or None, "status": version.status,
+           "submitted_at": version.submitted_at or None, "submitted_by": user_ref(version.submitted_by),
+           "approved_at": version.approved_at or None, "approved_by": user_ref(version.approved_by),
+           # Rédacteurs (création et modifications du contenu) : aucun n'approuve la version (quatre yeux).
+           "edited_by": [user_ref(u) for u in (version.create_uid | version.edited_by) if u.id],
+           "reject_reason": version.reject_reason or None,
+           "published_at": version.published_at or None, "published_by": user_ref(version.published_by),
+           "has_text": bool((version.body or "").strip()),
+           "document": attachments_rows("procedure_version", version)}
+    if detail:
+        row.update({"body": version.body or None, "objectives": version._objectives(values)})
+    return row
+
+
+def doc_ref(procedure):
+    """Document cité (rattachement, documents rattachés) : type, référence, titre, état."""
+    procedure = procedure.sudo()
+    if not procedure:
+        return None
+    return {"id": procedure.id, "doc_type": procedure.doc_type, "code": procedure.code, "title": procedure.title,
+            "status": procedure.status}
+
+
+def review_block(procedure):
+    """Revue périodique : périodicité (celle du document, à défaut celle du type), dates, état du jour."""
+    procedure = procedure.sudo()
+    return {"months": procedure.review_months or None, "period_months": procedure._review_period(),
+            "next_review_date": procedure.next_review_date or None,
+            "last_review_date": procedure.last_review_date or None, "state": procedure._review_state(today()),
+            "in_progress": procedure._review_in_progress()}
+
+
+def document_review_row(review):
+    review = review.sudo()
+    return {"id": review.id, "reviewed_on": review.reviewed_on, "reviewer": actor_ref(review.reviewer_id),
+            "outcome": review.outcome, "comment": review.comment,
+            "next_review_date": review.next_review_date or None,
+            "version": {"id": review.version_id.id, "version": review.version_id.version} if review.version_id else None,
+            "new_version": {"id": review.new_version_id.id, "version": review.new_version_id.version,
+                            "status": review.new_version_id.status} if review.new_version_id else None,
+            "actions": [action_line(a) for a in review.action_ids]}
 
 
 def can_manage_read(procedure):
@@ -140,12 +195,41 @@ def can_read_version(version):
         request.env.user)
 
 
+def version_actions(procedure, version):
+    """Gestes que le compte peut faire sur la version en préparation : soumettre, publier directement (hors
+    politique, sans quatre yeux), retirer de l'approbation (hsseq) ; approuver ou refuser (direction pour une
+    politique, hsseq pour les autres types ; jamais l'auteur quand les quatre yeux s'appliquent)."""
+    procedure = procedure.sudo()
+    if not version or procedure.status == "archived" or is_auditor():
+        return []
+    version = version.sudo()
+    user = request.env.user
+    hsseq = is_hsseq()
+    policy = procedure.doc_type == "policy"
+    four_eyes = policy or procedure._settings().document_four_eyes
+    actions = []
+    if version.status == "draft" and hsseq:
+        actions.append("submit")
+        if not four_eyes:
+            actions.append("publish")
+    if version.status == "submitted":
+        if hsseq:
+            actions.append("withdraw")
+        if procedure._can_approve(user):
+            author = user in version._authors()
+            if not (four_eyes and author):
+                actions.append("approve")
+            if not author:
+                actions.append("reject")
+    return actions
+
+
 def procedure_rights(procedure):
     hsseq = is_hsseq()
     transitions = [t for t in procedure._transitions() if hsseq]
-    draft = procedure._draft_version()
+    gestures = version_actions(procedure, procedure._draft_version())
     return transitions, {"can_edit": hsseq and procedure.status != "archived", "can_close": "archive" in transitions,
-                         "can_approve": hsseq and bool(draft) and procedure.status != "archived"}
+                         "can_approve": bool({"approve", "publish"} & set(gestures))}
 
 
 def audience_index(comps=None):
@@ -157,18 +241,64 @@ def procedure_row(procedure, detail=False, index=None):
     procedure = procedure.sudo()
     transitions, rights = procedure_rights(procedure)
     current = procedure.current_version_id
+    draft = procedure._draft_version()
     targets = procedure._audience_users(index) if current and procedure.status == "published" else None
-    row = {"id": procedure.id, "code": procedure.code, "title": procedure.title, "domain": procedure.domain or None,
+    values = None
+    if detail:
+        # Indicateurs du cockpit des objectifs, calculés une fois pour la version en vigueur et le brouillon, dans
+        # la portée du lecteur comme au cockpit : toute la société pour la lecture complète, les sites de
+        # l'auditeur sinon, aucune valeur sans site rattaché.
+        scope = site_scope()
+        codes = (current | draft).objective_ids.mapped("indicator_code")
+        values = {} if scope is not None and not scope else procedure._indicator_values(procedure.company_id, codes,
+                                                                                         scope)
+    row = {"id": procedure.id, "doc_type": procedure.doc_type, "code": procedure.code, "title": procedure.title,
+           "domain": procedure.domain or None, "parent": doc_ref(procedure.parent_id),
            "audience": audience_row(procedure), "status": procedure.status, "owner": user_ref(procedure.owner_id),
-           "current_version": version_row(current), "draft_version": version_row(procedure._draft_version()),
-           "read": current._read_stats(targets) if targets is not None else None, "rights": rights}
+           "current_version": version_row(current, detail, values), "draft_version": version_row(draft, detail, values),
+           "read": current._read_stats(targets) if targets is not None else None, "review": review_block(procedure),
+           "rights": rights}
     if detail:
         read, unread = readers(current, targets) if targets is not None else (None, None)
+        children = procedure.child_ids.sorted(lambda c: (TYPE_ORDER.get(c.doc_type, 9), c.code))
         row.update({"company": company_ref(procedure.company_id), "description": procedure.description or None,
+                    "children": [doc_ref(c) for c in children],
                     "versions": [version_row(v) for v in procedure.version_ids],
                     "readers": read, "unread": unread, "archive_reason": procedure.archive_reason or None,
+                    "reviews": [document_review_row(r) for r in procedure.review_ids],
+                    "version_actions": version_actions(procedure, draft),
+                    # Document à afficher sur les sites (PDF au gabarit de la société) : une version avec son texte.
+                    "poster": bool(current and (current.body or "").strip()),
                     "history": history("procedure", procedure), "transitions": transitions})
     return row
+
+
+def document_search(kw, order="code, id", skip=()):
+    """Documents lisibles du compte aux filtres de la liste : status, doc_type, domain, site_id (documents du
+    site et de tous les sites), parent_id, search, pending_approval=1 (version soumise), review=overdue ou due
+    (revue échue, ou à faire dans le délai d'alerte). skip : filtres ignorés (compteurs)."""
+    skip = set(skip)
+    domain = [("company_id", "in", companies(kw).ids)]
+    if kw.get("status") and "status" not in skip:
+        domain.append(("status", "in", kw["status"].split(",")))
+    if kw.get("doc_type") and "doc_type" not in skip:
+        domain.append(("doc_type", "in", kw["doc_type"].split(",")))
+    if kw.get("domain"):
+        domain.append(("domain", "=", kw["domain"]))
+    if kw.get("site_id"):
+        domain += ["|", ("site_ids", "=", False), ("site_ids", "in", [int_or_none(kw, "site_id")])]
+    if kw.get("parent_id"):
+        domain.append(("parent_id", "=", int_or_none(kw, "parent_id")))
+    if kw.get("search"):
+        domain += ["|", ("code", "ilike", kw["search"]), ("title", "ilike", kw["search"])]
+    if str(kw.get("pending_approval", "")) in ("1", "true") and "pending_approval" not in skip:
+        domain.append(("version_ids.status", "=", "submitted"))
+    rows = request.env["eguitra.hsseq.procedure"].sudo().search(domain, order=order).filtered(can_manage_read)
+    review = kw.get("review")
+    if review in ("overdue", "due") and "review" not in skip:
+        day = today()
+        rows = rows.filtered(lambda p: p._review_state(day) == review)
+    return rows
 
 
 def get_procedure(procedure_id):
@@ -179,13 +309,36 @@ def get_procedure(procedure_id):
 
 
 def procedure_values(data, partial=False):
+    """Champs d'un document. La référence, facultative à la création, est alors proposée selon le type."""
     values = {}
-    for key, limit, mandatory in (("code", 64, True), ("title", 300, True), ("description", 4000, False)):
+    for key, limit, mandatory in (("code", 64, partial), ("title", 300, True), ("description", 4000, False)):
         if not partial or key in data:
             values[key] = text(data, key, limit)
             if mandatory and not values[key]:
-                raise ApiError(400, "missing_fields", "Référence et titre de la procédure sont obligatoires.",
+                raise ApiError(400, "missing_fields", "Référence et titre du document sont obligatoires.",
                                fields=[key])
+    if not values.get("code"):
+        values.pop("code", None)
+    if "doc_type" in data or not partial:
+        doc_type = data.get("doc_type") or "procedure"
+        if doc_type not in dict(DOC_TYPES):
+            raise ApiError(400, "invalid_parameter", "Type de document inconnu.", fields=["doc_type"])
+        values["doc_type"] = doc_type
+    if "parent_id" in data:
+        parent = get("eguitra.hsseq.procedure", data["parent_id"], "Document de rattachement") \
+            if data["parent_id"] else None
+        values["parent_id"] = parent.id if parent else False
+    if "review_months" in data:
+        months = int_or_none(data, "review_months") or 0
+        if not 0 <= months <= 120:
+            raise ApiError(400, "invalid_parameter", "Revue : de 1 à 120 mois (0 : la périodicité du type).",
+                           fields=["review_months"])
+        values["review_months"] = months
+    if "next_review_date" in data:
+        values["next_review_date"] = date_value(data, "next_review_date")
+        if values["next_review_date"] and values["next_review_date"] <= today():
+            raise ApiError(400, "invalid_parameter", "La prochaine revue est postérieure à aujourd'hui.",
+                           fields=["next_review_date"])
     if "domain" in data:
         if data["domain"] and data["domain"] not in dict(DOMAINS):
             raise ApiError(400, "invalid_parameter", "Domaine inconnu.", fields=["domain"])
@@ -210,11 +363,42 @@ def version_values(data, partial=False):
             raise ApiError(400, "missing_fields", "Date d'effet manquante.", fields=["effective_date"])
     if "change_summary" in data:
         values["change_summary"] = text(data, "change_summary", 4000)
+    if "body" in data:
+        values["body"] = text(data, "body", 20000)
     return values
 
 
+def objective_commands(data, company):
+    """Objectifs d'une version (remplacent la liste) : libellé, et facultativement un indicateur du cockpit et
+    sa cible (à défaut, la cible des réglages de la société)."""
+    rows = data.get("objectives")
+    if rows is None:
+        return None
+    if not isinstance(rows, list) or len(rows) > MAX_OBJECTIVES:
+        raise ApiError(400, "invalid_parameter", f"Objectifs : une liste de {MAX_OBJECTIVES} au plus.",
+                       fields=["objectives"])
+    settings = request.env["eguitra.hsseq.settings"]._get(company)
+    commands = [(5, 0, 0)]
+    for rank, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            raise ApiError(400, "invalid_parameter", "Objectif invalide.", fields=["objectives"])
+        label = text(row, "label", 300)
+        if not label:
+            raise ApiError(400, "missing_fields", f"Libellé de l'objectif {rank} manquant.", fields=["objectives"])
+        code = row.get("indicator_code") or False
+        if code and code not in INDICATOR_INFO:
+            raise ApiError(400, "invalid_parameter", f"Indicateur inconnu pour l'objectif {rank}.",
+                           fields=["objectives"])
+        target = number(row, "target", None) if code else None
+        if code and target is None:
+            target = settings._target(code)
+        commands.append((0, 0, {"sequence": rank * 10, "label": label, "indicator_code": code,
+                                "target": target if target is not None else False}))
+    return commands
+
+
 def unique_code(company, code, procedure=None):
-    """Référence de procédure unique dans la société : 409 conflict sinon."""
+    """Référence de document unique dans la société : 409 conflict sinon."""
     domain = [("company_id", "=", company.id), ("code", "=", code)] + ([("id", "!=", procedure.id)] if procedure else [])
     if code and request.env["eguitra.hsseq.procedure"].sudo().search_count(domain):
         raise ApiError(409, "conflict", f"La référence {code} existe déjà dans la société.", fields=["code"])
@@ -424,26 +608,29 @@ def contact_values(data, partial=False):
 class EguitraHsseqDocuments(http.Controller):
     # ─── Procédures ───────────────────────────────────────────────────────
 
-    def _procedures(self, kw, order="code, id", with_status=True):
-        domain = [("company_id", "in", companies(kw).ids)]
-        if kw.get("status") and with_status:
-            domain.append(("status", "in", kw["status"].split(",")))
-        if kw.get("domain"):
-            domain.append(("domain", "=", kw["domain"]))
-        if kw.get("search"):
-            domain += ["|", ("code", "ilike", kw["search"]), ("title", "ilike", kw["search"])]
-        rows = request.env["eguitra.hsseq.procedure"].sudo().search(domain, order=order)
-        return rows.filtered(can_manage_read)
+    def _procedures(self, kw, order="code, id", with_status=True, skip=()):
+        return document_search(kw, order, skip=set(skip) | (set() if with_status else {"status"}))
 
     @hsseq_route("/hsseq/procedures", profiles=DOC_READ)
     def procedures(self, **kw):
         offset, limit, order = page_args(kw, "code", {"code": "code", "title": "title", "status": "status",
-                                                      "updated_at": "write_date"})
+                                                      "updated_at": "write_date", "doc_type": "doc_type",
+                                                      "next_review_date": "next_review_date"})
         rows = self._procedures(kw, order)
-        # Compteurs par état aux autres filtres de la liste (pas à celui de l'état).
-        every = self._procedures(kw, with_status=False)
+        # Compteurs aux autres filtres de la liste : par état, versions à approuver et revues échues (les onglets
+        # de l'écran) sans aucun de ces trois filtres ; par type sans celui du type.
+        every = self._procedures(kw, skip=("status", "pending_approval", "review"))
+        by_type = self._procedures(kw, skip=("doc_type",))
+        loose = every
+        day = today()
+        pending = loose.filtered(lambda p: p._draft_version().status == "submitted")
         counts = {"by_status": {code: len(every.filtered(lambda p, c=code: p.status == c))
-                                for code, _l in PROCEDURE_STATUSES}}
+                                for code, _l in PROCEDURE_STATUSES},
+                  "by_type": {code: len(by_type.filtered(lambda p, c=code: p.doc_type == c)) for code, _l in DOC_TYPES},
+                  "pending_approval": len(pending),
+                  "to_approve": len(pending.filtered(lambda p: "approve" in version_actions(p, p._draft_version()))),
+                  "reviews_overdue": len(loose.filtered(lambda p: p._review_state(day) == "overdue")),
+                  "reviews_due": len(loose.filtered(lambda p: p._review_state(day) == "due"))}
         index = audience_index(companies(kw)) if rows else []
         return page([procedure_row(p, index=index) for p in rows[offset:offset + limit]], len(rows), offset, limit,
                     counts)
@@ -454,24 +641,28 @@ class EguitraHsseqDocuments(http.Controller):
 
     @hsseq_route("/hsseq/procedures", methods=("POST",), profiles=HSSEQ)
     def create_procedure(self, **_kw):
-        """Procédure et sa première version en brouillon ({code, title, audience_profiles, site_ids, version,
-        effective_date, change_summary})."""
+        """Document et sa première version en brouillon ({doc_type, code (proposée selon le type à défaut),
+        title, parent_id, audience_profiles, site_ids, review_months, version, effective_date, change_summary,
+        body, objectives})."""
         data = read_json()
-        require(data, "code", "title", "version", "effective_date")
+        require(data, "title", "version", "effective_date")
         company = companies(data)[:1] if data.get("company_id") else request.env.company
         values = procedure_values(data)
-        values.setdefault("audience_profiles", ["conducteur"])
-        unique_code(company, values["code"])
+        values.setdefault("audience_profiles", DEFAULT_AUDIENCE.get(values["doc_type"], ["conducteur"]))
+        unique_code(company, values.get("code"))
         procedure = request.env["eguitra.hsseq.procedure"].sudo().create(dict(values, company_id=company.id))
-        request.env["eguitra.hsseq.procedure.version"].sudo().create(dict(version_values(data),
-                                                                          procedure_id=procedure.id))
+        version_data = version_values(data)
+        objectives = objective_commands(data, company)
+        if objectives:
+            version_data["objective_ids"] = objectives
+        request.env["eguitra.hsseq.procedure.version"].sudo().create(dict(version_data, procedure_id=procedure.id))
         return procedure_row(procedure, detail=True)
 
     @hsseq_route("/hsseq/procedures/<int:procedure_id>", methods=("PATCH",), profiles=HSSEQ)
     def update_procedure(self, procedure_id, **_kw):
         procedure = get_procedure(procedure_id)
         if procedure.status == "archived":
-            raise ApiError(422, "invalid_transition", "Procédure archivée : réactivez-la avant de la modifier.")
+            raise ApiError(422, "invalid_transition", "Document archivé : réactivez-le avant de le modifier.")
         values = procedure_values(read_json(), partial=True)
         if "code" in values:
             unique_code(procedure.company_id, values["code"], procedure)
@@ -480,29 +671,47 @@ class EguitraHsseqDocuments(http.Controller):
 
     @hsseq_route("/hsseq/procedures/<int:procedure_id>/versions", methods=("POST",), profiles=HSSEQ)
     def create_version(self, procedure_id, **_kw):
+        """Nouvelle version en brouillon ; sans texte ni objectifs donnés, ceux de la version en vigueur sont
+        repris (une politique se révise sans tout réécrire)."""
         procedure = get_procedure(procedure_id)
         if procedure.status == "archived":
-            raise ApiError(422, "invalid_transition", "Procédure archivée : réactivez-la avant une nouvelle version.")
+            raise ApiError(422, "invalid_transition", "Document archivé : réactivez-le avant une nouvelle version.")
         if procedure._draft_version():
-            raise ApiError(422, "invalid_transition", "Une version en brouillon existe déjà : publiez-la ou "
-                                                      "modifiez-la.")
+            raise ApiError(422, "invalid_transition", "Une version en préparation existe déjà : publiez-la, faites-la "
+                                                      "approuver ou modifiez-la.")
         data = read_json()
         require(data, "version", "effective_date")
         values = version_values(data)
         unique_version(procedure, values["version"])
-        request.env["eguitra.hsseq.procedure.version"].sudo().create(dict(values,
-                                                                          procedure_id=procedure.id))
+        objectives = objective_commands(data, procedure.company_id)
+        if objectives:
+            values["objective_ids"] = objectives
+        version = request.env["eguitra.hsseq.procedure.version"].sudo().create(dict(values,
+                                                                                    procedure_id=procedure.id))
+        current = procedure.current_version_id
+        if current:
+            if "body" not in data:
+                version.body = current.body or False
+            if objectives is None:
+                version._copy_content(current, body=False)
         return procedure_row(procedure, detail=True)
 
     @hsseq_route("/hsseq/procedures/<int:procedure_id>/versions/<int:version_id>", methods=("PATCH",), profiles=HSSEQ)
     def update_version(self, procedure_id, version_id, **_kw):
         procedure = get_procedure(procedure_id)
         version = get_version(procedure, version_id)
+        if version.status == "submitted":
+            raise ApiError(422, "invalid_transition", "Version soumise à l'approbation : retirez-la pour la "
+                                                      "modifier.")
         if version.status != "draft":
             raise ApiError(422, "invalid_transition", "Version publiée : elle ne se modifie plus (nouvelle version).")
-        values = version_values(read_json(), partial=True)
+        data = read_json()
+        values = version_values(data, partial=True)
         if "version" in values:
             unique_version(procedure, values["version"], version)
+        objectives = objective_commands(data, procedure.company_id)
+        if objectives is not None:
+            values["objective_ids"] = objectives
         version.write(values)
         return procedure_row(procedure, detail=True)
 
@@ -639,7 +848,8 @@ class EguitraHsseqDocuments(http.Controller):
         if str(kw.get("unread", "")) in ("1", "true"):
             procedure_rows = [r for r in procedure_rows if not r["read"]]
             bulletin_rows = [r for r in bulletin_rows if not r["read"]]
-        procedure_rows.sort(key=lambda r: r["read"])
+        # Non lus d'abord ; dans chaque groupe, les politiques avant ce qui les met en œuvre.
+        procedure_rows.sort(key=lambda r: (r["read"], TYPE_ORDER.get(r["doc_type"], 9)))
         bulletin_rows.sort(key=lambda r: r["read"])
         return {"procedures": procedure_rows, "bulletins": bulletin_rows,
                 "unread_count": sum(not r["read"] for r in procedure_rows + bulletin_rows)}
@@ -830,17 +1040,23 @@ class EguitraHsseqDocuments(http.Controller):
             index = audience_index(comps)
             procedures = self._procedures(sheet_filters(kw, "procedures", common=("company_id",)))
             rows = []
+            types = dict(DOC_TYPES)
             for p in procedures:
                 current = p.current_version_id
                 stats = current._read_stats(p._audience_users(index)) if current and p.status == "published" \
                     else None
-                rows.append([p.code, p.title, dict(PROCEDURE_STATUSES).get(p.status), current.version or "",
-                             current.effective_date or None, ", ".join(p.audience_profiles or []),
-                             ", ".join(p.site_ids.mapped("name")) or "Tous", stats["targets"] if stats else None,
-                             stats["read"] if stats else None, stats["rate"] if stats else None])
-            sheets.append({"title": "Procédures", "meta": meta,
-                           "columns": [("Référence", "text"), ("Titre", "text"), ("État", "text"), ("Version", "text"),
-                                       ("Date d'effet", "date"), ("Profils visés", "text"), ("Sites visés", "text"),
+                rows.append([types.get(p.doc_type), p.code, p.title, p.parent_id.code or "",
+                             dict(PROCEDURE_STATUSES).get(p.status), current.version or "",
+                             current.effective_date or None, current.approved_by.name or "",
+                             current.approved_at.date() if current.approved_at else None, p.next_review_date or None,
+                             ", ".join(p.audience_profiles or []), ", ".join(p.site_ids.mapped("name")) or "Tous",
+                             stats["targets"] if stats else None, stats["read"] if stats else None,
+                             stats["rate"] if stats else None])
+            sheets.append({"title": "Politiques et procédures", "meta": meta,
+                           "columns": [("Type", "text"), ("Référence", "text"), ("Titre", "text"),
+                                       ("Rattaché à", "text"), ("État", "text"), ("Version", "text"),
+                                       ("Date d'effet", "date"), ("Approuvée par", "text"), ("Approuvée le", "date"),
+                                       ("Prochaine revue", "date"), ("Profils visés", "text"), ("Sites visés", "text"),
                                        ("Comptes visés", "int"), ("Lectures", "int"), ("Taux de lecture (%)", "percent")],
                            "rows": rows, "totals": None})
             bulletins = env["eguitra.hsseq.bulletin"].sudo().search(
@@ -882,10 +1098,17 @@ class EguitraHsseqDocuments(http.Controller):
 
 
 def my_procedure_row(procedure, ack):
+    """Document en vigueur tel que le lit le compte visé (web et NIMOVA Terrain) : type, version, texte d'une
+    politique ou d'une consigne et ses objectifs (sans valeur du cockpit), approbation, document joint."""
     version = procedure.current_version_id
-    return {"id": procedure.id, "code": procedure.code, "title": procedure.title, "domain": procedure.domain or None,
+    return {"id": procedure.id, "doc_type": procedure.doc_type, "code": procedure.code, "title": procedure.title,
+            "domain": procedure.domain or None,
             "version": {"id": version.id, "version": version.version, "effective_date": version.effective_date,
-                        "published_at": version.published_at or None, "change_summary": version.change_summary or None},
+                        "published_at": version.published_at or None, "change_summary": version.change_summary or None,
+                        "approved_at": version.approved_at or None, "approved_by": user_ref(version.approved_by)},
+            "body": version.body or None,
+            "objectives": [{"label": o["label"], "indicator_label": o["indicator_label"], "unit": o["unit"],
+                            "target": o["target"]} for o in version._objectives(values={})],
             "document": attachments_rows("procedure_version", version), "read": bool(ack),
             "read_at": ack.read_at if ack else None}
 
@@ -901,6 +1124,18 @@ def my_contact_row(contact):
     return {"id": contact.id, "site": site_ref(contact.site_id), "function": contact.function, "name": contact.name,
             "organization": contact.organization or None, "phone": contact.phone, "phone2": contact.phone2 or None,
             "call_order": contact.call_order}
+
+
+def document_alerts(comps, sites=None):
+    """Référentiel documentaire HSE (cockpit) : revues de documents en vigueur échues, versions soumises à
+    l'approbation, documents des sites donnés (None : tous)."""
+    docs = request.env["eguitra.hsseq.procedure"].sudo().search([("company_id", "in", comps.ids),
+                                                                 ("status", "!=", "archived")])
+    if sites is not None:
+        docs = docs.filtered(lambda d: d._applies_to_sites(sites))
+    day = today()
+    return {"reviews_overdue": len(docs.filtered(lambda d: d._review_state(day) == "overdue")),
+            "pending_approval": len(docs.filtered(lambda d: d._draft_version().status == "submitted"))}
 
 
 def overdue_drills(comps, sites=None):

@@ -17,3 +17,4 @@ from . import test_reviews
 from . import test_corrections
 from . import test_corrections_lot3
 from . import test_corrections_cahier
+from . import test_policies

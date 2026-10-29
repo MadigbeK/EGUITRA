@@ -51,6 +51,9 @@ class EguitraHsseqAttachment(models.Model):
                 values["role"] = role
             attachment.write(values)
             attachment.attachment_id.write({"res_model": record._name, "res_id": record.id})
+        # Pièce d'une version de document HSE : qui la joint compte parmi ses rédacteurs (quatre yeux).
+        if self and object_key == "procedure_version":
+            record._mark_edited()
         return self
 
     def _row(self):

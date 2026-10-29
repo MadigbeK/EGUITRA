@@ -29,7 +29,7 @@ from .common import (
     site_scope,
     vehicle_ref,
 )
-from .documents import overdue_drills
+from .documents import document_alerts, overdue_drills
 from .lock import departures
 from .referentials import deadline_items
 
@@ -128,7 +128,9 @@ def lot3_blocks(comps, month, sites, vehicle_kind):
         "emergency": dict(overdue_drills(comps, sites or None), plans_active=env["eguitra.hsseq.emergency.plan"].sudo()
                           .search_count(base + site_domain)),
         "documents": {"procedures_published": count, "targets": targets, "read": read,
-                      "read_rate": round(read * 100 / targets, 1) if targets else None},
+                      "read_rate": round(read * 100 / targets, 1) if targets else None,
+                      # Référentiel documentaire HSE (29/10) : revues échues, versions qui attendent l'approbation.
+                      **document_alerts(comps, sites or None)},
         "telematics": {"violations": Violation.search_count(violation_domain),
                        "by_type": {code: Violation.search_count(violation_domain + [("violation_type", "=", code)])
                                    for code, _l in VIOLATION_TYPES},

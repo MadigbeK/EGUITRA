@@ -5,7 +5,8 @@ Transport, pour EGUITRA GROUP SARLU et MB AxisPro Consulting.
 
 Cockpit, événements et enquêtes, contrôles avant départ, verrou de départ et dérogations, plan
 d'actions, habilitations, documents et urgences, audits et conformité, environnement, rapport mensuel
-au format du donneur d'ordre, risques, revue de direction, télématique ; refus attendus par profil.
+au format du donneur d'ordre, risques, revue de direction, télématique ; refus attendus par profil ;
+politiques et procédures HSE (approbation de la direction, revue périodique, tableau de bord).
 
 | Rubrique {28} | À remplir {72} |
 |---|---|
@@ -19,7 +20,7 @@ au format du donneur d'ordre, risques, revue de direction, télématique ; refus
 | Société | ☐ EGUITRA GROUP SARLU    ☐ MB AxisPro Consulting |
 
 Document préparé par E-VOLUTION XP le 27 octobre 2026, d'après les écrans de la plateforme à cette
-date.
+date ; partie J (politiques et procédures HSE) ajoutée le 29 octobre 2026.
 
 <!-- saut de page -->
 
@@ -67,6 +68,7 @@ compris les erreurs.
 | test.dg | Direction | les deux sociétés | lecture, dépenses d'actions, revue de direction |
 | test.auditeur | Auditeur HSSEQ, lecture seule | « Parc de Matoto (démo) », trente jours | refus |
 | test.conducteur | Conducteur, téléphone seul | EGUITRA GROUP SARLU | refus |
+| test.admin | Administration | les deux sociétés | refus d'approuver une politique (partie J) |
 
 Données fictives utiles : site « Parc de Matoto (démo) » et ses trois ensembles ; événements
 « Recul sans guide au dépôt (démo) » (presque-accident, déclaré), « Câble électrique arraché près des
@@ -78,7 +80,9 @@ la route, criticité élevée, deux actions dont une en retard) ; un contrôle a
 exigences ; un déversement, un déchet et deux mesures de poussières ; deux risques ; revue « Revue de
 direction du trimestre (démo) » ; deux violations de conduite ; modèle de rapport « Modèle générique de
 donneur d'ordre (démo) ». Conducteurs : « Alpha Diallo (démo) » à jour, « Ousmane Bangoura (démo) »
-avec les matières dangereuses échues.
+avec les matières dangereuses échues. Partie J : politique « POL-HSE-DEMO-01 », « Politique santé,
+sécurité et environnement (démo) », approuvée par test.dg, revue à faire dans vingt jours ; la
+procédure « PR-HSE-DEMO-01 » s'y rattache.
 
 ## A. Cockpit et événements
 
@@ -1622,6 +1626,269 @@ enregistrées. » ; l'historique du mois ne porte la saisie qu'une fois.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## J. Politiques et procédures HSE
+
+Les documents HSE (politiques, procédures, instructions de travail, consignes, formulaires) se tiennent
+dans Personnel et conformité > Documents et urgences, onglets « Politiques et procédures » et
+« Tableau de bord ». Une politique n'entre en vigueur qu'approuvée par la direction ; les autres
+documents, par le Responsable HSSEQ. Jouez la partie dans l'ordre : HSE-60 crée la politique que
+HSE-61, HSE-63 et HSE-65 reprennent.
+
+### HSE-59. Lire le référentiel en arbre et le filtrer
+
+Objectif : vérifier que le référentiel se lit par type, en liste ou en arbre, avec la version en
+vigueur, la lecture et la prochaine revue.
+
+Compte : test.hsseq.
+
+Données : la politique « POL-HSE-DEMO-01 » et la procédure « PR-HSE-DEMO-01 », qui s'y rattache.
+
+1. Documents et urgences, onglet « Politiques et procédures ». Lisez les colonnes de la liste.
+2. « Affichage » : « Arbre ».
+3. « Type » : « Politiques ». Puis « Type » : « Tous les types » et « Site » : « Parc de Matoto
+   (démo) ».
+4. Ouvrez la politique dans l'arbre, puis, dans sa rubrique « Rattachement », la procédure.
+
+Résultat attendu : la liste montre pour chaque document son type, sa référence, « Version en
+vigueur », « Lecture » et « Prochaine revue » ; la politique porte « Revue à faire ». En arbre, la
+procédure apparaît en retrait sous la politique. Le filtre « Politiques » ne garde que les
+politiques ; le filtre de site garde les documents du site et ceux de tous les sites. La fiche de la
+procédure indique « Met en œuvre Politique POL-HSE-DEMO-01 : … ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-60. Rédiger une politique et la soumettre à la direction
+
+Objectif : vérifier qu'une politique se rédige avec sa référence proposée, son texte et ses objectifs,
+puis attend l'approbation de la direction.
+
+Compte : test.hsseq.
+
+Données : type « Politique » ; référence laissée vide ; titre « Politique alcool et drogues
+(essai) » ; engagement de la direction « Aucune prise de poste sous l'emprise de l'alcool ou de
+drogues (essai). » ; objectif 1 « Zéro alcootest positif (essai) », indicateur « Alcootests
+positifs », cible 0.
+
+1. Onglet « Politiques et procédures », « Nouveau document ». Choisissez le type « Politique » et
+   lisez l'aide de « Référence ».
+2. Remplissez « Titre », « Engagement de la direction », puis « Ajouter un objectif » et remplissez
+   « Objectif 1 », « Indicateur du cockpit » et « Cible ». « Créer le document ».
+3. Sur la fiche, lisez la référence attribuée, puis « Soumettre à la direction » et confirmez par
+   « Soumettre ».
+4. Regardez les commandes de la fiche.
+
+Résultat attendu : l'aide propose « la suivante des politiques (POL-HSE-001…) » et « Profils visés »
+coche tous les profils. La fiche porte une référence « POL-HSE-… », le tampon « En rédaction » et,
+dans « Objectifs », la cible et la valeur sur douze mois. Après la soumission : « Version 1 soumise
+à l'approbation de la direction générale. », tampon « En approbation », bandeau « … la direction
+générale l'approuve, jamais l'un de ses rédacteurs ni la personne qui l'a soumise. ». test.hsseq n'a
+que « Retirer de l'approbation » : ni « Approuver », ni « Modifier la version ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-61. Approuver une politique et imprimer le document à afficher
+
+Objectif : vérifier que la direction approuve la politique, que son nom et la date sont imprimés et
+que la lecture est demandée aux comptes visés.
+
+Compte : test.dg.
+
+Données : la politique « Politique alcool et drogues (essai) » soumise en HSE-60.
+
+1. Documents et urgences, onglet « Politiques et procédures », onglet « À approuver ». Ouvrez la
+   politique, lisez son texte et ses objectifs.
+2. « Approuver la version 1 ». Lisez la fenêtre, puis « Approuver ».
+3. « Document à afficher », puis ouvrez le PDF.
+
+Résultat attendu : la fenêtre indique que votre nom et la date du jour figurent sur le document à
+afficher. Puis « Version 1 approuvée et en vigueur : sa lecture est demandée à … comptes visés. » ;
+tampon « En vigueur » ; la version porte « approuvée le … par Test - Direction générale
+(direction) » ; « Revue périodique » annonce la prochaine revue dans douze mois. Le PDF, au logo de
+la société, montre « Politique », le titre, l'engagement, « Nos objectifs », « La Direction
+générale », votre nom, « Approuvé le … », la référence et « version 1 ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-62. Refuser une nouvelle version avec un motif
+
+Objectif : vérifier que la direction refuse une version avec un motif, que la version en vigueur reste
+en place et que le rédacteur est prévenu.
+
+Compte : test.hsseq, puis test.dg, puis test.hsseq.
+
+Données : la politique « POL-HSE-DEMO-01 » ; version 2, changements « Objectifs de l'année
+(essai) » ; motif du refus « Cible à revoir (essai) ».
+
+1. test.hsseq : fiche de la politique, « Nouvelle version ». Lisez « Engagement de la direction » et
+   « Objectifs », remplissez « Changements apportés », puis « Créer la version ».
+2. « Soumettre à la direction », puis « Soumettre ».
+3. test.dg : ouvrez la politique, « Refuser ». Saisissez le motif, puis « Refuser ».
+4. test.hsseq : rouvrez la politique.
+
+Résultat attendu : à l'étape 1, le texte et les objectifs de la version 1 sont repris. À l'étape 3,
+« Version 2 refusée : son rédacteur est prévenu. ». À l'étape 4, bandeau « Version 2 refusée : Cible
+à revoir (essai) », la version 2 est de nouveau en brouillon et modifiable ; la version 1 reste
+« Version en vigueur ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-63. Seule la direction approuve une politique
+
+Objectif : vérifier que ni l'administration ni l'auditeur n'approuvent une politique, et que le
+rédacteur ne l'approuve pas.
+
+Compte : test.hsseq, test.admin, puis test.auditeur.
+
+Données : la version 2 de « POL-HSE-DEMO-01 » refusée en HSE-62.
+
+1. test.hsseq : « Soumettre à la direction », puis « Soumettre ». Regardez les commandes.
+2. test.admin : ouvrez la même politique. Regardez les commandes et la ligne « Approbation ».
+3. test.auditeur : ouvrez la même politique.
+4. test.hsseq : « Retirer de l'approbation ».
+
+Résultat attendu : test.hsseq n'a que « Retirer de l'approbation » ; test.admin n'a ni « Approuver »
+ni « Refuser », et la fiche indique « Approbation : Direction générale » ; test.auditeur lit la fiche
+sans aucune commande ni nom de lecteur. Après le retrait, « Version 2 retirée de l'approbation : elle
+se modifie de nouveau. ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-64. Noter la revue d'une politique et en tirer une action
+
+Objectif : vérifier que la revue périodique se trace, fixe la prochaine revue et peut créer une action
+du plan d'actions.
+
+Compte : test.hsseq.
+
+Données : la politique « POL-HSE-DEMO-01 », revue à faire ; conclusion « Reconduit sans
+changement » ; constats « Politique toujours adaptée aux activités (essai) » ; action « Afficher la
+politique au quai de chargement (essai) », confiée à Test - Responsable exploitation transport,
+échéance dans un mois.
+
+1. Ouvrez la politique ; lisez la rubrique « Revue périodique ».
+2. « Noter la revue ». Choisissez « Reconduit sans changement », remplissez « Constats et
+   conclusion », cochez « Tirer une action du plan d'actions » et remplissez l'action.
+3. « Enregistrer la revue ».
+4. Cliquez sur la référence de l'action, sous la revue.
+
+Résultat attendu : « Revue notée : politique reconduite, prochaine revue le … » (dans un an) ; le
+tampon « Revue à faire » disparaît ; la revue est listée avec sa date, son auteur et l'action ACT/… ;
+l'action s'ouvre, origine « Document HSE POL-HSE-DEMO-01 ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-65. Décider en revue une nouvelle version
+
+Objectif : vérifier qu'une revue qui conclut à une révision prépare la nouvelle version.
+
+Compte : test.hsseq.
+
+Données : la politique « Politique alcool et drogues (essai) », en vigueur depuis HSE-61 ;
+conclusion « Nouvelle version à rédiger » ; constats « Étendre aux sous-traitants (essai) ».
+
+1. Ouvrez la politique, « Noter la revue ».
+2. Choisissez « Nouvelle version à rédiger », remplissez « Constats et conclusion », puis
+   « Enregistrer la revue ».
+3. Lisez « Version en brouillon » et « Revue périodique ».
+
+Résultat attendu : « Revue notée : la version 2 est préparée en brouillon. » ; la version 2 reprend
+l'engagement et les objectifs, ses changements commencent par « Revue du … : Étendre aux
+sous-traitants (essai) » ; « Revue périodique » indique « Nouvelle version en préparation, décidée en
+revue ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-66. Lire et accuser lecture d'une politique
+
+Objectif : vérifier qu'un compte visé lit la politique, son engagement et ses objectifs, et en accuse
+lecture.
+
+Compte : test.parc.
+
+Données : la politique « POL-HSE-DEMO-01 ».
+
+1. Documents et urgences, onglet « À lire », carte « Politiques et procédures ».
+2. Lisez la politique, puis « J'ai lu la politique » et confirmez.
+
+Résultat attendu : la politique montre le tampon « Politique », « Approuvée par Test - Direction
+générale pour la direction, le … », l'engagement et « Nos objectifs », sans document à télécharger.
+Après la confirmation, « Lecture accusée le … ». La même lecture se fera sur NIMOVA Terrain
+(« Documents ») quand l'application sera installée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-67. Suivre le tableau de bord et l'exporter
+
+Objectif : vérifier le tableau de bord des documents et ce que l'auditeur n'y lit pas.
+
+Compte : test.hsseq, puis test.auditeur.
+
+Données : les documents de démonstration et ceux des scénarios précédents.
+
+1. test.hsseq : onglet « Tableau de bord ». Lisez les quatre chiffres, « Documents en vigueur par
+   type », « Lecture par document », « Lecture par site » et « Accusés manquants par personne »
+   (ouvrez une personne).
+2. « Exporter le tableau de bord », puis ouvrez le fichier.
+3. test.auditeur : onglet « Tableau de bord », puis « Exporter le tableau de bord ».
+
+Résultat attendu : chiffres « Documents en vigueur », « Taux de lecture », « Revues en retard »,
+« Versions à approuver » ; chaque personne liste les documents qu'elle n'a pas encore lus. Le
+classeur a les feuilles « Documents en vigueur », « Revues à faire », « Lecture par site » et
+« Accusés manquants ». test.auditeur ne lit que son site : « Accusés manquants par personne : non
+communiqués à votre profil. », et son classeur n'a pas la feuille « Accusés manquants ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### HSE-68. Régler la revue périodique des documents
+
+Objectif : vérifier que la périodicité de revue se règle par type de document, sans développement.
+
+Compte : test.hsseq.
+
+Données : « Revue d'une procédure (mois) » : 36 ; puis retour à 24.
+
+1. Administration > Paramètres, onglet « Réglages », « Société » EGUITRA GROUP SARLU. Lisez les
+   cartes « Politiques et procédures » et « Approbation des documents HSE ».
+2. Saisissez 36 dans « Revue d'une procédure (mois) », puis « Enregistrer les réglages ».
+3. Remettez 24, puis « Enregistrer les réglages ».
+
+Résultat attendu : la carte « Politiques et procédures » montre les périodicités (politique 12 mois,
+procédure 24, instruction de travail 24, consigne 24, formulaire 36) et « Alerte avant l'échéance
+(jours) » à 30 ; la case des procédures approuvées par une seconde personne est décochée. Chaque
+enregistrement affiche « Réglages de EGUITRA GROUP SARLU enregistrés. ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -1635,7 +1902,8 @@ enregistrées. » ; l'historique du mois ne porte la saisie qu'une fois.
 | G. Risques, revue de direction et télématique | 3 | | | |
 | H. Refus attendus | 6 | | | |
 | I. Contrôles de saisie et de sécurité | 4 | | | |
-| Total | 58 | | | |
+| J. Politiques et procédures HSE | 10 | | | |
+| Total | 68 | | | |
 
 Réserves et anomalies relevées :
 

@@ -25,6 +25,8 @@ AUDITED_MODELS = [
     "eguitra.hsseq.telematics.violation", "eguitra.hsseq.telematics.import",
     # Corrections du lot 2.
     "eguitra.hsseq.qualification.rule",
+    # Politiques et procédures (29/10).
+    "eguitra.hsseq.policy.objective", "eguitra.hsseq.document.review",
 ]
 
 
