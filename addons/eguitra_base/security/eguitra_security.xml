@@ -123,6 +123,16 @@
         <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
 
+    <!-- Agent du service client (NIMOVA · Service client, décision du gérant du 29 octobre 2026) : demandes et
+         réclamations des clients, saisies, réponses, réponses types, comptes de l'espace client ; un compte
+         ouvert aux deux sociétés travaille dans sa société de travail. Aucun droit comptable. -->
+    <record id="group_profile_service_client" model="res.groups">
+        <field name="name">Service client</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Demandes et réclamations des clients : saisie des appels, visites et courriers, réponses par le canal du dossier (courriel, WhatsApp, espace client), notes internes, réponses types, affectation, fusion, satisfaction, comptes de l'espace client. Aucun droit comptable.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
     <record id="group_profile_admin" model="res.groups">
         <field name="name">Administration</field>
         <field name="privilege_id" ref="privilege_eguitra_profiles"/>
@@ -139,6 +149,14 @@
     <record id="group_profile_porteur" model="res.groups">
         <field name="name">Porteur de projet</field>
         <field name="comment">Portail AxisPro : dépôt des pièces, suivi du dossier, échanges avec le cabinet.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_portal'))]"/>
+    </record>
+
+    <!-- Client : utilisateur de l'espace client en ligne (NIMOVA · Service client), sans accès interne ; il ne lit
+         que les dossiers de son tiers, par l'API de l'espace client. -->
+    <record id="group_profile_client" model="res.groups">
+        <field name="name">Client (espace client)</field>
+        <field name="comment">Espace client : dépôt des demandes et réclamations, pièces jointes, réponses, suivi de l'état et satisfaction, pour les seuls dossiers de son tiers.</field>
         <field name="implied_ids" eval="[Command.link(ref('base.group_portal'))]"/>
     </record>
 </odoo>

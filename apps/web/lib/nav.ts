@@ -31,6 +31,8 @@ export const RH_GESTION: Profile[] = ["admin", "direction", "rh"];
  * et l'exploitation (chef de parc). Le conducteur n'y entre pas : il passe par le téléphone.
  */
 export const HSSEQ: Profile[] = ["admin", "direction", "hsseq", "exploitation"];
+/** Agents du service client : saisie, affectation, comptes de l'espace client (l'administration aussi). */
+export const SC_AGENTS: Profile[] = ["admin", "service_client"];
 /** Lecture de l'auditeur externe (lot 2), en plus : le noyau borne ses réponses à ses sites et refuse toute écriture. */
 const HSSEQ_LECTURE: Profile[] = [...HSSEQ, "auditeur"];
 
@@ -287,6 +289,21 @@ export const NAV: Record<AppCode, NavSection[]> = {
     { label: "Réglages", items: [{ href: "/agenda/reglages", label: "Réglages de l'agenda", icon: "SlidersHorizontal" }] },
     { label: "Administration", items: [{ href: "/agenda/ressources", label: "Ressources", icon: "Building2", profiles: ["admin"] }] },
   ],
+  // Service client : profils des routes du module (addons/eguitra_service_client/controllers/common.py). Les
+  // métiers n'y voient que les dossiers qui leur sont assignés ; la direction lit tout.
+  "service-client": [
+    {
+      label: "Service client",
+      items: [
+        { href: "/service-client", label: "Dossiers", icon: "Inbox" },
+        { href: "/service-client/nouveau", label: "Nouveau dossier", icon: "Plus", profiles: SC_AGENTS },
+        { href: "/service-client/tableau", label: "Tableau de bord", icon: "LayoutDashboard", profiles: [...SC_AGENTS, "direction"] },
+      ],
+    },
+    { label: "Espace client", items: [{ href: "/service-client/clients", label: "Comptes de l'espace client", icon: "Users", profiles: SC_AGENTS }] },
+    { label: "Administration", items: [{ href: "/service-client/reglages", label: "Réglages du service client", icon: "SlidersHorizontal", profiles: [...SC_AGENTS, "direction"] }] },
+  ],
+  "espace-client": [{ label: "Mes demandes", items: [{ href: "/espace-client", label: "Mes demandes", icon: "Inbox" }] }],
 };
 
 /**

@@ -26,8 +26,9 @@ MAX_MFA_ATTEMPTS = 5
 APPS = tuple(APP_REGISTRY)
 # Applications web internes, dans l'ordre de l'accueil : une connexion « de repli » (fallback) depuis
 # l'adresse commune entre dans la première que le profil ouvre, quand il n'ouvre pas celle demandée.
-# Ni le portail (porteurs), ni les applications de téléphone (sessions longues, routes bornées).
-FALLBACK_APPS = ("finance", "transport", "axispro", "analyse", "rh", "hsseq")
+# Ni le portail (porteurs) ni l'espace client (comptes externes), ni les applications de téléphone (sessions
+# longues, routes bornées).
+FALLBACK_APPS = ("finance", "transport", "axispro", "analyse", "rh", "hsseq", "service-client")
 
 
 def _mfa_required(env):

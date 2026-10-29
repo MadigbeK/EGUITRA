@@ -32,7 +32,7 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";
 }
 
-const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a", hsseq: "#14a3c2", agenda: "#6d6af0" };
+const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a", hsseq: "#14a3c2", agenda: "#6d6af0", "service-client": "#e0573b", "espace-client": "#e0573b" };
 
 /**
  * Accueil d'une application pour ce compte. Finance s'ouvre sur le premier écran que ses profils

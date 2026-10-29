@@ -69,6 +69,23 @@ services:
       db:
         condition: service_healthy
     command: ["odoo", "-c", "/etc/odoo/odoo.conf"]
+    # Service client (eguitra_service_client) : boîtes de courriel relevées et WhatsApp (API Cloud de Meta). Les
+    # secrets ne vivent que dans l'environnement du noyau (infra/.env), jamais en base ni dans le dépôt ; vides,
+    # les canaux sont inactifs et les réglages du service client le disent.
+    environment:
+      SC_IMAP_HOST: ${SC_IMAP_HOST:-}
+      SC_IMAP_PORT: ${SC_IMAP_PORT:-993}
+      SC_IMAP_GROUPE_USER: ${SC_IMAP_GROUPE_USER:-}
+      SC_IMAP_GROUPE_PASSWORD: ${SC_IMAP_GROUPE_PASSWORD:-}
+      SC_IMAP_CABINET_USER: ${SC_IMAP_CABINET_USER:-}
+      SC_IMAP_CABINET_PASSWORD: ${SC_IMAP_CABINET_PASSWORD:-}
+      SC_MAIL_AUTHSERV_ID: ${SC_MAIL_AUTHSERV_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_GROUPE_PHONE_NUMBER_ID: ${WHATSAPP_GROUPE_PHONE_NUMBER_ID:-}
+      WHATSAPP_CABINET_PHONE_NUMBER_ID: ${WHATSAPP_CABINET_PHONE_NUMBER_ID:-}
+      WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-}
     ports:
       - "127.0.0.1:8069:8069"
       - "127.0.0.1:8072:8072"
@@ -168,6 +185,22 @@ services:
       db-recette:
         condition: service_healthy
     command: ["odoo", "-c", "/etc/odoo/odoo.conf"]
+    # Service client de la recette : ses propres boîtes et son propre numéro WhatsApp (variables RECETTE_…),
+    # aucun secret commun avec la production.
+    environment:
+      SC_IMAP_HOST: ${RECETTE_SC_IMAP_HOST:-}
+      SC_IMAP_PORT: ${RECETTE_SC_IMAP_PORT:-993}
+      SC_IMAP_GROUPE_USER: ${RECETTE_SC_IMAP_GROUPE_USER:-}
+      SC_IMAP_GROUPE_PASSWORD: ${RECETTE_SC_IMAP_GROUPE_PASSWORD:-}
+      SC_IMAP_CABINET_USER: ${RECETTE_SC_IMAP_CABINET_USER:-}
+      SC_IMAP_CABINET_PASSWORD: ${RECETTE_SC_IMAP_CABINET_PASSWORD:-}
+      SC_MAIL_AUTHSERV_ID: ${RECETTE_SC_MAIL_AUTHSERV_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${RECETTE_WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${RECETTE_WHATSAPP_APP_SECRET:-}
+      WHATSAPP_VERIFY_TOKEN: ${RECETTE_WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_GROUPE_PHONE_NUMBER_ID: ${RECETTE_WHATSAPP_GROUPE_PHONE_NUMBER_ID:-}
+      WHATSAPP_CABINET_PHONE_NUMBER_ID: ${RECETTE_WHATSAPP_CABINET_PHONE_NUMBER_ID:-}
+      WHATSAPP_API_VERSION: ${RECETTE_WHATSAPP_API_VERSION:-}
     ports:
       - "127.0.0.1:8169:8069"
       - "127.0.0.1:8172:8072"

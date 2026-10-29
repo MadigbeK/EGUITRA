@@ -100,6 +100,8 @@ export interface OdooCallOptions {
   userAgent?: string | null;
   rawBody?: BodyInit | null;
   contentType?: string | null;
+  /** En-têtes transmis tels quels (signature d'une notification WhatsApp de Meta). */
+  extraHeaders?: Record<string, string>;
   /** Abandon de l'appel (délai). */
   signal?: AbortSignal;
 }
@@ -118,6 +120,7 @@ export async function odooFetch(path: string, opts: OdooCallOptions = {}): Promi
     headers["X-Forwarded-Host"] = "eguitra-web";
   }
   if (opts.userAgent) headers["User-Agent"] = opts.userAgent;
+  for (const [name, value] of Object.entries(opts.extraHeaders ?? {})) headers[name] = value;
   let body: BodyInit | undefined;
   if (opts.rawBody !== undefined && opts.rawBody !== null) {
     body = opts.rawBody;

@@ -17,6 +17,9 @@ Le département finance tient leurs deux comptabilités, séparément, dans la m
 - HSSEQ (NIMOVA · HSSEQ) sert les deux sociétés ; ses formulaires de terrain passent par l'application
   native NIMOVA Terrain, qui ne sert qu'EGUITRA GROUP (le transport) et n'a aucun écran web.
 - Agenda (NIMOVA · Agenda) sert les deux sociétés : un seul agenda par compte.
+- Service client (NIMOVA · Service client, décision du gérant du 29 octobre 2026) sert les deux sociétés,
+  dossiers séparés comme la comptabilité ; l'espace client en ligne (« Espace client ») est l'application
+  externe des clients, sur le modèle du portail des porteurs.
 
 Un compte reçoit des profils (eguitra_base, PROFILE_GROUPS) et des sociétés ; ses applications en
 découlent : un profil peut tout ouvrir (administration, direction) ou une seule application.
@@ -55,7 +58,16 @@ APPS = {
     # a un seul agenda) ; ni le porteur, ni le conducteur, ni l'auditeur, ni le salarié sans profil, comme
     # pour la discussion. Pendant : eguitra_agenda/models/common.py (AGENDA_PROFILES).
     "agenda": {"profiles": {"admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier",
-                            "cabinet", "associe", "rh", "hsseq"}, "entity": None, "model": "eguitra.agenda.calendar"},
+                            "cabinet", "associe", "rh", "hsseq", "service_client"}, "entity": None,
+               "model": "eguitra.agenda.calendar"},
+    # Service client (NIMOVA · Service client) : demandes et réclamations des clients des deux sociétés, chacune ses
+    # dossiers. Les agents (service_client) et l'administration traitent tout ; la direction lit tout ; les métiers
+    # (finance, exploitation, BTP, immobilier, cabinet) n'y voient que les dossiers qui leur sont assignés.
+    "service-client": {"profiles": {"admin", "direction", "service_client", "finance", "exploitation", "chantiers",
+                                    "immobilier", "cabinet"}, "entity": None, "model": "eguitra.sc.ticket"},
+    # Espace client en ligne : application externe du client (profil client, utilisateur du portail), pour les
+    # dossiers de son tiers dans la ou les sociétés où son compte est ouvert.
+    "espace-client": {"profiles": {"client"}, "entity": None, "model": "eguitra.sc.ticket"},
 }
 
 # Préfixe des routes de l'API -> société servie par le module : ses routes refusent de travailler

@@ -16,8 +16,16 @@ PROFILE_GROUPS = {
     "hsseq": "eguitra_base.group_profile_hsseq",
     "conducteur": "eguitra_base.group_profile_conducteur",
     "auditeur": "eguitra_base.group_profile_auditeur",
+    # Agent du service client (NIMOVA · Service client), pour l'une ou l'autre société.
+    "service_client": "eguitra_base.group_profile_service_client",
     "porteur": "eguitra_base.group_profile_porteur",
+    # Client de l'espace client en ligne (utilisateur du portail), sur le modèle du porteur.
+    "client": "eguitra_base.group_profile_client",
 }
+
+# Profils des comptes externes (utilisateurs du portail) : chacun ne se combine avec aucun autre et n'ouvre
+# aucune application interne (discussion, agenda, suivi des demandes).
+EXTERNAL_PROFILES = ("porteur", "client")
 
 
 class ResUsers(models.Model):

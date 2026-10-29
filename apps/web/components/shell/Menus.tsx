@@ -101,6 +101,11 @@ const DESCRIPTIONS: Record<string, string> = {
   "/agenda/planning": "Disponibilités des collègues et des ressources",
   "/agenda/reglages": "Heures, rappels, absence, partages, délégations",
   "/agenda/ressources": "Salles, véhicules et équipements réservables",
+  "/service-client": "Demandes et réclamations, fil d'échanges, échéances",
+  "/service-client/nouveau": "Saisie pendant un appel, une visite ou un courrier",
+  "/service-client/tableau": "Délais, retards, satisfaction, réclamations ; exports",
+  "/service-client/clients": "Invitations et comptes des clients",
+  "/service-client/reglages": "Heures, délais, catégories, équipes, réponses types, canaux",
 };
 
 const SENS_PASTILLE: Record<NavBadge, [string, string]> = { approvals: [" en attente", " en attente"], controls: [" contrôle en anomalie", " contrôles en anomalie"], alerts: [" alerte", " alertes"] };
