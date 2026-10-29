@@ -26,6 +26,7 @@ class TestLiens(ScCase):
         mine, other = self.invoice(self.client_a), self.invoice(self.client_b)
         found = self.api("GET", f"/service-client/links?model=account.move&partner_id={self.client_a.id}", self.agent)
         self.assertEqual([r["id"] for r in found], [mine.id], "Les seules factures du client du dossier")
+        self.api("GET", "/service-client/links?model=account.move", self.agent, status=422)
         detail = self.api("PATCH", f"{T}/{ticket.id}", self.agent, {"link_model": "account.move", "link_id": mine.id})
         self.assertEqual((detail["link"]["type"], detail["link"]["id"]), ("Facture", mine.id))
         self.api("PATCH", f"{T}/{ticket.id}", self.agent, {"link_model": "account.move", "link_id": other.id},

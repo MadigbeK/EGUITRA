@@ -351,7 +351,9 @@ function FicheLiee({ d, ctx, onFait }: { d: FicheDossier; ctx: ContexteSC; onFai
           </Button>
         </div>
       ) : (
-        <p className="mb-3 text-[13px] text-muted">Facture, rotation, bail ou bien, chantier, dossier AxisPro ou offre du client.</p>
+        <p className="mb-3 text-[13px] text-muted">
+          Facture, rotation, bail ou bien, chantier, dossier AxisPro ou offre du client.{!d.partner && " Rattachez d'abord le dossier à un client : seules ses fiches sont proposées (les biens restent accessibles)."}
+        </p>
       )}
       <div className="grid gap-2">
         <Select value={modele} onChange={(e) => setModele(e.target.value)} options={ctx.links.map((l) => ({ value: l.model, label: l.type }))} aria-label="Nature de la fiche" />

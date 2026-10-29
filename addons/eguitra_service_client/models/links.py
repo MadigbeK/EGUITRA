@@ -27,6 +27,9 @@ class EguitraScLinks(models.AbstractModel):
         if model not in LINK_MODELS or model not in self.env:
             raise UserError("Nature de fiche inconnue ou module absent.")
         _nature, partner_field, _href, extra = LINK_MODELS[model]
+        if partner_field and not partner:
+            # Les fiches d'un client (factures, offres, baux…) ne se parcourent que pour le client du dossier.
+            raise UserError("Rattachez d'abord le dossier à un client : ses fiches seules sont proposées.")
         Model = self.env[model].sudo()
         domain = list(extra)
         if "company_id" in Model._fields:
