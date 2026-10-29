@@ -21,7 +21,7 @@ const MODULES: Array<ModuleTerrain & { profils: string[] }> = [
   // Levée après correction : chef de parc du site et Responsable HSSEQ (§ 7, LIFT du noyau).
   { cle: "nonconformites", titre: "Non-conformités", detail: "À lever après correction, photo à l'appui", route: "/nonconformites", couleur: "hsseq", profils: ["hsseq", "exploitation"] },
   // Lot 3 : procédures et alertes qui visent le compte (toute personne), lecture accusée sur le terrain.
-  { cle: "documents", titre: "Documents", detail: "Procédures et alertes à lire", route: "/documents", couleur: "hsseq", profils: ["admin", "direction", "hsseq", "exploitation", "conducteur"] },
+  { cle: "documents", titre: "Documents", detail: "Politiques, procédures et alertes à lire", route: "/documents", couleur: "hsseq", profils: ["admin", "direction", "hsseq", "exploitation", "conducteur"] },
   // Lot 2 : espace du conducteur, ses habilitations et son aptitude en statut seul.
   { cle: "dossier", titre: "Mon dossier", detail: "Habilitations et aptitude", route: "/dossier", couleur: "hsseq", profils: ["conducteur"] },
 ];

@@ -15,13 +15,40 @@ import type { TonEtat } from "@/lib/couleurs";
 import { INSECABLE } from "@/lib/format";
 import type { Attachment } from "@/lib/hsseq-types";
 import type { Me, Profile } from "@/lib/types";
-import type { Audience, AudienceProfile, BulletinKind, BulletinStatus, DrillStatus, ObjetPiece, ProcedureStatus, Scenario, VersionStatus } from "./types";
+import type { Audience, AudienceProfile, BulletinKind, BulletinStatus, DocType, DrillStatus, ObjetPiece, ProcedureStatus, ReviewOutcome, ReviewState, Scenario, VersionStatus } from "./types";
 
 /* ─── Libellés ────────────────────────────────────────────────────────── */
 
 export const STATUT_PROCEDURE: Record<ProcedureStatus, string> = { draft: "En rédaction", published: "En vigueur", archived: "Archivée" };
 
-export const STATUT_VERSION: Record<VersionStatus, string> = { draft: "Brouillon", published: "En vigueur", superseded: "Remplacée" };
+export const STATUT_VERSION: Record<VersionStatus, string> = { draft: "Brouillon", submitted: "En approbation", published: "En vigueur", superseded: "Remplacée" };
+
+/** Type d'un document du référentiel : libellé, pluriel des listes, article indéfini (« une politique », « un formulaire »). */
+export const TYPE_DOCUMENT: Record<DocType, { label: string; pluriel: string; un: string }> = {
+  policy: { label: "Politique", pluriel: "Politiques", un: "une politique" },
+  procedure: { label: "Procédure", pluriel: "Procédures", un: "une procédure" },
+  work_instruction: { label: "Instruction de travail", pluriel: "Instructions de travail", un: "une instruction de travail" },
+  instruction: { label: "Consigne", pluriel: "Consignes", un: "une consigne" },
+  form: { label: "Formulaire ou modèle", pluriel: "Formulaires et modèles", un: "un formulaire" },
+};
+export const ORDRE_TYPES = Object.keys(TYPE_DOCUMENT) as DocType[];
+
+/** Types du document de rattachement permis (DOC_PARENT_TYPES du noyau) : une procédure met en œuvre une politique… */
+export const RATTACHEMENTS: Record<DocType, DocType[]> = {
+  policy: [],
+  procedure: ["policy"],
+  work_instruction: ["procedure"],
+  instruction: ["procedure", "work_instruction"],
+  form: ["procedure", "work_instruction"],
+};
+
+/** Préfixe de la référence proposée par le noyau selon le type. */
+export const PREFIXE_REFERENCE: Record<DocType, string> = { policy: "POL-HSE-", procedure: "PR-HSE-", work_instruction: "IT-HSE-", instruction: "CS-HSE-", form: "FO-HSE-" };
+
+/** État de la revue périodique, en tampon. */
+export const ETAT_REVUE: Record<ReviewState, string> = { overdue: "Revue en retard", due: "Revue à faire", scheduled: "Revue à venir" };
+
+export const CONCLUSION_REVUE: Record<ReviewOutcome, string> = { renewed: "Reconduit sans changement", revised: "Nouvelle version à rédiger" };
 
 /** Nature d'une alerte : libellé, pluriel des listes, genre (le statut s'y accorde). */
 export const NATURE_ALERTE: Record<BulletinKind, { label: string; pluriel: string; feminin: boolean }> = {
@@ -90,6 +117,7 @@ const TON_DOCUMENTS: Readonly<Record<string, TonEtat>> = {
   "À lire": "warn",
   "Brouillon à publier": "warn",
   "Document à joindre": "warn",
+  "Texte à rédiger": "warn",
   "Noms à retirer": "danger",
   "En rédaction": "neutral",
   Remplacée: "neutral",
@@ -98,6 +126,12 @@ const TON_DOCUMENTS: Readonly<Record<string, TonEtat>> = {
   Archivé: "neutral",
   "Sans exercice prévu": "warn",
   Retiré: "neutral",
+  "En approbation": "warn",
+  "À approuver": "warn",
+  "Revue en retard": "danger",
+  "Revue à faire": "warn",
+  "Revue à venir": "neutral",
+  Refusée: "danger",
 };
 
 /** Tampon d'un état de l'écran : le ton des tables communes s'il y figure, sinon celui de TON_DOCUMENTS. */
@@ -119,6 +153,11 @@ export interface Droits {
   pret: boolean;
   /** Rédiger, publier, relancer, archiver ; planifier et déclarer les exercices ; tenir l'annuaire (hsseq, jamais l'auditeur). */
   ecriture: boolean;
+  /**
+   * Approuver les politiques (direction hors administration) : l'écran propose le filtre « À approuver » ;
+   * les gestes de chaque version suivent `version_actions` du noyau (quatre yeux compris).
+   */
+  approbation: boolean;
   documents: boolean;
   urgences: boolean;
   /** Le compte peut être visé par une procédure ou une alerte (onglet « À lire ») : pas l'auditeur seul. */
@@ -135,6 +174,7 @@ export function useDroits(): Droits {
   return {
     pret: Boolean(data),
     ecriture: profils.includes("hsseq") && !auditeur,
+    approbation: !auditeur && (profils.includes("hsseq") || (profils.includes("direction") && !profils.includes("admin"))),
     documents: profils.some((p) => LECTURE_DOCUMENTS.includes(p)),
     urgences: profils.some((p) => LECTURE_URGENCES.includes(p)),
     aLire: profils.some((p) => VISES.includes(p)),
@@ -231,6 +271,15 @@ const CHAMP: Readonly<Record<string, string>> = {
   year: "année",
   sort: "tri",
   company_id: "société",
+  doc_type: "type de document",
+  parent_id: "document de rattachement",
+  review_months: "périodicité de revue",
+  next_review_date: "prochaine revue",
+  objectives: "objectifs",
+  outcome: "conclusion de la revue",
+  comment: "constats de la revue",
+  reviewed_on: "date de la revue",
+  due_date: "échéance de l'action",
 };
 
 /** Refus écrits par l'écran, plus précis que le message commun. */
@@ -238,6 +287,9 @@ const REFUS: Partial<Record<string, string>> = {
   document_missing: `Joignez d'abord le document de la version (PDF ou photo)${INSECABLE}: les comptes visés le lisent avant d'en accuser lecture.`,
   participants_required: `Indiquez les participants de l'exercice${INSECABLE}: leur nombre, ou les comptes présents.`,
   reason_required: `Le motif est obligatoire${INSECABLE}: il est journalisé avec la décision.`,
+  text_missing: `Rédigez d'abord le texte de la version${INSECABLE}: une politique se lit et s'affiche dans son texte.`,
+  direction_approval_required: `Une politique entre en vigueur approuvée par la direction${INSECABLE}: soumettez-la à son approbation.`,
+  four_eyes: `Quatre yeux${INSECABLE}: une autre personne que le rédacteur, et que celle qui a soumis la version, l'approuve.`,
 };
 
 /**
@@ -295,6 +347,13 @@ export const OPERATION: Readonly<Record<string, string>> = {
   cancel: "Annulation",
   reopen: "Réouverture",
   attachment_removed: "Pièce retirée",
+  submit: "Soumission à l'approbation",
+  approve: "Approbation",
+  reject: "Refus de l'approbateur",
+  withdraw: "Retrait de l'approbation",
+  review: "Revue périodique",
+  review_action: "Action tirée de la revue",
+  notify: "Notification",
 };
 
 /** Champs journalisés, en clair. */
@@ -325,6 +384,10 @@ export const CHAMP_JOURNAL: Readonly<Record<string, string>> = {
   duration_minutes: "durée",
   debrief: "bilan",
   cancel_reason: "motif de l'annulation",
+  doc_type: "type",
+  parent_id: "document de rattachement",
+  review_months: "périodicité de revue",
+  next_review_date: "prochaine revue",
 };
 
 /**
@@ -347,4 +410,8 @@ export const VALEURS_MONTREES: ReadonlySet<string> = new Set([
   "performed_date",
   "participants_count",
   "duration_minutes",
+  "doc_type",
+  "parent_id",
+  "review_months",
+  "next_review_date",
 ]);

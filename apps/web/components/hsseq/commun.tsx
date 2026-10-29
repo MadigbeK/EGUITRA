@@ -433,6 +433,7 @@ export const ORIGINE_ACTION: Record<ActionOrigin, string> = {
   review: "Revue de direction",
   complaint: "Réclamation client",
   drill: "Exercice d'urgence",
+  document: "Document HSE",
 };
 
 /** Hiérarchie des mesures, de la plus forte (élimination) à la plus faible (EPI). */

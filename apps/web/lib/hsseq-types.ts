@@ -438,8 +438,11 @@ export interface EventClassification {
 
 /* ─── Actions (§9.2) ──────────────────────────────────────────────────── */
 
-/** Origine d'une action ; « complaint » (réclamation client) et « drill » (exercice d'urgence) au lot 3. */
-export type ActionOrigin = "event" | "audit" | "check" | "risk" | "review" | "complaint" | "drill";
+/**
+ * Origine d'une action ; « complaint » (réclamation client) et « drill » (exercice d'urgence) au lot 3 ;
+ * « document » (document HSE, le plus souvent sa revue périodique ; origin_id : le document) le 29/10.
+ */
+export type ActionOrigin = "event" | "audit" | "check" | "risk" | "review" | "complaint" | "drill" | "document";
 
 /** Hiérarchie des mesures, de la plus forte à la plus faible. */
 export type ControlLevel = "elimination" | "substitution" | "engineering" | "administrative" | "ppe";
@@ -1134,8 +1137,11 @@ export interface Cockpit {
   };
   /** Plans d'urgence en vigueur, exercices en retard et des 30 prochains jours. */
   emergency: { plans_active: number; overdue: number; upcoming: number };
-  /** Procédures en vigueur et accusés de lecture attendus et reçus. */
-  documents: { procedures_published: number; targets: number; read: number; read_rate: number | null };
+  /**
+   * Documents HSE en vigueur (politiques, procédures…) et accusés de lecture attendus et reçus ; revues de
+   * documents échues et versions qui attendent l'approbation (29/10).
+   */
+  documents: { procedures_published: number; targets: number; read: number; read_rate: number | null; reviews_overdue?: number; pending_approval?: number };
   /** Violations de conduite du mois, par type, et dernier import. */
   telematics: { violations: number; by_type: Record<ViolationType, number>; last_import_at: string | null };
   computed_at: string;
@@ -1243,6 +1249,15 @@ export interface HsseqSettings {
   costly_action_threshold: number;
   check_window_hours: number;
   breath_test_window_hours: number;
+  /** Politiques et procédures (29/10) : revue périodique par type (mois), alerte avant l'échéance (jours). */
+  review_months_policy: number;
+  review_months_procedure: number;
+  review_months_work_instruction: number;
+  review_months_instruction: number;
+  review_months_form: number;
+  document_review_alert_days: number;
+  /** Procédures et autres documents approuvés par un autre Responsable HSSEQ que leurs rédacteurs. */
+  document_four_eyes: boolean;
   /** Destinataire des notifications de la direction ; nul : les comptes Direction générale de la société. */
   director: Ref | null;
   criticality_thresholds: CriticalityThreshold[];

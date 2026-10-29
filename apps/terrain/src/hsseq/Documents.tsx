@@ -12,10 +12,15 @@ import { espaces, mesures, textes } from "../ui/terrain";
 import { Module, useTerrain } from "../ui/useTerrain";
 import type { Lecture } from "./envoi";
 import { documentSansFichier, ouvrirDocument } from "./ouvrirDocument";
-import type { MyBulletin, MyDocuments, MyProcedure } from "./types";
+import type { MyBulletin, MyDocuments, MyProcedure, TypeDocument } from "./types";
 import { useMesDocuments } from "./useHsseq";
 
 const NATURE_ALERTE: Record<MyBulletin["kind"], string> = { flash_alert: "Alerte flash", lesson: "Retour d'expérience" };
+const TYPE_DOCUMENT: Record<TypeDocument, string> = {
+  policy: "Politique", procedure: "Procédure", work_instruction: "Instruction de travail", instruction: "Consigne", form: "Formulaire",
+};
+/** Type du document, procédure à défaut (bureau antérieur au 29/10). */
+const typeDe = (p: MyProcedure): string => TYPE_DOCUMENT[p.doc_type ?? "procedure"];
 const DOMAINE: Record<NonNullable<MyProcedure["domain"]>, string> = {
   safety: "Sécurité", health: "Santé", security: "Sûreté", environment: "Environnement", quality: "Qualité",
 };
@@ -29,9 +34,10 @@ function taille(octets: number | null): string {
 }
 
 /**
- * Documents à lire (contrat HSSEQ, lot 3) : procédures en vigueur et alertes publiées qui visent le
- * compte. La lecture s'accuse d'un geste, avec l'heure de lecture sur l'appareil, même sans réseau :
- * l'accusé part par la file d'envoi. Une procédure se lit dans son document, ouvert d'abord.
+ * Documents à lire (contrat HSSEQ, lot 3) : politiques et procédures en vigueur et alertes publiées qui
+ * visent le compte. La lecture s'accuse d'un geste, avec l'heure de lecture sur l'appareil, même sans
+ * réseau : l'accusé part par la file d'envoi. Une procédure se lit dans son document, ouvert d'abord ;
+ * une politique ou une consigne, dans son texte (et ses objectifs), affiché sur place.
  */
 export function Documents({ user }: { user: Utilisateur }) {
   return (
@@ -119,7 +125,7 @@ function Contenu({ user }: { user: Utilisateur }) {
   const entete = (
     <EnTete
       titre="Documents"
-      sousTitre={procedure ? procedure.code : bulletin ? NATURE_ALERTE[bulletin.kind] : "Procédures et alertes à lire"}
+      sousTitre={procedure ? `${typeDe(procedure)} ${procedure.code}` : bulletin ? NATURE_ALERTE[bulletin.kind] : "Politiques, procédures et alertes à lire"}
       gauche={(
         <Pressable
           accessibilityRole="button"
@@ -199,6 +205,7 @@ function Contenu({ user }: { user: Utilisateur }) {
           {retour ? <Bandeau ton={retour.ton} texte={retour.texte} onFermer={() => setRetour(null)} /> : null}
           <Feuille>
             <View style={styles.ligne}>
+              <Tampon mot={typeDe(procedure)} ton="neutre" />
               {procedure.domain ? <Tampon mot={DOMAINE[procedure.domain]} ton="neutre" /> : null}
               {tampon("procedure", procedure)}
             </View>
@@ -206,11 +213,30 @@ function Contenu({ user }: { user: Utilisateur }) {
             <Texte variante="service" ton="second">
               {[procedure.code, `version ${procedure.version.version}`, procedure.version.effective_date ? `en vigueur le ${fmtDate(procedure.version.effective_date)}` : null].filter(Boolean).join(", ")}
             </Texte>
+            {procedure.version.approved_by ? (
+              <Texte variante="service" ton="second">
+                {`Approuvée par ${procedure.version.approved_by.name}${procedure.doc_type === "policy" ? " pour la direction" : ""}${procedure.version.approved_at ? `, le ${fmtDate(procedure.version.approved_at)}` : ""}.`}
+              </Texte>
+            ) : null}
           </Feuille>
           {procedure.version.change_summary ? (
             <Feuille>
               <Texte variante="libelle">Ce qui change dans cette version</Texte>
               <Texte>{procedure.version.change_summary}</Texte>
+            </Feuille>
+          ) : null}
+          {procedure.body ? (
+            <Feuille>
+              <Texte variante="libelle">{procedure.doc_type === "policy" ? "Engagement de la direction" : "Texte"}</Texte>
+              <Texte>{procedure.body}</Texte>
+            </Feuille>
+          ) : null}
+          {procedure.objectives?.length ? (
+            <Feuille>
+              <Texte variante="libelle">Nos objectifs</Texte>
+              {procedure.objectives.map((o, i) => (
+                <Texte key={i}>{`• ${o.label}${o.indicator_label && o.target !== null ? ` (${o.indicator_label} : cible ${String(o.target).replace(".", ",")})` : ""}`}</Texte>
+              ))}
             </Feuille>
           ) : null}
           {procedure.document.length ? (
@@ -270,15 +296,15 @@ function Contenu({ user }: { user: Utilisateur }) {
             </Feuille>
           </Pressable>
         ))}
-        {liste.procedures.length ? <Texte variante="libelle">Procédures</Texte> : null}
+        {liste.procedures.length ? <Texte variante="libelle">Politiques et procédures</Texte> : null}
         {liste.procedures.map((p) => (
-          <Pressable key={`p-${p.id}`} accessibilityRole="button" accessibilityLabel={`Procédure ${p.code} : ${p.title}${estLu("procedure", p) ? ", lue" : ", à lire"}`} onPress={() => { setRetour(null); setChoisi({ objet: "procedure", id: p.id }); }} android_ripple={{ color: c.voile }}>
+          <Pressable key={`p-${p.id}`} accessibilityRole="button" accessibilityLabel={`${typeDe(p)} ${p.code} : ${p.title}${estLu("procedure", p) ? ", lue" : ", à lire"}`} onPress={() => { setRetour(null); setChoisi({ objet: "procedure", id: p.id }); }} android_ripple={{ color: c.voile }}>
             <Feuille>
               <View style={styles.ligne}>
                 <Texte variante="texteDemi" style={{ flex: 1 }}>{p.title}</Texte>
                 {tampon("procedure", p)}
               </View>
-              <Texte variante="service" ton="second">{[p.code, `version ${p.version.version}`, p.domain ? DOMAINE[p.domain] : null].filter(Boolean).join(", ")}</Texte>
+              <Texte variante="service" ton="second">{[typeDe(p), p.code, `version ${p.version.version}`, p.domain ? DOMAINE[p.domain] : null].filter(Boolean).join(", ")}</Texte>
             </Feuille>
           </Pressable>
         ))}

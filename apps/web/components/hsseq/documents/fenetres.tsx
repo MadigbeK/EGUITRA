@@ -9,13 +9,27 @@
  */
 
 import { useState, type ReactNode } from "react";
+import { Plus } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Segmented, Select, Textarea, cx } from "@/components/ui";
-import { DOMAINE, NIVEAU_MAITRISE, texteErreur } from "@/components/hsseq/commun";
-import { aujourdhui, decaler, useReferentiels } from "@/components/hsseq/actions/outils";
+import { DOMAINE, INDICATEUR, NIVEAU_MAITRISE, texteErreur } from "@/components/hsseq/commun";
+import { aujourdhui, decaler, requete, useReferentiels } from "@/components/hsseq/actions/outils";
 import { apiSend, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDate, fmtGNF, pluriel } from "@/lib/format";
-import type { ControlLevel, Domain, EventLine, HsseqAction, Page, Ref } from "@/lib/hsseq-types";
-import { NATURE_ALERTE, ORDRE_PUBLIC, ORDRE_SCENARIOS, PUBLIC, SCENARIO, messageDocument, numeroLisible } from "./libelles";
+import type { ControlLevel, Domain, EventLine, HsseqAction, IndicatorCode, Page, Ref } from "@/lib/hsseq-types";
+import {
+  CONCLUSION_REVUE,
+  NATURE_ALERTE,
+  ORDRE_PUBLIC,
+  ORDRE_SCENARIOS,
+  ORDRE_TYPES,
+  PREFIXE_REFERENCE,
+  PUBLIC,
+  RATTACHEMENTS,
+  SCENARIO,
+  TYPE_DOCUMENT,
+  messageDocument,
+  numeroLisible,
+} from "./libelles";
 import type {
   AudienceProfile,
   Bulletin,
@@ -23,17 +37,24 @@ import type {
   BulletinKind,
   ContactInput,
   CrisisContact,
+  DocRef,
+  DocType,
   Drill,
   DrillInput,
   EmergencyPlan,
   NewDrillAction,
   NewProcedure,
+  Objective,
+  ObjectiveInput,
   PerformInput,
   PlanInput,
   PlanLine,
   Procedure,
   ProcedureInput,
+  ProcedureLine,
   ProcedureVersion,
+  ReviewInput,
+  ReviewOutcome,
   Scenario,
   VersionInput,
 } from "./types";
@@ -162,65 +183,167 @@ function entier(texte: string): number | null {
   return /^\d+$/.test(t) ? Number(t) : Number.NaN;
 }
 
-/* ─── Procédures ──────────────────────────────────────────────────────── */
+/* ─── Politiques et procédures ────────────────────────────────────────── */
+
+/** Objectif en cours de saisie : la cible reste un texte tant qu'elle n'est pas envoyée. */
+interface ObjectifSaisi {
+  label: string;
+  indicator_code: IndicatorCode | "";
+  target: string;
+}
+
+const ORDRE_INDICATEURS = Object.keys(INDICATEUR) as IndicatorCode[];
+
+function versObjectifs(objectifs: Objective[] | undefined): ObjectifSaisi[] {
+  return (objectifs ?? []).map((o) => ({ label: o.label, indicator_code: o.indicator_code ?? "", target: o.target === null || o.target === undefined ? "" : String(o.target).replace(".", ",") }));
+}
+
+/** Nombre saisi (virgule acceptée) : nul si vide, NaN s'il est illisible. */
+function decimal(texte: string): number | null {
+  const t = texte.trim().replace(/\s/g, "").replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
+/** Objectifs à envoyer ; nul si l'un d'eux est incomplet (libellé manquant, cible illisible). */
+function objectifsEnvoyes(objectifs: ObjectifSaisi[]): ObjectiveInput[] | null {
+  const lignes = objectifs.filter((o) => o.label.trim() || o.indicator_code || o.target.trim());
+  if (lignes.some((o) => !o.label.trim() || Number.isNaN(decimal(o.target)))) return null;
+  return lignes.map((o) => ({ label: o.label.trim(), indicator_code: o.indicator_code || null, target: o.indicator_code ? decimal(o.target) : null }));
+}
 
 /**
- * Nouvelle procédure (avec sa première version, en brouillon) ou modification de ses champs : référence,
- * titre, domaine, objet, responsable du document, public visé. Le document de la version se joint
- * ensuite sur la fiche, avant la publication.
+ * Objectifs chiffrés d'une version (politique surtout) : un libellé, et facultativement l'indicateur du
+ * cockpit auquel il se relie et sa cible (vide : la cible des réglages). L'objectif relié se lit sur la
+ * fiche avec la valeur des douze derniers mois.
  */
-export function FenetreProcedure({ procedure, onClose, envoyer }: { procedure?: Procedure; onClose: () => void; envoyer: (corps: NewProcedure | ProcedureInput) => Promise<unknown> }) {
+function EditeurObjectifs({ objectifs, onChange }: { objectifs: ObjectifSaisi[]; onChange: (o: ObjectifSaisi[]) => void }) {
+  const maj = (i: number, champ: Partial<ObjectifSaisi>) => onChange(objectifs.map((o, j) => (j === i ? { ...o, ...champ } : o)));
+  return (
+    <Groupe legende="Objectifs" aide="Facultatifs. Reliez un objectif à un indicateur du cockpit pour lire sa valeur sur douze mois ; sans cible saisie, celle des réglages." className="md:col-span-2">
+      <ul className="space-y-2.5">
+        {objectifs.map((o, i) => (
+          <li key={i} className="grid grid-cols-1 gap-2 rounded-[12px] border border-line p-3 sm:grid-cols-[minmax(0,1fr)_14rem_7rem_auto] sm:items-end">
+            <Field label={`Objectif ${i + 1}`} error={!o.label.trim() && (o.indicator_code || o.target.trim()) ? "Libellé de l'objectif." : undefined}>
+              <Input value={o.label} onChange={(e) => maj(i, { label: e.target.value })} placeholder="Zéro accident du travail avec arrêt" maxLength={300} />
+            </Field>
+            <Field label="Indicateur du cockpit">
+              <Select value={o.indicator_code} onChange={(e) => maj(i, { indicator_code: e.target.value as IndicatorCode | "" })} placeholder="Aucun" options={ORDRE_INDICATEURS.map((c) => ({ value: c, label: INDICATEUR[c] }))} />
+            </Field>
+            <Field label="Cible" error={Number.isNaN(decimal(o.target)) ? "Nombre attendu." : undefined}>
+              <Input inputMode="decimal" value={o.target} disabled={!o.indicator_code} onChange={(e) => maj(i, { target: e.target.value })} placeholder={o.indicator_code ? "Réglages" : "–"} />
+            </Field>
+            <Button size="sm" variant="ghost" onClick={() => onChange(objectifs.filter((_o, j) => j !== i))}>
+              Retirer
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {objectifs.length < 20 && (
+        <Button size="sm" className="mt-2.5" onClick={() => onChange([...objectifs, { label: "", indicator_code: "", target: "" }])}>
+          <Plus className="h-3.5 w-3.5" /> Ajouter un objectif
+        </Button>
+      )}
+    </Groupe>
+  );
+}
+
+/** Documents auxquels un document de ce type peut se rattacher (une procédure à une politique…), hors archivés. */
+function useRattachements(type: DocType, actuel: DocRef | null, soi?: number) {
+  const permis = RATTACHEMENTS[type];
+  const { data } = useApi<Page<ProcedureLine>>(permis.length ? `/hsseq/procedures?${requete({ doc_type: permis.join(","), status: "draft,published", limit: 500 })}` : null);
+  const documents: Array<Pick<DocRef, "id" | "code" | "title" | "doc_type">> = (data?.items ?? []).filter((d) => d.id !== soi);
+  if (actuel && permis.includes(actuel.doc_type) && !documents.some((d) => d.id === actuel.id)) documents.unshift(actuel);
+  return documents;
+}
+
+/**
+ * Nouveau document (avec sa première version, en brouillon) ou modification de ses champs : type (fixé
+ * une fois une version en vigueur), référence (proposée par le noyau selon le type si elle reste vide),
+ * titre, document de rattachement, domaine, objet et domaine d'application, responsable, public visé,
+ * périodicité de revue ; à la création, la première version : numéro, date d'effet, changements, texte
+ * (l'engagement d'une politique, une consigne courte) et objectifs d'une politique. Le document d'une
+ * procédure se joint ensuite sur la fiche.
+ */
+export function FenetreProcedure({ procedure, type: typeInitial, onClose, envoyer }: { procedure?: Procedure; type?: DocType; onClose: () => void; envoyer: (corps: NewProcedure | ProcedureInput) => Promise<unknown> }) {
   const { data: ref } = useReferentiels();
   const [f, setF] = useState(() => ({
+    doc_type: procedure?.doc_type ?? typeInitial ?? ("procedure" as DocType),
     code: procedure?.code ?? "",
     title: procedure?.title ?? "",
     domain: (procedure?.domain ?? "") as Domain | "",
     description: procedure?.description ?? "",
+    parent_id: procedure?.parent ? String(procedure.parent.id) : "",
     owner_id: procedure?.owner ? String(procedure.owner.id) : "",
-    profils: procedure ? [...procedure.audience.profiles] : (["conducteur", "exploitation"] as AudienceProfile[]),
+    profils: procedure ? [...procedure.audience.profiles] : (typeInitial === "policy" ? [...ORDRE_PUBLIC] : ["conducteur", "exploitation"]) as AudienceProfile[],
     sites: procedure ? procedure.audience.sites.map((s) => s.id) : ([] as number[]),
+    review_months: procedure?.review.months ? String(procedure.review.months) : "",
     version: "1",
     effective_date: aujourdhui(),
     change_summary: "",
+    body: "",
+    objectifs: [] as ObjectifSaisi[],
   }));
   const { erreur, envoi, envoyer: lancer } = useEnvoi(onClose, procedure ? "Modification impossible." : "Création impossible.");
+  // Le type décide de l'approbation : il ne change plus une fois une version mise en vigueur.
+  const typeFige = Boolean(procedure?.versions.some((v) => v.status === "published" || v.status === "superseded"));
+  const rattachements = useRattachements(f.doc_type, procedure?.parent ?? null, procedure?.id);
   const actuel = procedure?.owner ?? null;
   const comptes = sansConducteurs(ref?.owners);
   const responsables = actuel && !comptes.some((o) => o.id === actuel.id) ? [actuel, ...comptes] : comptes;
-  const pret = Boolean(f.code.trim() && f.title.trim() && f.profils.length && (procedure || (f.version.trim() && f.effective_date)));
+  const mois = entier(f.review_months);
+  const moisValide = mois === null || (!Number.isNaN(mois) && mois >= 1 && mois <= 120);
+  const objectifs = objectifsEnvoyes(f.objectifs);
+  const politique = f.doc_type === "policy";
+  const pret = Boolean((procedure ? f.code.trim() : true) && f.title.trim() && f.profils.length && moisValide && objectifs && (procedure || (f.version.trim() && f.effective_date)));
+
+  function changerType(t: DocType) {
+    // Un rattachement qui ne convient plus au nouveau type est retiré ; une politique vise tout le personnel.
+    const parentGarde = rattachements.some((d) => String(d.id) === f.parent_id && RATTACHEMENTS[t].includes(d.doc_type));
+    setF({ ...f, doc_type: t, parent_id: parentGarde ? f.parent_id : "", profils: !procedure && t === "policy" ? [...ORDRE_PUBLIC] : f.profils });
+  }
 
   function corps(): NewProcedure | ProcedureInput {
     const domain = f.domain || null;
     const description = f.description.trim() || null;
     const owner = f.owner_id ? Number(f.owner_id) : null;
+    const parent = f.parent_id ? Number(f.parent_id) : null;
+    const months = mois ?? 0;
     if (!procedure) {
-      // Sans responsable choisi, le noyau désigne l'auteur de la procédure.
+      // Sans responsable choisi, le noyau désigne l'auteur ; sans référence, il la propose selon le type.
       return {
-        code: f.code.trim(), title: f.title.trim(), domain, description, ...(owner ? { owner_id: owner } : {}), audience_profiles: f.profils, site_ids: f.sites,
+        doc_type: f.doc_type, ...(f.code.trim() ? { code: f.code.trim() } : {}), title: f.title.trim(), domain, description, parent_id: parent,
+        ...(owner ? { owner_id: owner } : {}), audience_profiles: f.profils, site_ids: f.sites, review_months: months,
         version: f.version.trim(), effective_date: f.effective_date, change_summary: f.change_summary.trim() || null,
+        body: f.body.trim() || null, ...(objectifs?.length ? { objectives: objectifs } : {}),
       };
     }
     const c: ProcedureInput = {};
+    if (f.doc_type !== procedure.doc_type) c.doc_type = f.doc_type;
     if (f.code.trim() !== procedure.code) c.code = f.code.trim();
     if (f.title.trim() !== procedure.title) c.title = f.title.trim();
     if (domain !== procedure.domain) c.domain = domain;
     if (description !== (procedure.description ?? null)) c.description = description;
+    if (parent !== (procedure.parent?.id ?? null)) c.parent_id = parent;
     if (owner !== (procedure.owner?.id ?? null)) c.owner_id = owner;
+    if (months !== (procedure.review.months ?? 0)) c.review_months = months;
     if (!memes(f.profils, procedure.audience.profiles)) c.audience_profiles = f.profils;
     if (!memes(f.sites, procedure.audience.sites.map((s) => s.id))) c.site_ids = f.sites;
     return c;
   }
 
+  const permis = RATTACHEMENTS[f.doc_type];
   return (
     <Modal
       open
       wide
-      title={procedure ? `Modifier la procédure ${procedure.code}` : "Nouvelle procédure"}
+      title={procedure ? `Modifier ${procedure.code}` : `Nouveau document${INSECABLE}: ${TYPE_DOCUMENT[f.doc_type].label.toLocaleLowerCase("fr")}`}
       onClose={onClose}
       footer={
         <Pied
           onClose={onClose}
-          action={procedure ? "Enregistrer" : "Créer la procédure"}
+          action={procedure ? "Enregistrer" : "Créer le document"}
           envoi={envoi}
           pret={pret}
           onEnvoyer={() => {
@@ -232,27 +355,42 @@ export function FenetreProcedure({ procedure, onClose, envoyer }: { procedure?: 
       }
     >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field label="Référence">
-          <Input value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} placeholder="PR-HSE-007" maxLength={64} required />
+        <Field label="Type de document" hint={typeFige ? "Fixé : une version est déjà entrée en vigueur." : politique ? "Approuvée par la direction, revue chaque année par défaut." : "Approuvé par le Responsable HSSEQ."}>
+          <Select value={f.doc_type} disabled={typeFige} onChange={(e) => changerType(e.target.value as DocType)} options={ORDRE_TYPES.map((t) => ({ value: t, label: TYPE_DOCUMENT[t].label }))} />
         </Field>
+        <Field label="Référence" hint={procedure ? undefined : `Vide : la suivante des ${TYPE_DOCUMENT[f.doc_type].pluriel.toLocaleLowerCase("fr")} (${PREFIXE_REFERENCE[f.doc_type]}001…).`}>
+          <Input value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} placeholder={`${PREFIXE_REFERENCE[f.doc_type]}…`} maxLength={64} required={Boolean(procedure)} />
+        </Field>
+        <Field label="Titre" className="md:col-span-2">
+          <Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder={politique ? "Politique santé, sécurité et environnement" : "Dépotage d'une citerne chez le client"} maxLength={300} required />
+        </Field>
+        {permis.length > 0 && (
+          <Field label={f.doc_type === "procedure" ? "Politique mise en œuvre" : "Document de rattachement"} hint={`Facultatif${INSECABLE}: ${permis.map((t) => TYPE_DOCUMENT[t].un).join(" ou ")}.`}>
+            <Select value={f.parent_id} onChange={(e) => setF({ ...f, parent_id: e.target.value })} placeholder="Aucun" options={rattachements.map((d) => ({ value: d.id, label: `${d.code} ${d.title}` }))} />
+          </Field>
+        )}
         <Field label="Domaine">
           <Select value={f.domain} onChange={(e) => setF({ ...f, domain: e.target.value as Domain | "" })} placeholder="Non précisé" options={(Object.keys(DOMAINE) as Domain[]).map((d) => ({ value: d, label: DOMAINE[d] }))} />
         </Field>
-        <Field label="Titre" className="md:col-span-2">
-          <Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Dépotage d'une citerne chez le client" maxLength={300} required />
-        </Field>
         <Field label="Objet et domaine d'application" className="md:col-span-2">
-          <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Opérations couvertes, du début à la fin, et qui les applique" maxLength={4000} />
+          <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder={politique ? "Activités, sites et personnes couverts par l'engagement (salariés, sous-traitants…)" : "Opérations couvertes, du début à la fin, et qui les applique"} maxLength={4000} />
         </Field>
         <ChoixPublic profils={f.profils} sites={f.sites} onProfils={(p) => setF({ ...f, profils: p })} onSites={(s) => setF({ ...f, sites: s })} />
-        <Field label="Responsable du document" hint="Il tient la procédure à jour et en prépare les versions.">
+        <Field label="Responsable du document" hint="Il tient le document à jour, en prépare les versions et est prévenu de sa revue.">
           <Select value={f.owner_id} onChange={(e) => setF({ ...f, owner_id: e.target.value })} placeholder={procedure ? "Aucun responsable" : "Vous-même"} options={responsables.map((o) => ({ value: o.id, label: o.name }))} />
+        </Field>
+        <Field label="Revue tous les (mois)" hint={procedure ? `Vide : la périodicité des réglages (aujourd'hui ${procedure.review.period_months} mois).` : "Vide : la périodicité des réglages pour ce type."} error={moisValide ? undefined : "De 1 à 120 mois."}>
+          <Input inputMode="numeric" value={f.review_months} onChange={(e) => setF({ ...f, review_months: e.target.value })} placeholder={politique ? "12" : "Réglages"} />
         </Field>
         {!procedure && (
           <>
             <div className="md:col-span-2">
               <p className="m-0 border-t border-line pt-4 text-[13px] font-semibold text-ink">Première version</p>
-              <p className="m-0 mt-1 text-[12.5px] leading-snug text-muted">Elle reste en brouillon&nbsp;: joignez son document sur la fiche, puis publiez-la&nbsp;; sa lecture est alors demandée aux comptes visés.</p>
+              <p className="m-0 mt-1 text-[12.5px] leading-snug text-muted">
+                {politique
+                  ? `Elle reste en brouillon${INSECABLE}: soumettez-la à l'approbation de la direction, qui la signe${INSECABLE}; sa lecture est ensuite demandée aux comptes visés.`
+                  : `Elle reste en brouillon${INSECABLE}: joignez son document sur la fiche (ou écrivez son texte), puis publiez-la ou soumettez-la${INSECABLE}; sa lecture est ensuite demandée aux comptes visés.`}
+              </p>
             </div>
             <Field label="Numéro de version">
               <Input value={f.version} onChange={(e) => setF({ ...f, version: e.target.value })} maxLength={32} required />
@@ -261,8 +399,12 @@ export function FenetreProcedure({ procedure, onClose, envoyer }: { procedure?: 
               <Input type="date" value={f.effective_date} onChange={(e) => setF({ ...f, effective_date: e.target.value })} required />
             </Field>
             <Field label="Changements apportés" className="md:col-span-2">
-              <Textarea className="min-h-[60px]" value={f.change_summary} onChange={(e) => setF({ ...f, change_summary: e.target.value })} placeholder="Première édition, ou ce qui change par rapport à la procédure précédente" maxLength={4000} />
+              <Textarea className="min-h-[60px]" value={f.change_summary} onChange={(e) => setF({ ...f, change_summary: e.target.value })} placeholder="Première édition, ou ce qui change par rapport au document précédent" maxLength={4000} />
             </Field>
+            <Field label={politique ? "Engagement de la direction" : "Texte (facultatif)"} hint={politique ? "Le texte signé par la direction, affiché sur les sites et lu par les comptes visés." : "Une consigne courte se lit dans son texte ; une procédure, dans son document joint."} className="md:col-span-2">
+              <Textarea className="min-h-[140px]" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} placeholder={politique ? "La direction d'EGUITRA GROUP s'engage à…" : "Moteur coupé, cales en place…"} maxLength={20000} />
+            </Field>
+            {politique && <EditeurObjectifs objectifs={f.objectifs} onChange={(o) => setF({ ...f, objectifs: o })} />}
           </>
         )}
         <div className="md:col-span-2">
@@ -279,31 +421,48 @@ function versionSuivante(actuelle: string | undefined): string {
 }
 
 /**
- * Nouvelle version d'une procédure (une seule en brouillon à la fois), ou modification du brouillon :
- * numéro, date d'effet, changements apportés. Le document se joint ensuite sur la fiche.
+ * Nouvelle version d'un document (une seule en préparation à la fois), ou modification du brouillon :
+ * numéro, date d'effet, changements apportés, texte et objectifs (repris de la version en vigueur à la
+ * création, sauf s'ils sont modifiés). Le document se joint ensuite sur la fiche.
  */
 export function FenetreVersion({ procedure, version, onClose, envoyer }: { procedure: Procedure; version?: ProcedureVersion; onClose: () => void; envoyer: (corps: VersionInput) => Promise<unknown> }) {
+  const base = version ?? procedure.current_version;
   const [f, setF] = useState(() => ({
     version: version?.version ?? versionSuivante(procedure.current_version?.version),
     effective_date: version?.effective_date ?? aujourdhui(),
     change_summary: version?.change_summary ?? "",
+    body: base?.body ?? "",
+    objectifs: versObjectifs(base?.objectives),
   }));
   const { erreur, envoi, envoyer: lancer } = useEnvoi(onClose, "Enregistrement impossible.");
-  const pret = Boolean(f.version.trim() && f.effective_date);
+  const politique = procedure.doc_type === "policy";
+  const objectifs = objectifsEnvoyes(f.objectifs);
+  const initiaux = objectifsEnvoyes(versObjectifs(base?.objectives));
+  const pret = Boolean(f.version.trim() && f.effective_date && objectifs);
 
   function corps(): VersionInput {
     const v: VersionInput = { version: f.version.trim(), effective_date: f.effective_date, change_summary: f.change_summary.trim() || null };
-    if (!version) return v;
+    const body = f.body.trim() || null;
+    const memesObjectifs = JSON.stringify(objectifs) === JSON.stringify(initiaux);
+    if (!version) {
+      // Texte et objectifs inchangés : le noyau reprend ceux de la version en vigueur.
+      if (body !== (base?.body ?? null)) v.body = body;
+      if (!memesObjectifs && objectifs) v.objectives = objectifs;
+      return v;
+    }
     const c: VersionInput = {};
     if (v.version !== version.version) c.version = v.version;
     if (v.effective_date !== version.effective_date) c.effective_date = v.effective_date;
     if (v.change_summary !== (version.change_summary ?? null)) c.change_summary = v.change_summary;
+    if (body !== (version.body ?? null)) c.body = body;
+    if (!memesObjectifs && objectifs) c.objectives = objectifs;
     return c;
   }
 
   return (
     <Modal
       open
+      wide={politique || Boolean(f.body)}
       title={version ? `Version ${version.version} de ${procedure.code}` : `Nouvelle version de ${procedure.code}`}
       onClose={onClose}
       footer={
@@ -320,24 +479,120 @@ export function FenetreVersion({ procedure, version, onClose, envoyer }: { proce
         />
       }
     >
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {!version && procedure.current_version && (
-          <p className="m-0 rounded-[10px] bg-panel-2 px-3 py-2 text-[13px] leading-snug text-ink-2">
-            Version {procedure.current_version.version} en vigueur depuis le {fmtDate(procedure.current_version.effective_date)}. La nouvelle version reste en brouillon jusqu&apos;à sa publication, qui demande de nouveau la lecture aux comptes visés.
+          <p className="m-0 rounded-[10px] bg-panel-2 px-3 py-2 text-[13px] leading-snug text-ink-2 md:col-span-2">
+            Version {procedure.current_version.version} en vigueur depuis le {fmtDate(procedure.current_version.effective_date)}. La nouvelle version reste en préparation jusqu&apos;à sa mise en vigueur{politique ? ", après l'approbation de la direction" : ""}, qui demande de nouveau la lecture aux comptes visés.
           </p>
         )}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Numéro de version">
-            <Input value={f.version} onChange={(e) => setF({ ...f, version: e.target.value })} maxLength={32} required />
-          </Field>
-          <Field label="Date d'effet">
-            <Input type="date" value={f.effective_date} onChange={(e) => setF({ ...f, effective_date: e.target.value })} required />
-          </Field>
-        </div>
-        <Field label="Changements apportés" hint="Lus par les comptes visés avant le document : dites ce qui change pour eux.">
+        <Field label="Numéro de version">
+          <Input value={f.version} onChange={(e) => setF({ ...f, version: e.target.value })} maxLength={32} required />
+        </Field>
+        <Field label="Date d'effet">
+          <Input type="date" value={f.effective_date} onChange={(e) => setF({ ...f, effective_date: e.target.value })} required />
+        </Field>
+        <Field label="Changements apportés" hint="Lus par les comptes visés avant le document : dites ce qui change pour eux." className="md:col-span-2">
           <Textarea value={f.change_summary} onChange={(e) => setF({ ...f, change_summary: e.target.value })} placeholder="Ce qui change par rapport à la version en vigueur, et pourquoi" maxLength={4000} />
         </Field>
-        <ErreurFenetre texte={erreur} />
+        <Field label={politique ? "Engagement de la direction" : "Texte (facultatif)"} hint={politique ? "Le texte signé par la direction, affiché sur les sites." : "Une consigne courte se lit dans son texte ; une procédure, dans son document joint."} className="md:col-span-2">
+          <Textarea className="min-h-[140px]" value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} maxLength={20000} />
+        </Field>
+        {(politique || f.objectifs.length > 0) && <EditeurObjectifs objectifs={f.objectifs} onChange={(o) => setF({ ...f, objectifs: o })} />}
+        <div className="md:col-span-2">
+          <ErreurFenetre texte={erreur} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Revue périodique d'un document en vigueur : conclusion (reconduit sans changement, avec sa prochaine
+ * revue ; ou nouvelle version à rédiger, préparée en brouillon depuis la version en vigueur), constats,
+ * date ; et, si la revue le demande, l'action du plan d'actions qui en découle (origine « document HSE »).
+ */
+export function FenetreRevue({ procedure, onClose, envoyer }: { procedure: Procedure; onClose: () => void; envoyer: (corps: ReviewInput) => Promise<unknown> }) {
+  const { data: ref } = useReferentiels();
+  const [f, setF] = useState(() => ({
+    outcome: "renewed" as ReviewOutcome,
+    comment: "",
+    reviewed_on: aujourdhui(),
+    next_review_date: "",
+    version: versionSuivante(procedure.current_version?.version),
+    action: false,
+    description: "",
+    owner_id: "",
+    due_date: decaler(aujourdhui(), 30),
+    expected_evidence: "",
+  }));
+  const { erreur, envoi, envoyer: lancer } = useEnvoi(onClose, "Revue non enregistrée.");
+  const brouillon = procedure.draft_version;
+  const prochaineValide = !f.next_review_date || f.next_review_date > aujourdhui();
+  const actionPrete = !f.action || Boolean(f.description.trim() && f.owner_id && f.due_date);
+  const pret = Boolean(f.comment.trim() && f.reviewed_on && f.reviewed_on <= aujourdhui() && prochaineValide && actionPrete);
+
+  function corps(): ReviewInput {
+    return {
+      outcome: f.outcome,
+      comment: f.comment.trim(),
+      reviewed_on: f.reviewed_on,
+      ...(f.outcome === "renewed" && f.next_review_date ? { next_review_date: f.next_review_date } : {}),
+      ...(f.outcome === "revised" && !brouillon && f.version.trim() ? { version: f.version.trim() } : {}),
+      ...(f.action ? { action: { description: f.description.trim(), owner_id: Number(f.owner_id), due_date: f.due_date, expected_evidence: f.expected_evidence.trim() || null } } : {}),
+    };
+  }
+
+  return (
+    <Modal open wide title={`Revue de ${procedure.code}`} onClose={onClose} footer={<Pied onClose={onClose} action="Enregistrer la revue" envoi={envoi} pret={pret} onEnvoyer={() => void lancer(() => envoyer(corps()))} />}>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <p className="m-0 rounded-[10px] bg-panel-2 px-3 py-2 text-[13px] leading-snug text-ink-2 md:col-span-2">
+          {procedure.review.next_review_date ? `Revue prévue le ${fmtDate(procedure.review.next_review_date)}, ` : ""}
+          {`tous les ${procedure.review.period_months} mois. Version ${procedure.current_version?.version ?? ""} en vigueur depuis le ${fmtDate(procedure.current_version?.effective_date)}.`}
+        </p>
+        <Groupe legende="Conclusion" className="md:col-span-2">
+          <Segmented<ReviewOutcome> label="Conclusion de la revue" value={f.outcome} onChange={(o) => setF({ ...f, outcome: o })} options={[{ key: "renewed", label: CONCLUSION_REVUE.renewed }, { key: "revised", label: CONCLUSION_REVUE.revised }]} />
+        </Groupe>
+        <Field label="Revue le">
+          <Input type="date" max={aujourdhui()} value={f.reviewed_on} onChange={(e) => setF({ ...f, reviewed_on: e.target.value })} required />
+        </Field>
+        {f.outcome === "renewed" ? (
+          <Field label="Prochaine revue le" hint={`Vide : dans ${procedure.review.period_months} mois.`} error={prochaineValide ? undefined : "Postérieure à aujourd'hui."}>
+            <Input type="date" min={decaler(aujourdhui(), 1)} value={f.next_review_date} onChange={(e) => setF({ ...f, next_review_date: e.target.value })} />
+          </Field>
+        ) : brouillon ? (
+          <p className="m-0 self-end text-[12.5px] leading-snug text-muted">{`La version ${brouillon.version}, déjà en préparation, porte la révision.`}</p>
+        ) : (
+          <Field label="Numéro de la nouvelle version" hint="Préparée en brouillon depuis la version en vigueur ; la prochaine revue se fixe à sa mise en vigueur.">
+            <Input value={f.version} onChange={(e) => setF({ ...f, version: e.target.value })} maxLength={32} />
+          </Field>
+        )}
+        <Field label="Constats et conclusion" hint="Adéquation du document aux activités, aux exigences et aux retours du terrain." className="md:col-span-2">
+          <Textarea value={f.comment} onChange={(e) => setF({ ...f, comment: e.target.value })} placeholder="Ce qui a été revu, ce qui reste adapté, ce qui doit changer" maxLength={4000} />
+        </Field>
+        <div className="md:col-span-2">
+          <Case coche={f.action} onChange={(c) => setF({ ...f, action: c })}>
+            Tirer une action du plan d&apos;actions
+          </Case>
+        </div>
+        {f.action && (
+          <>
+            <Field label="Action" className="md:col-span-2">
+              <Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Afficher la politique au quai de chargement, former les nouveaux arrivants…" maxLength={4000} />
+            </Field>
+            <Field label="Responsable">
+              <Select value={f.owner_id} onChange={(e) => setF({ ...f, owner_id: e.target.value })} placeholder="À choisir" options={sansConducteurs(ref?.owners).map((o) => ({ value: o.id, label: o.name }))} />
+            </Field>
+            <Field label="Échéance">
+              <Input type="date" min={aujourdhui()} value={f.due_date} onChange={(e) => setF({ ...f, due_date: e.target.value })} required />
+            </Field>
+            <Field label="Preuve attendue" hint="L'action ne se clôt qu'avec sa preuve jointe." className="md:col-span-2">
+              <Textarea className="min-h-[60px]" value={f.expected_evidence} onChange={(e) => setF({ ...f, expected_evidence: e.target.value })} maxLength={2000} />
+            </Field>
+          </>
+        )}
+        <div className="md:col-span-2">
+          <ErreurFenetre texte={erreur} />
+        </div>
       </div>
     </Modal>
   );

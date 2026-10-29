@@ -20,8 +20,9 @@ import { Bascule } from "@/components/hsseq/actions/outils";
 import { apiDownload, apiSend, useApi } from "@/lib/api-client";
 import { INSECABLE, fmtDate, fmtDateTime, fmtInt, pluriel } from "@/lib/format";
 import type { Attachment } from "@/lib/hsseq-types";
-import { NATURE_ALERTE, TamponDocument, codeRefus, messageDocument } from "./libelles";
-import type { AcknowledgeInput, MyBulletin, MyDocuments, MyProcedure } from "./types";
+import { fmtCase } from "@/components/hsseq/cockpit/outils";
+import { NATURE_ALERTE, TYPE_DOCUMENT, TamponDocument, codeRefus, messageDocument } from "./libelles";
+import type { AcknowledgeInput, DocType, MyBulletin, MyDocuments, MyProcedure } from "./types";
 
 /** Refus d'un accusé, affiché sous le document concerné. */
 interface Refus {
@@ -63,7 +64,7 @@ export function MesDocuments({ nonLus, onNonLus }: { nonLus?: boolean; onNonLus?
   async function lireProcedure(p: MyProcedure) {
     const ok = await demanderConfirmation(`Vous confirmez avoir lu la version ${p.version.version} de «${INSECABLE}${p.title}${INSECABLE}». Votre accusé est daté et enregistré${INSECABLE}; il ne se retire pas.`, {
       titre: `Accuser lecture de ${p.code}${INSECABLE}?`,
-      action: "J'ai lu la procédure",
+      action: libelleLecture(p.doc_type),
     });
     if (ok) await accuser(`p${p.id}`, `/hsseq/procedures/${p.id}/acknowledge`, { version_id: p.version.id });
   }
@@ -126,7 +127,7 @@ export function MesDocuments({ nonLus, onNonLus }: { nonLus?: boolean; onNonLus?
       )}
 
       {procedures.length > 0 && (
-        <Card title="Procédures" padded={false}>
+        <Card title="Politiques et procédures" padded={false}>
           <ul className="divide-y divide-line/80">
             {procedures.map((p) => (
               <li key={p.id} className="px-6 py-5">
@@ -238,7 +239,19 @@ function AlerteALire({ b, occupe, refus, onLire }: { b: MyBulletin; occupe: bool
   );
 }
 
-/** Procédure en vigueur : version, ce qui change, document à télécharger, accusé de lecture. */
+/** Libellé du bouton d'accusé, accordé au type du document. */
+function libelleLecture(type: DocType): string {
+  if (type === "policy") return "J'ai lu la politique";
+  if (type === "procedure") return "J'ai lu la procédure";
+  if (type === "instruction") return "J'ai lu la consigne";
+  return "J'ai lu le document";
+}
+
+/**
+ * Document en vigueur (politique, procédure, instruction, consigne, formulaire) : version, approbation,
+ * ce qui change, texte d'une politique ou d'une consigne et ses objectifs, document à télécharger, accusé
+ * de lecture.
+ */
 function ProcedureALire({ p, occupe, refus, onLire }: { p: MyProcedure; occupe: boolean; refus: string | null; onLire: () => void }) {
   const [erreur, setErreur] = useState<string | null>(null);
   async function telecharger(d: Attachment) {
@@ -252,6 +265,7 @@ function ProcedureALire({ p, occupe, refus, onLire }: { p: MyProcedure; occupe: 
   return (
     <article>
       <Reperes lu={p.read}>
+        <Tag>{TYPE_DOCUMENT[p.doc_type]?.label ?? "Document"}</Tag>
         <span className="font-mono text-[11.5px]">{p.code}</span>
         <span>
           version {p.version.version}, en vigueur le {fmtDate(p.version.effective_date)}
@@ -259,11 +273,34 @@ function ProcedureALire({ p, occupe, refus, onLire }: { p: MyProcedure; occupe: 
         {p.domain && <Tag>{DOMAINE[p.domain]}</Tag>}
       </Reperes>
       <h3 className="m-0 mt-2 text-[15.5px] font-semibold leading-snug text-ink">{p.title}</h3>
+      {p.version.approved_by && (
+        <p className="m-0 mt-1 text-[12.5px] text-muted">{`Approuvée par ${p.version.approved_by.name}${p.doc_type === "policy" ? " pour la direction" : ""}${p.version.approved_at ? `, le ${fmtDate(p.version.approved_at)}` : ""}.`}</p>
+      )}
       {p.version.change_summary && (
         <p className="m-0 mt-1.5 whitespace-pre-line text-[13px] leading-snug text-ink-2">
           <span className="font-semibold text-ink">{`Ce qui change${INSECABLE}: `}</span>
           {p.version.change_summary}
         </p>
+      )}
+      {p.body && (!p.read || p.doc_type === "policy") && <p className="m-0 mt-3 whitespace-pre-line text-[13.5px] leading-relaxed text-ink-2">{p.body}</p>}
+      {p.body && p.read && p.doc_type !== "policy" && (
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[13px] font-semibold text-ink marker:text-muted">Relire le texte</summary>
+          <p className="m-0 mt-2 whitespace-pre-line text-[13.5px] leading-relaxed text-ink-2">{p.body}</p>
+        </details>
+      )}
+      {p.objectives.length > 0 && (
+        <div className="mt-3 rounded-[12px] bg-accent-doux px-4 py-3">
+          <p className="m-0 text-[12.5px] font-semibold text-ink">Nos objectifs</p>
+          <ul className="m-0 mt-1.5 list-disc space-y-1 pl-5 text-[13.5px] leading-snug text-ink">
+            {p.objectives.map((o, i) => (
+              <li key={i}>
+                {o.label}
+                {o.indicator_label && o.target !== null && o.unit ? <span className="text-[12.5px] text-muted">{` (${o.indicator_label}${INSECABLE}: cible ${fmtCase(o.target, o.unit)})`}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <div className="mt-3.5 flex flex-wrap items-center gap-2">
         {p.document.map((d) => (
@@ -272,8 +309,8 @@ function ProcedureALire({ p, occupe, refus, onLire }: { p: MyProcedure; occupe: 
             <span className="sr-only">{` ${d.name}, ${fmtInt(Math.max(1, Math.round(d.size / 1024)))}${INSECABLE}ko`}</span>
           </Button>
         ))}
-        {!p.document.length && <span className="text-[12.5px] text-muted">{`Document non joint${INSECABLE}: demandez-le au Responsable HSSEQ.`}</span>}
-        <Accuse lu={p.read} le={p.read_at} libelle="J'ai lu la procédure" occupe={occupe} refus={refus} onLire={onLire} />
+        {!p.document.length && !p.body && <span className="text-[12.5px] text-muted">{`Document non joint${INSECABLE}: demandez-le au Responsable HSSEQ.`}</span>}
+        <Accuse lu={p.read} le={p.read_at} libelle={libelleLecture(p.doc_type)} occupe={occupe} refus={refus} onLire={onLire} />
       </div>
       {erreur && (
         <div className="mt-3">

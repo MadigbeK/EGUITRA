@@ -193,13 +193,26 @@ export interface PieceJointe {
   url: string;
 }
 
-/** Procédure en vigueur qui vise le compte (GET /hsseq/my/documents ; noyau : my_procedure_row). */
+/** Type d'un document HSE (29/10) : politique, procédure, instruction de travail, consigne, formulaire. */
+export type TypeDocument = "policy" | "procedure" | "work_instruction" | "instruction" | "form";
+
+/**
+ * Document en vigueur qui vise le compte (GET /hsseq/my/documents ; noyau : my_procedure_row) : une
+ * politique se lit dans son texte (`body`) et ses objectifs, une procédure dans son document joint.
+ * Type, texte, objectifs et approbation : servis depuis le 29/10 (facultatifs pour un bureau plus ancien).
+ */
 export interface MyProcedure {
   id: number;
+  doc_type?: TypeDocument;
   code: string;
   title: string;
   domain: "safety" | "health" | "security" | "environment" | "quality" | null;
-  version: { id: number; version: number | string; effective_date: string | null; published_at: string | null; change_summary: string | null };
+  version: {
+    id: number; version: number | string; effective_date: string | null; published_at: string | null; change_summary: string | null;
+    approved_at?: string | null; approved_by?: { id: number; name: string } | null;
+  };
+  body?: string | null;
+  objectives?: Array<{ label: string; indicator_label: string | null; unit: string | null; target: number | null }>;
   document: PieceJointe[];
   read: boolean;
   read_at: string | null;
