@@ -201,6 +201,11 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 29 octobre 2026 : menu « Achats et ventes » (version 20261029-1050)
+
+- Le gérant ne trouvait pas les achats en recette : les écrans n'étaient que des onglets de Ventes et d'Achats et dépenses. Rubrique « Achats et ventes » ajoutée au menu de Finance (offres, commandes clients, bons de commande, catalogue, tableaux des ventes et des achats), en recette puis en production (version 20261029-1050, sauvegarde 20261029T1050 prise avant ; changement de l'application web seule).
+- Recette : compte test.achatvente (profils finance et achats, deux sociétés) pour parcourir le cahier 11 d'un seul compte ; les scénarios à deux personnes gardent test.daf et test.achats. Cahier 11 envoyé au gérant.
+
 ### 27 octobre 2026, 21 h 30 : Achats et ventes en production (version 20261027-2132)
 
 - En production : version 20261027-2132 (code 9903b18), sauvegarde prise avant (20261027T2132), carte blanche du gérant. Contenu : module eguitra_commerce (quinze modules ; sale et purchase d'Odoo installés, sans stock), eguitra_chantier 19.0.1.1.1 (déduction de l'avance de démarrage dans les situations). Offres OF/EG et OF/MBAX, commandes et acomptes, offre de travaux vers chantier, bons de commande BC, réceptions REC, rapprochement, comparaison de devis, tableaux de bord, dans Finance.
