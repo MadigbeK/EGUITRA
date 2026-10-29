@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Tâches du service client, sans effet si elles passent deux fois (journal des messages reçus, niveau
+         d'escalade, états d'envoi). -->
+    <record id="cron_fetch_mail" model="ir.cron">
+        <field name="name">Service client : relève des boîtes de courriel</field>
+        <field name="model_id" ref="model_eguitra_sc_mail_gateway"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_fetch()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+    </record>
+    <record id="cron_whatsapp" model="ir.cron">
+        <field name="name">Service client : envois WhatsApp en file et médias reçus</field>
+        <field name="model_id" ref="model_eguitra_sc_whatsapp"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_run()</field>
+        <field name="interval_number">5</field>
+        <field name="interval_type">minutes</field>
+    </record>
+    <record id="cron_escalate" model="ir.cron">
+        <field name="name">Service client : escalade des dossiers en retard</field>
+        <field name="model_id" ref="model_eguitra_sc_ticket"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_escalate()</field>
+        <field name="interval_number">15</field>
+        <field name="interval_type">minutes</field>
+    </record>
+    <record id="cron_auto_close" model="ir.cron">
+        <field name="name">Service client : clôture des dossiers résolus sans réponse du client</field>
+        <field name="model_id" ref="model_eguitra_sc_ticket"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_auto_close()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque nuit à 03 h 20 (heure de Conakry, UTC). -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:20:00')"/>
+    </record>
+    <record id="cron_purge" model="ir.cron">
+        <field name="name">Service client : purge des notifications lues, du journal et des compteurs de débit</field>
+        <field name="model_id" ref="model_eguitra_sc_notification"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_purge()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 03:30:00')"/>
+    </record>
+</odoo>

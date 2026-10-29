@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Service client. Règles globales : chaque société ses dossiers (sociétés autorisées du compte, la société de
+        travail en tête). Règles par profil (cumulées par le noyau) : agents et administration, tout ; direction,
+        lecture de tout ; direction et métiers (finance, exploitation, BTP, immobilier, cabinet), lecture et
+        traitement des dossiers qui leur sont assignés (à eux ou à leur équipe). Le client de l'espace client n'a
+        aucun droit sur ces modèles : l'API de l'espace client lit pour lui, bornée à son tiers.
+    -->
+    <record id="rule_sc_ticket_company" model="ir.rule">
+        <field name="name">Service client, dossiers : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_sc_ticket"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_sc_ticket_agents" model="ir.rule">
+        <field name="name">Service client, dossiers : tous pour les agents</field>
+        <field name="model_id" ref="model_eguitra_sc_ticket"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_service_client')), Command.link(ref('eguitra_base.group_profile_admin'))]"/>
+    </record>
+    <record id="rule_sc_ticket_direction_read" model="ir.rule">
+        <field name="name">Service client, dossiers : tous en lecture pour la direction</field>
+        <field name="model_id" ref="model_eguitra_sc_ticket"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[Command.link(ref('eguitra_base.group_profile_direction'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="rule_sc_ticket_assigned" model="ir.rule">
+        <field name="name">Service client, dossiers : ceux qui sont assignés au compte ou à son équipe</field>
+        <field name="model_id" ref="model_eguitra_sc_ticket"/>
+        <field name="domain_force">['|', ('user_id', '=', user.id), ('team_id.member_ids', 'in', [user.id])]</field>
+        <field name="groups" eval="[
+            Command.link(ref('eguitra_base.group_profile_direction')),
+            Command.link(ref('eguitra_base.group_profile_finance')),
+            Command.link(ref('eguitra_base.group_profile_exploitation')),
+            Command.link(ref('eguitra_base.group_profile_chantiers')),
+            Command.link(ref('eguitra_base.group_profile_immobilier')),
+            Command.link(ref('eguitra_base.group_profile_cabinet')),
+        ]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="rule_sc_message_company" model="ir.rule">
+        <field name="name">Service client, fil : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_sc_message"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_sc_message_agents" model="ir.rule">
+        <field name="name">Service client, fil : tout pour les agents et la direction (lecture)</field>
+        <field name="model_id" ref="model_eguitra_sc_message"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[
+            Command.link(ref('eguitra_base.group_profile_service_client')),
+            Command.link(ref('eguitra_base.group_profile_admin')),
+            Command.link(ref('eguitra_base.group_profile_direction')),
+        ]"/>
+    </record>
+    <record id="rule_sc_message_assigned" model="ir.rule">
+        <field name="name">Service client, fil : celui des dossiers assignés au compte ou à son équipe</field>
+        <field name="model_id" ref="model_eguitra_sc_message"/>
+        <field name="domain_force">['|', ('ticket_id.user_id', '=', user.id), ('ticket_id.team_id.member_ids', 'in', [user.id])]</field>
+        <field name="groups" eval="[
+            Command.link(ref('eguitra_base.group_profile_finance')),
+            Command.link(ref('eguitra_base.group_profile_exploitation')),
+            Command.link(ref('eguitra_base.group_profile_chantiers')),
+            Command.link(ref('eguitra_base.group_profile_immobilier')),
+            Command.link(ref('eguitra_base.group_profile_cabinet')),
+        ]"/>
+    </record>
+
+    <record id="rule_sc_settings_company" model="ir.rule">
+        <field name="name">Service client, réglages : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_sc_settings"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_sc_category_company" model="ir.rule">
+        <field name="name">Service client, catégories : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_sc_category"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_sc_team_company" model="ir.rule">
+        <field name="name">Service client, équipes : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_sc_team"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_sc_template_company" model="ir.rule">
+        <field name="name">Service client, réponses types : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_sc_template"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_sc_notification_own" model="ir.rule">
+        <field name="name">Service client, notifications : chacun les siennes</field>
+        <field name="model_id" ref="model_eguitra_sc_notification"/>
+        <field name="domain_force">[('user_id', '=', user.id)]</field>
+    </record>
+</odoo>
