@@ -1079,3 +1079,67 @@ Pièces jointes : `spill`, `waste`, `contamination`, `complaint`, `procedure_ver
   pour toutes les feuilles ; ‰ des citernes qui mêle volume corrigé à 15 °C et volume livré non corrigé ;
   `detected_on` d'une contamination non borné à aujourd'hui.
 
+## 17. Politiques et procédures HSE (29/10, `eguitra_hsseq` 19.0.1.3.0)
+
+Demande du client du 29/10 (« la partie HSE : les politiques et les procédures »), carte blanche du
+gérant. Le modèle des procédures (`/hsseq/procedures`, nom technique gardé) devient le référentiel
+documentaire HSE ; les routes existantes ne changent pas de forme et NIMOVA Terrain lit toujours
+`GET /hsseq/my/documents`.
+
+### Types, références, hiérarchie
+
+| Type (`doc_type`) | Référence proposée | Se rattache à (`parent_id`) | Approbation | Revue proposée |
+|---|---|---|---|---|
+| `policy` (politique) | `POL-HSE-001` | aucun document | direction (hors administration), quatre yeux | 12 mois |
+| `procedure` | `PR-HSE-001` | une politique | Responsable HSSEQ | 24 mois |
+| `work_instruction` (instruction de travail ou mode opératoire) | `IT-HSE-001` | une procédure | Responsable HSSEQ | 24 mois |
+| `instruction` (consigne) | `CS-HSE-001` | une procédure ou une instruction | Responsable HSSEQ | 24 mois |
+| `form` (formulaire ou modèle) | `FO-HSE-001` | une procédure ou une instruction | Responsable HSSEQ | 36 mois |
+
+Référence facultative à la création : la suivante du type dans la société (après la plus grande, saisie
+à la main comprise). Type figé une fois une version mise en vigueur. Refus : `invalid_parent`.
+
+### Cycle d'une version
+
+`draft` → `submitted` (`POST …/versions/{id}/submit`, hsseq ; contenu exigé : texte pour une politique,
+`text_missing` ; document joint ou texte pour les autres, `document_missing`) → `published` (`…/approve` :
+direction pour une politique, hsseq pour les autres) → `superseded`. `…/reject` ({reason}, motif exigé)
+et `…/withdraw` (hsseq) rendent la version au brouillon. `…/publish` (hsseq) garde la mise en vigueur
+d'un geste, sauf pour une politique (`direction_approval_required`). Quatre yeux (`four_eyes`) : jamais
+un rédacteur (création ou modification du texte, des objectifs, du numéro, de la date, des changements,
+d'une pièce) ni l'auteur de la soumission pour une politique ; pour les autres types si le réglage
+`document_four_eyes` est coché. `version_actions` de la fiche : les gestes permis au compte.
+
+### Champs ajoutés
+
+- Document : `doc_type`, `parent`, `review` ({months, period_months, next_review_date, last_review_date,
+  state : overdue | due | scheduled, in_progress}) ; sur la fiche : `children`, `reviews`,
+  `version_actions`, `poster`.
+- Version : `submitted_at`, `submitted_by`, `approved_at`, `approved_by`, `edited_by`, `reject_reason`,
+  `has_text` ; sur la fiche : `body`, `objectives` ({label, indicator_code, indicator_label, unit,
+  direction, target, value, status}, valeur sur douze mois dans la portée du lecteur, comme au cockpit).
+- Entrées : `body`, `objectives` ([{label, indicator_code, target}], cible des réglages à défaut ; reprises
+  de la version en vigueur à la création d'une version), `review_months`, `next_review_date`.
+- Liste : filtres `doc_type`, `site_id`, `parent_id`, `pending_approval=1`, `review=overdue|due`, tris
+  `doc_type`, `next_review_date` ; `counts.by_type`, `pending_approval`, `to_approve`,
+  `reviews_overdue`, `reviews_due`.
+- `GET /hsseq/my/documents` : `doc_type`, `body`, `objectives`, `version.approved_by`, `version.approved_at`.
+
+### Routes ajoutées
+
+| Route | Profils |
+|---|---|
+| `GET /hsseq/procedures/tree` | administration, direction, hsseq, auditeur (ses sites) |
+| `POST /hsseq/procedures/{id}/versions/{vid}/{submit,withdraw,approve,reject}` | direction, hsseq (le noyau contrôle le type et les quatre yeux) |
+| `POST /hsseq/procedures/{id}/reviews` ({outcome : renewed ou revised, comment, reviewed_on, next_review_date, version, action}) | hsseq |
+| `GET /hsseq/procedures/{id}/poster.pdf` (`version_id` : un projet, lecture complète seule) | gestion et comptes visés ; 422 `text_missing` sans texte |
+| `GET /hsseq/procedures/dashboard` et `/dashboard/export.xlsx` (`doc_type`, `site_id`) | administration, direction, hsseq, auditeur (sans `missing_by_person`) |
+
+Actions : origine `document` (origin_id : le document ; filtre `document_id`), créée par une revue ou par
+`POST /hsseq/actions`. Réglages : `review_months_policy`, `review_months_procedure`,
+`review_months_work_instruction`, `review_months_instruction`, `review_months_form`,
+`document_review_alert_days` (30), `document_four_eyes` (booléen). Cockpit : `documents.reviews_overdue`,
+`documents.pending_approval`. Tâche planifiée quotidienne : alerte de revue avant l'échéance (une fois),
+puis chaque semaine de retard (sauf nouvelle version décidée en revue et en préparation). Notifications :
+`document_submitted`, `document_rejected`, `document_review_due`, `document_review_overdue`.
+
