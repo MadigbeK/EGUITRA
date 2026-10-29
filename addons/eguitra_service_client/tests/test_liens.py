@@ -12,10 +12,14 @@ T = "/service-client/tickets"
 class TestLiens(ScCase):
     def invoice(self, partner, company=None):
         company = company or self.groupe
-        account = self.env["account.account"].sudo().search(
-            [("code", "=like", "70%"), ("company_ids", "in", company.ids)], order="code", limit=1)
+        # Code de compte propre à chaque société : recherche et journal dans la société de la facture.
+        env = self.env["account.account"].sudo().with_company(company)
+        account = env.search([("code", "=like", "70%"), ("company_ids", "in", company.ids)], order="code", limit=1)
+        journal = self.env["account.journal"].sudo().search([("type", "=", "sale"), ("company_id", "=", company.id)],
+                                                            limit=1)
+        self.assertTrue(account and journal, f"Compte de produit et journal de vente de {company.name}")
         return self.env["account.move"].sudo().with_company(company).create({
-            "move_type": "out_invoice", "partner_id": partner.id, "company_id": company.id,
+            "move_type": "out_invoice", "partner_id": partner.id, "company_id": company.id, "journal_id": journal.id,
             "invoice_line_ids": [Command.create({"name": "Transport (essai)", "quantity": 1, "price_unit": 1_000_000,
                                                  "account_id": account.id, "tax_ids": [Command.set([])]})],
         })

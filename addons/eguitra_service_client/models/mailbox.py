@@ -32,7 +32,8 @@ import logging
 import os
 import ssl
 
-from odoo import api, fields, models
+from odoo import api, fields, models, tools
+from odoo.modules import module as odoo_module
 
 from odoo.addons.eguitra_api.files import checked_name, detect_type
 
@@ -45,6 +46,15 @@ MAX_PER_RUN = 50
 MAX_RAW = 25 * 1024 * 1024
 MAX_PER_SENDER_HOUR = 20
 ENTITIES = ("groupe", "cabinet")
+
+
+def _in_test_mode(env):
+    """Tests du noyau : leur transaction reste ouverte, jamais de commit. Odoo 19 n'a plus
+    registry.in_test_mode() ; on lit le test en cours et l'option de lancement des tests."""
+    check = getattr(env.registry, "in_test_mode", None)
+    if callable(check):
+        return check()
+    return bool(getattr(odoo_module, "current_test", False) or tools.config.get("test_enable"))
 
 
 def imap_config(entity, environ=None):
@@ -141,7 +151,7 @@ class EguitraScMailGateway(models.AbstractModel):
                 client.uid("store", uid, "+FLAGS", "(\\Seen)")
                 # Un message traité et marqué lu reste traité si la tâche s'interrompt ensuite (hors des tests,
                 # qui gardent leur transaction).
-                if not self.env.registry.in_test_mode():
+                if not _in_test_mode(self.env):
                     self.env.cr.commit()
                 count += 1
         finally:

@@ -40,9 +40,9 @@
                 <t t-if="r['objectives']">
                     <h2 t-att-style="'border-bottom: 1.5pt solid %s;' % r['color']">Nos objectifs</h2>
                     <ul class="obj">
-                        <li t-foreach="r['objectives']" t-as="o">
-                            <strong t-esc="o['label']"/>
-                            <t t-if="o['target']"><br/><span class="muted"><t t-esc="o['target']"/> (<t t-esc="o['indicator']"/>)</span></t>
+                        <li t-foreach="r['objectives']" t-as="objectif">
+                            <strong t-esc="objectif['label']"/>
+                            <t t-if="objectif['target']"><br/><span class="muted"><t t-esc="objectif['target']"/> (<t t-esc="objectif['indicator']"/>)</span></t>
                         </li>
                     </ul>
                 </t>
