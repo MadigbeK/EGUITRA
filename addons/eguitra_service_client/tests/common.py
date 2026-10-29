@@ -196,6 +196,12 @@ class ScCase(RefusParProfil, ApiCase):
         with patch.dict(os.environ, dict(WA_ENV, **(extra_env or {}))), patch.object(wa, "http_request", fake):
             yield fake
 
+    @contextmanager
+    def no_meta(self):
+        """Canal WhatsApp non configuré, quel que soit l'environnement du serveur de test."""
+        with patch.dict(os.environ, {key: "" for key in WA_ENV}):
+            yield
+
     @staticmethod
     def wa_payload(text="Bonjour, ma livraison n'est pas arrivée", sender="224621111111", wamid="wamid.recu.1",
                    name="Awa Diallo", phone_id="100200300", timestamp=None, media=None):

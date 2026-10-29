@@ -30,21 +30,25 @@ def _members(values):
     return users
 
 
+def _settings_payload():
+    comp = company()
+    row = request.env["eguitra.sc.settings"]._get(comp)._row()
+    row.update({
+        "public_url": public_url(request.env),
+        "channels": {"email": request.env["eguitra.sc.mail.gateway"]._status(comp),
+                     "whatsapp": request.env["eguitra.sc.whatsapp"]._status(comp),
+                     "mail_server": bool(request.env["ir.mail_server"].sudo().search_count([]))},
+        "webhook_path": "/api/whatsapp/webhook",
+    })
+    return row
+
+
 class EguitraServiceClientAdmin(http.Controller):
     # ─── Réglages ────────────────────────────────────────────────────────
 
     @api_route("/service-client/settings", profiles=READ_ALL)
     def settings(self, **_kw):
-        comp = company()
-        row = request.env["eguitra.sc.settings"]._get(comp)._row()
-        row.update({
-            "public_url": public_url(request.env),
-            "channels": {"email": request.env["eguitra.sc.mail.gateway"]._status(comp),
-                         "whatsapp": request.env["eguitra.sc.whatsapp"]._status(comp),
-                         "mail_server": bool(request.env["ir.mail_server"].sudo().search_count([]))},
-            "webhook_path": "/api/whatsapp/webhook",
-        })
-        return row
+        return _settings_payload()
 
     @api_route("/service-client/settings", methods=("PATCH",), profiles=SETTINGS_WRITE)
     def update_settings(self, **_kw):
@@ -61,7 +65,7 @@ class EguitraServiceClientAdmin(http.Controller):
             open_tickets = request.env["eguitra.sc.ticket"].sudo().search(
                 [("company_id", "=", company().id), ("state", "not in", ("resolved", "closed"))])
             open_tickets._compute_deadlines()
-        return self.settings()
+        return _settings_payload()
 
     # ─── Catégories ──────────────────────────────────────────────────────
 

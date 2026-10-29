@@ -428,7 +428,7 @@ class EguitraScTicket(models.Model):
             "ticket_id": ticket.id, "kind": "public", "direction": "out", "channel": ticket.channel,
             "body": body.replace("Bonjour ,", "Bonjour,"), "auto": True,
         })
-        message._deliver()
+        message._deliver(queue=True)
         return message
 
     def _request_satisfaction(self):
