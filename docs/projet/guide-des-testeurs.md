@@ -26,8 +26,10 @@ portail ; ailleurs, la connexion lui répond « Votre profil ne donne pas accès
 | RH et « Mon espace » | l'adresse de la recette suivie de /rh | test.rh, test.salarie |
 | HSSEQ (santé, sécurité, environnement, qualité) | l'adresse de la recette suivie de /hsseq | test.hsseq, test.auditeur, test.exploitation, test.parc, test.dg |
 | Agenda | l'adresse de la recette suivie de /agenda | tous les comptes internes (pas le porteur, ni le conducteur) |
+| Service client | l'adresse de la recette suivie de /service-client | test.serviceclient, test.dg, test.admin ; les métiers pour les dossiers qui leur sont confiés |
 | Rotations, au téléphone | l'adresse de la recette suivie de /mobile | test.exploitation, test.parc |
 | Portail des porteurs de projets | l'adresse de la recette suivie de /portail | test.porteur, porteur.demo |
+| Espace client (clients des deux sociétés) | l'adresse de la recette suivie de /espace-client | test.client, test.client.cabinet |
 
 Sur la recette, le mot de passe est commun à tous les comptes et ne se modifie pas : une tentative de
 changement est refusée, c'est normal. Votre compte de test reste personnel pendant la campagne : si
@@ -52,8 +54,10 @@ comptabilité, ses clients, ses factures. La plateforme les sert par application
 | NIMOVA · RH | Direction, ressources humaines ; « Mon espace » pour chaque salarié | Les deux, gestion commune |
 | NIMOVA · HSSEQ | Responsable HSSEQ, direction, exploitation ; auditeur en lecture seule | Les deux |
 | NIMOVA · Agenda | Tous les comptes internes : agenda personnel, partage, délégation, salles et véhicules | Un seul agenda par personne, quelles que soient ses sociétés |
+| NIMOVA · Service client | Agents du service client, direction ; les métiers pour leurs dossiers | Les deux, séparément : chaque société ses dossiers |
 | NIMOVA · Rotations | Exploitation, agents de parc | EGUITRA GROUP SARLU seulement |
 | Portail des porteurs de projets | Clients du cabinet | MB AxisPro Consulting seulement |
+| Espace client | Clients des deux sociétés (demandes et réclamations) | Celle du client |
 
 Les achats et les ventes (offres, commandes, bons de commande, réceptions) sont dans NIMOVA · Finance,
 sous Ventes et sous Achats et dépenses.
@@ -83,8 +87,13 @@ immobilier) n'apparaissent que lorsque la société de travail est EGUITRA GROUP
 | test.hsseq | Responsable HSSEQ | HSSEQ | Les deux |
 | test.auditeur | Auditeur HSSEQ (lecture seule, un site, trente jours) | HSSEQ | EGUITRA GROUP |
 | test.conducteur | Conducteur | NIMOVA Terrain (application de téléphone, pas encore installable) | EGUITRA GROUP |
+| test.serviceclient | Agent du service client | Service client | Les deux |
+| test.client | Client d'EGUITRA GROUP SARLU (Démo - Transports Kaloum) | Espace client | EGUITRA GROUP |
+| test.client.cabinet | Client de MB AxisPro Consulting (Démo - Coopérative de Kindia) | Espace client | MB AxisPro Consulting |
 
-Tous les comptes internes ouvrent aussi l'Agenda.
+Tous les comptes internes ouvrent aussi l'Agenda. Les comptes de la finance, de l'exploitation, du BTP,
+de l'immobilier et du cabinet ouvrent aussi le Service client, pour les seuls dossiers qui leur sont
+confiés.
 
 Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend, même un détail.
 
@@ -138,6 +147,22 @@ Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend
   « Trouver un créneau » ; réserver une salle.
 - Partager son agenda (disponibilités seules, détails, modification) ; test.daf gère l'agenda de
   test.dg par délégation : vérifiez la mention « pour le compte de ».
+
+### Service client (test.serviceclient) et espace client (test.client, test.client.cabinet)
+
+- Service client : la file des dossiers (ouverts, les miens, sans responsable, en retard) ; « Nouveau
+  dossier » pendant un appel : retrouver le client par son nom ou son téléphone, voir ses dossiers en
+  cours, noter la demande et la réponse donnée ; dans un dossier, répondre au client par son canal,
+  ajouter une note interne, confier le dossier à un collègue, le passer « En attente du client » puis
+  « Résolu », noter sa satisfaction, fusionner un doublon, lier une facture, transmettre une
+  réclamation de qualité à HSSEQ.
+- Comptes de l'espace client : ouvrir un compte à un contact d'un client (invitation par courriel,
+  ou lien remis une fois si la recette n'a pas de serveur de courrier).
+- Espace client, avec test.client : déposer une demande, joindre une pièce, répondre, confirmer la
+  résolution, donner son avis. Vous ne devez jamais voir les notes internes, les échéances ni les
+  demandes d'un autre client ; test.client.cabinet ne voit que celles de MB AxisPro Consulting.
+- Sur la recette, le courriel et WhatsApp peuvent ne pas être branchés : les réglages le disent, et
+  les dossiers « courriel » et « WhatsApp » de démonstration ont été simulés.
 
 ### Chantiers (test.chantiers)
 
