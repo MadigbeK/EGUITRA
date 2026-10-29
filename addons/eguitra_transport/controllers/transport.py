@@ -67,7 +67,7 @@ MEASURES_15 = [("temperature_loaded", "Température au chargement (°C)"),
 VEHICLE_STATES = ("service", "maintenance", "off", "sold")
 # Champs dont la correction ne remet pas une rotation validée en saisie (sans effet sur volumes et montants).
 PLANNING_FIELDS = {"note", "date_planned_departure", "date_planned_arrival", "date_planned_return", "co_driver_id",
-                   "volume_planned", "order_id"}
+                   "volume_planned"}
 # Tri de la liste des rotations (paramètre sort, « -clé » pour l'ordre décroissant) : colonnes de
 # l'écran et champ du modèle. Le volume est le volume facturable (livré, à défaut chargé), la marge
 # et son taux ceux qu'affiche la ligne (estimés tant qu'aucun frais n'est saisi).
@@ -1167,6 +1167,10 @@ class EguitraTransport(http.Controller):
         # Règle des quatre yeux (audit du 25 octobre, I-T5) : corriger une rotation validée la remet en
         # saisie ; un autre compte que celui qui l'a saisie la revalide. Une note ou la planification de
         # l'opération (dates prévues, convoyeur, ordre de transport) ne la change pas.
+        # Ordre de transport d'une rotation validée : ni rattachement ni détachement, et pas de remise en saisie
+        # pour y parvenir (revue de sécurité du 29/10/2026) ; le noyau le refuse aussi (models/order.py).
+        if "order_id" in values and values["order_id"] != (rot.order_id.id or False) and rot.state == "done":
+            raise ApiError(422, "business_rule", "Rotation validée : elle ne change pas d'ordre de transport.")
         if rot.state == "done" and set(values) - PLANNING_FIELDS:
             rot.action_reset()
         rot.write(values)

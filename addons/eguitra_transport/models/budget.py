@@ -23,7 +23,7 @@ coûts déclarés des rubriques que le budget couvre : jamais de double saisie n
 """
 
 from odoo import Command, api, fields, models
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 from odoo.addons.eguitra_approval.models.account_move import fingerprint
 from odoo.addons.eguitra_finance.models.syscohada import OPENING_JOURNAL
@@ -52,6 +52,16 @@ DEFAULT_RUBRICS = [
 ]
 BUDGET_STATES = [("draft", "Brouillon"), ("submitted", "En approbation"), ("approved", "Approuvé"),
                  ("rejected", "Refusé"), ("cancelled", "Annulé")]
+# Profils de la finance : décaissement, justification et clôture, rapprochement des bons carburant.
+CASH_PROFILES = ("admin", "finance")
+
+
+def check_cash_profile(env, action):
+    """La caisse relève de la finance (ou de l'administration), quel que soit le chemin d'appel."""
+    if not env.su and not set(CASH_PROFILES) & set(env.user._eguitra_profiles()):
+        raise AccessError(f"{action} : réservé à la finance.")
+
+
 TRIP_STATES = [("none", "Sans budget"), ("preparing", "Budget en préparation"), ("to_disburse", "À décaisser"),
                ("to_justify", "À justifier"), ("closed", "Clôturé")]
 VOUCHER_STATES = [("issued", "Remis au chauffeur"), ("reconciled", "Rapproché"), ("cancelled", "Annulé")]
@@ -271,6 +281,14 @@ class EguitraTransportBudget(models.Model):
             missing.append("le chauffeur de l'opération (bénéficiaire de l'avance)")
         return missing
 
+    def _cumulative_amount(self):
+        """Cumul de l'opération : budget initial et additifs ni annulés ni refusés, celui-ci compris. Les règles
+        d'approbation se choisissent sur ce cumul : des additifs successifs, chacun sous un seuil, ne passent pas
+        à côté de l'accord que leur total exige (revue de sécurité du 29/10/2026)."""
+        self.ensure_one()
+        budgets = self.rotation_id.budget_ids.filtered(lambda b: b.state not in ("cancelled", "rejected")) | self
+        return sum(budgets.mapped("amount_total"))
+
     def action_submit(self):
         Rule = self.env["eguitra.approval.rule"]
         Request = self.env["eguitra.approval.request"]
@@ -281,15 +299,19 @@ class EguitraTransportBudget(models.Model):
             if missing:
                 raise UserError(f"Budget {budget.name} incomplet : {', '.join(missing)}.")
             budget.write({"state": "submitted", "submitted_by": self.env.user.id, "submitted_at": fields.Datetime.now()})
-            rules = Rule._applicable("travel_budget", budget.company_id, budget.amount_total)
+            cumulative = budget._cumulative_amount()
+            rules = Rule._applicable("travel_budget", budget.company_id, cumulative)
             if not rules:
                 budget._eguitra_on_approved()
                 continue
             partner = budget.rotation_id.driver_id.partner_id or budget.rotation_id.partner_id
             request = Request._open(budget, "cash_out", rules, budget.amount_total, partner)
+            currency = budget.currency_id
+            total = (f", cumul de l'opération {fmt_int(cumulative)} {currency.name}"
+                     if currency.compare_amounts(cumulative, budget.amount_total) else "")
             request.sudo().write({"document": "travel_budget",
                                   "name": f"Budget de voyage : {budget.name} ({budget._label().lower()}, opération "
-                                          f"{budget.rotation_id._label()})"})
+                                          f"{budget.rotation_id._label()}{total})"})
         return True
 
     def _eguitra_on_approved(self):
@@ -346,6 +368,7 @@ class EguitraTransportBudget(models.Model):
 
     def action_disburse(self, journal=None, day=None):
         """Avance en espèces remise au chauffeur : opération de caisse, au débit du compte des avances."""
+        check_cash_profile(self.env, "Décaissement d'une avance de frais de route")
         for budget in self:
             if budget.state != "approved":
                 raise UserError(f"Budget {budget.name} : seul un budget approuvé se décaisse.")
@@ -448,6 +471,7 @@ class EguitraTransportFuelVoucher(models.Model):
 
     def action_reconcile(self, invoice, actual_amount=None):
         """Rapprochement avec la facture de la station (pièce d'achat du fournisseur, même société)."""
+        check_cash_profile(self.env, "Rapprochement d'un bon carburant")
         for voucher in self:
             if voucher.state != "issued":
                 raise UserError(f"Bon {voucher.name} : seul un bon remis se rapproche.")
@@ -467,6 +491,7 @@ class EguitraTransportFuelVoucher(models.Model):
         return True
 
     def action_unreconcile(self):
+        check_cash_profile(self.env, "Rapprochement d'un bon carburant")
         for voucher in self.filtered(lambda v: v.state == "reconciled"):
             voucher.write({"state": "issued", "invoice_id": False, "actual_amount": 0.0, "reconciled_at": False,
                            "reconciled_by": False})
@@ -548,6 +573,11 @@ class ResCompany(models.Model):
     transport_fuel_station_id = fields.Many2one(
         "res.partner", "Station carburant habituelle",
         help="Station proposée sur la ligne de carburant du budget de voyage (bon carburant).")
+    transport_complement_tolerance = fields.Monetary(
+        "Tolérance de complément à la clôture", currency_field="currency_id", default=0.0,
+        help="Dépenses justifiées au-delà de l'avance : jusqu'à ce montant, un additif de régularisation part au "
+             "circuit d'approbation à la clôture ; au-delà, la clôture est refusée tant qu'un additif motivé, approuvé "
+             "et décaissé, ne couvre pas l'écart. 0 : tout dépassement exige un additif.")
 
 
 class EguitraTransportRotation(models.Model):
@@ -727,27 +757,85 @@ class EguitraTransportRotation(models.Model):
         move.action_post()
         return move
 
+    def _trip_check_closer(self):
+        """Quatre yeux : celui qui a saisi ou corrigé les dépenses réelles ne clôture pas (revue du 29/10/2026)."""
+        self.ensure_one()
+        if self.env.su:
+            return
+        entered = self.expense_ids.mapped("create_uid") | self.expense_ids.mapped("write_uid")
+        if self.env.user in entered:
+            raise UserError(f"Opération {self._label()} : vous avez saisi ou corrigé ses dépenses réelles ; la clôture "
+                            "revient à une autre personne.")
+
+    def _trip_complement_rubric(self):
+        """Rubrique du complément : celle dont les dépenses en espèces dépassent le plus le budget approuvé."""
+        self.ensure_one()
+        planned = {}
+        for line in self.budget_ids.filtered(lambda b: b.state == "approved").line_ids.filtered(lambda l: l.kind == "cash"):
+            planned[line.rubric_id] = planned.get(line.rubric_id, 0.0) + line.amount
+        spent = {}
+        for expense in self.expense_ids:
+            spent[expense.rubric_id] = spent.get(expense.rubric_id, 0.0) + expense.amount
+        overruns = sorted(((amount - planned.get(rubric, 0.0), rubric) for rubric, amount in spent.items()),
+                          key=lambda item: -item[0])
+        if overruns and overruns[0][0] > 0:
+            return overruns[0][1]
+        Rubric = self.env["eguitra.transport.budget.rubric"]
+        return Rubric._by_prefill(self.company_id, "other") or self.expense_ids[:1].rubric_id
+
+    def _trip_complement_budget(self, complement):
+        """Complément dans la tolérance : additif de régularisation soumis au circuit des budgets de voyage. Il se
+        décaisse après approbation, comme tout budget ; la clôture attend."""
+        self.ensure_one()
+        budget = self._new_budget("additive", "Complément à la justification des dépenses du voyage")
+        rubric = self._trip_complement_rubric()
+        budget.write({"line_ids": [Command.create({
+            "rubric_id": rubric.id, "kind": "cash", "unit": "fixed", "quantity": 1, "price_unit": complement,
+            "description": "Dépenses justifiées au-delà de l'avance"})]})
+        budget.action_submit()
+        return budget
+
     def action_trip_close(self, journal=None, day=None):
-        """Clôture : reliquat rendu en caisse ou complément versé, dépenses en espèces passées en charges,
-        coûts réels reportés sur la rotation. Le compte des avances du chauffeur est soldé pour l'opération."""
+        """Clôture : reliquat rendu en caisse, dépenses en espèces passées en charges, coûts réels reportés sur la
+        rotation. Le compte des avances du chauffeur est soldé pour l'opération.
+
+        Dépenses au-delà de l'avance (revue de sécurité du 29/10/2026) : aucune sortie de caisse sans approbation.
+        Au-delà de la tolérance de la société, la clôture est refusée tant qu'un additif approuvé ne couvre pas
+        l'écart ; dans la tolérance, un additif de régularisation part au circuit et la clôture attend son
+        approbation et son décaissement. Rend les additifs de régularisation créés (vide : opérations clôturées)."""
+        check_cash_profile(self.env, "Clôture du budget de voyage")
+        complements = self.env[BUDGET_MODEL]
         for rot in self:
+            rot._trip_check_closer()
             blockers = rot._trip_close_blockers()
             if blockers:
                 raise UserError(f"Opération {rot._label()} : clôture impossible ({'; '.join(blockers)}).")
             day = day or fields.Date.context_today(self)
             company = rot.company_id
-            balance = company.currency_id.round(rot._trip_advance() - rot._trip_cash_spent())
+            currency = company.currency_id
+            balance = currency.round(rot._trip_advance() - rot._trip_cash_spent())
+            if currency.compare_amounts(balance, 0) < 0:
+                complement = -balance
+                tolerance = company.transport_complement_tolerance or 0.0
+                if currency.compare_amounts(complement, tolerance) > 0:
+                    raise UserError(
+                        f"Opération {rot._label()} : les dépenses justifiées dépassent l'avance de {fmt_int(complement)} "
+                        f"{currency.name}, au-delà de la tolérance de {fmt_int(tolerance)} {currency.name}. Établissez un "
+                        "additif motivé au budget de voyage ; approuvé et décaissé, il couvre l'écart et la clôture "
+                        "devient possible.")
+                complements |= rot._trip_complement_budget(complement)
+                continue
             values = {"trip_closed_at": fields.Datetime.now(), "trip_closed_by": self.env.user.id}
             if balance:
                 if not rot.driver_id:
                     raise UserError(f"Opération {rot._label()} : désignez le chauffeur, débiteur de l'avance.")
                 cash = journal or company._transport_budget_journal()
                 if not cash or cash.company_id != company or cash.type not in ("cash", "bank"):
-                    raise UserError("Choisissez la caisse qui reçoit le reliquat ou verse le complément.")
-                label = "Reliquat rendu" if balance > 0 else "Complément versé"
+                    raise UserError("Choisissez la caisse qui reçoit le reliquat.")
                 line = self.env["account.bank.statement.line"].create({
                     "journal_id": cash.id, "date": day,
-                    "payment_ref": f"{label} sur l'avance de frais de route, opération {rot._label()}, {rot.driver_id.name}",
+                    "payment_ref": f"Reliquat rendu sur l'avance de frais de route, opération {rot._label()}, "
+                                   f"{rot.driver_id.name}",
                     "amount": balance, "partner_id": rot.driver_id._ensure_partner().id,
                     "counterpart_account_id": company._transport_advance_account().id,
                 })
@@ -757,7 +845,7 @@ class EguitraTransportRotation(models.Model):
                 values["trip_expense_move_id"] = move.id
             rot.sudo().write(values)
             rot._trip_report_costs()
-        return True
+        return complements
 
     def _trip_summary(self):
         """Avance, dépenses, reliquat ou complément, état : pour les écrans de justification."""

@@ -420,6 +420,7 @@ def _settings_payload():
                              [("company_id", "=", company.id)])],
         "advance_account": {"id": advance.id, "code": advance.code, "name": advance.name} if advance else None,
         "journal": _ref(sudo.transport_budget_journal_id),
+        "complement_tolerance": company.transport_complement_tolerance,
         "journals": [_ref(j) for j in request.env["account.journal"].sudo().search(
             [("company_id", "=", company.id), ("type", "in", ("cash", "bank"))])] if sees else [],
         "rubrics": [_rubric_row(r, sees) for r in request.env["eguitra.transport.budget.rubric"].with_context(
@@ -770,8 +771,12 @@ class EguitraTransportDocuments(http.Controller):
             journal = request.env["account.journal"].browse(_int(data["journal_id"], "Caisse")).exists()
             if not journal:
                 raise ApiError(422, "business_rule", "Caisse inconnue.")
-        rot.action_trip_close(journal, parse_date(data, "date"))
-        return _trip_payload(rot)
+        complements = rot.action_trip_close(journal, parse_date(data, "date"))
+        payload = _trip_payload(rot)
+        # Dépenses au-delà de l'avance, dans la tolérance : additif de régularisation soumis au circuit, la clôture
+        # attend son approbation et son décaissement.
+        payload["complement_budget"] = _budget_row(complements[:1]) if complements else None
+        return payload
 
     # ─── Bons carburant ───────────────────────────────────────────────────
 
@@ -1029,6 +1034,11 @@ class EguitraTransportDocuments(http.Controller):
                 if not account or company not in account.company_ids:
                     raise ApiError(422, "business_rule", "Compte inconnu dans la société de travail.")
             values["transport_advance_account_id"] = account.id or False
+        if "complement_tolerance" in data:
+            tolerance = as_float(data["complement_tolerance"] or 0, "complement_tolerance")
+            if tolerance < 0:
+                raise ApiError(400, "invalid_parameter", "La tolérance de complément ne peut pas être négative.")
+            values["transport_complement_tolerance"] = tolerance
         if "journal_id" in data:
             journal = request.env["account.journal"]
             if data["journal_id"]:

@@ -20,6 +20,8 @@ ORDER_STATES = [("draft", "Brouillon"), ("validated", "Validé"), ("executed", "
                 ("cancelled", "Annulé")]
 QUANTITY_UOMS = [("l", "litres"), ("kg", "kg"), ("t", "t")]
 LIVE_STATES = ("validated", "executed", "closed")
+# Ordre ouvert : il reçoit des opérations (préparées dès le brouillon, avant la signature du client).
+OPEN_STATES = ("draft", "validated", "executed")
 
 
 class EguitraTransportOrder(models.Model):
@@ -232,14 +234,19 @@ class EguitraTransportRotation(models.Model):
                 raise ValidationError(f"Rotation {rot._label()} : le client diffère de celui de l'ordre de "
                                       f"transport {rot.order_id.name}.")
 
+    @api.model
+    def _check_order_open(self, order):
+        """Un ordre de transport reçoit des opérations tant qu'il est ouvert : ni clôturé ni annulé."""
+        if order.state not in OPEN_STATES:
+            raise UserError(f"L'ordre de transport {order.name} est {dict(ORDER_STATES)[order.state].lower()} : "
+                            "il ne reçoit plus d'opération.")
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get("order_id"):
                 order = self.env["eguitra.transport.order"].browse(vals["order_id"])
-                if order.state not in ("draft", "validated", "executed"):
-                    raise UserError(f"L'ordre de transport {order.name} est {dict(ORDER_STATES)[order.state].lower()} : "
-                                    "il ne reçoit plus d'opération.")
+                self._check_order_open(order)
                 vals.setdefault("partner_id", order.partner_id.id)
                 if order.product_id:
                     vals.setdefault("product_id", order.product_id.id)
@@ -251,7 +258,26 @@ class EguitraTransportRotation(models.Model):
         linked.order_id._sync_state()
         return rotations
 
+    def _check_order_change(self, order_id):
+        """Rattacher une opération à un ordre, ou l'en détacher (revue de sécurité du 29/10/2026) : jamais une
+        rotation validée ou facturée ; l'ordre visé est ouvert, du même client et de la même société."""
+        order = self.env["eguitra.transport.order"].browse(order_id) if order_id else None
+        for rot in self:
+            if rot.order_id.id == (order.id if order else False):
+                continue
+            if rot.state in ("done", "invoiced"):
+                raise UserError(f"Rotation {rot._label()} validée ou facturée : elle ne change pas d'ordre de transport.")
+            if order:
+                self._check_order_open(order)
+                if order.company_id != rot.company_id:
+                    raise UserError(f"L'ordre de transport {order.name} est d'une autre société.")
+                if order.partner_id.commercial_partner_id != rot.partner_id.commercial_partner_id:
+                    raise UserError(f"Rotation {rot._label()} : le client diffère de celui de l'ordre de transport "
+                                    f"{order.name}.")
+
     def write(self, vals):
+        if "order_id" in vals:
+            self._check_order_change(vals["order_id"])
         orders = self.order_id
         result = super().write(vals)
         if "order_id" in vals:

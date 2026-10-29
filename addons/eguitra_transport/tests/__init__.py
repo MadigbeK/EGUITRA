@@ -17,3 +17,6 @@ from . import test_verrous_rotation
 from . import test_saisies_audit
 from . import test_synchronisation
 from . import test_facture_transport
+from . import test_ordre_transport
+from . import test_tracteur_remorque
+from . import test_budget_voyage
