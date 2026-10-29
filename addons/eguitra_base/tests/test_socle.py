@@ -83,6 +83,15 @@ class TestSocle(TransactionCase):
         self.assertFalse(auditeur.share, "L'auditeur est un compte interne, borné par le module HSSEQ")
         self.assertFalse(auditeur.has_group("account.group_account_readonly"), "Aucun droit comptable")
 
+        agent = Users.create({
+            "name": "Agent Test",
+            "login": "service.client.socle",
+            "group_ids": [(4, self.env.ref("eguitra_base.group_profile_service_client").id)],
+        })
+        self.assertEqual(agent._eguitra_profiles(), ["service_client"])
+        self.assertFalse(agent.share, "L'agent du service client est un compte interne")
+        self.assertFalse(agent.has_group("account.group_account_readonly"), "Aucun droit comptable")
+
         admin = Users.create({
             "name": "Admin Test",
             "login": "admin.test",
@@ -97,6 +106,14 @@ class TestSocle(TransactionCase):
         })
         self.assertTrue(porteur.share, "Un porteur de projet est un utilisateur du portail")
         self.assertEqual(porteur._eguitra_profiles(), ["porteur"])
+
+        client = Users.create({
+            "name": "Client Test",
+            "login": "client.socle",
+            "group_ids": [(6, 0, [self.env.ref("eguitra_base.group_profile_client").id])],
+        })
+        self.assertTrue(client.share, "Un client de l'espace client est un utilisateur du portail")
+        self.assertEqual(client._eguitra_profiles(), ["client"])
 
     def test_piste_audit(self):
         regle = self.env["auditlog.rule"].search([("model_id.model", "=", "res.partner")])

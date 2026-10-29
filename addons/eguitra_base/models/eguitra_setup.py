@@ -52,6 +52,14 @@ AUDIT_EXCLUDED_MODELS = [
     "eguitra.agenda.notification",
     "eguitra.agenda.reminder.log",
     "eguitra.agenda.booking.attempt",
+    # Service client (eguitra_service_client) : notifications des agents (recopient les objets des dossiers, déjà
+    # suivis), journal technique des messages reçus (idempotence et refus : boucles, rebonds), compteurs de débit
+    # des pages publiques et file des médias WhatsApp à télécharger. Dossiers, fil, réglages, catégories,
+    # équipes, réponses types et invitations, eux, sont suivis.
+    "eguitra.sc.notification",
+    "eguitra.sc.inbound",
+    "eguitra.sc.public.attempt",
+    "eguitra.sc.media.job",
 ]
 PLATFORM_PREFIXES = ("eguitra.", "axispro.", "portail.")
 

@@ -1,6 +1,6 @@
 from odoo import fields, models
 
-from odoo.addons.eguitra_base.models.res_users import PROFILE_GROUPS
+from odoo.addons.eguitra_base.models.res_users import EXTERNAL_PROFILES, PROFILE_GROUPS
 
 from ..organisation import APPS, ENTITY_NAMES, PROFILE_ENTITY
 
@@ -83,16 +83,19 @@ class ResUsers(models.Model):
             self.sudo().write({"group_ids": commands})
 
     def _eguitra_set_profiles(self, profiles):
-        """Remplace les profils de la plateforme ; un porteur de projet n'a que ce profil."""
+        """Remplace les profils de la plateforme ; un compte externe (porteur de projet, client de l'espace
+        client) n'a que ce profil."""
         self.ensure_one()
         unknown = set(profiles) - set(PROFILE_GROUPS)
         if unknown:
             raise ValueError(f"Profils inconnus : {', '.join(sorted(unknown))}")
         groups = {code: self.env.ref(xmlid) for code, xmlid in PROFILE_GROUPS.items()}
-        if "porteur" in profiles:
-            if len(profiles) > 1:
-                raise ValueError("Le profil porteur de projet ne se combine avec aucun autre.")
-            self.sudo().write({"group_ids": [(6, 0, groups["porteur"].ids)]})
+        external = [code for code in EXTERNAL_PROFILES if code in profiles]
+        if external:
+            if len(set(profiles)) > 1:
+                label = "porteur de projet" if external[0] == "porteur" else "client"
+                raise ValueError(f"Le profil {label} ne se combine avec aucun autre.")
+            self.sudo().write({"group_ids": [(6, 0, groups[external[0]].ids)]})
             return
         commands = [(3, g.id) for code, g in groups.items() if code not in profiles]
         commands += [(4, groups[code].id) for code in profiles]

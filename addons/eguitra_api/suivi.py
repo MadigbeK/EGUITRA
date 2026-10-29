@@ -58,6 +58,8 @@ APP_LABELS = {
     "analyse": "NIMOVA · Analyse",
     "rh": "NIMOVA · RH",
     "agenda": "NIMOVA · Agenda",
+    "service-client": "NIMOVA · Service client",
+    "espace-client": "Espace client",
     PLATFORM_APP: "Plateforme (connexion, compte, autre)",
 }
 

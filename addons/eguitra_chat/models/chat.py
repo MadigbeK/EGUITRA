@@ -32,11 +32,11 @@ from odoo import Command, api, fields, models
 from odoo.exceptions import AccessError, MissingError, UserError
 
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
-from odoo.addons.eguitra_base.models.res_users import PROFILE_GROUPS
+from odoo.addons.eguitra_base.models.res_users import EXTERNAL_PROFILES, PROFILE_GROUPS
 
 ADMIN_GROUP = "eguitra_base.group_profile_admin"
-# Profils internes : tous, sauf celui du porteur de projet (utilisateur du portail).
-INTERNAL_PROFILES = tuple(code for code in PROFILE_GROUPS if code != "porteur")
+# Profils internes : tous, sauf ceux des comptes externes (porteur de projet, client de l'espace client).
+INTERNAL_PROFILES = tuple(code for code in PROFILE_GROUPS if code not in EXTERNAL_PROFILES)
 
 KINDS = [("direct", "À deux"), ("group", "Groupe"), ("object", "Fiche")]
 MESSAGE_KINDS = [("message", "Message"), ("event", "Événement")]

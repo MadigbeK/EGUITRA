@@ -49,7 +49,10 @@ class TestAdmin(RefusParProfil, ApiCase):
         self.assertEqual(status, 200)
         self.assertEqual([p["code"] for p in profils], ["admin", "direction", "finance", "achats", "exploitation",
                                                         "chantiers", "immobilier", "cabinet", "associe", "rh",
-                                                        "hsseq", "conducteur", "auditeur", "porteur"])
+                                                        "hsseq", "conducteur", "auditeur", "service_client",
+                                                        "porteur", "client"])
+        agent = next(p for p in profils if p["code"] == "service_client")
+        self.assertEqual((agent["name"], agent["entity"]), ("Service client", None), "Profil commun aux deux sociétés")
         associe = next(p for p in profils if p["code"] == "associe")
         self.assertEqual((associe["name"], associe["entity"]), ("Associé du cabinet", "cabinet"),
                          "Profil propre à MB AxisPro Consulting")
@@ -83,9 +86,12 @@ class TestAdmin(RefusParProfil, ApiCase):
         self.assertEqual(user["login"], "ibrahima")
         self.assertEqual(user["profiles"], ["exploitation"])
         self.assertTrue(user["password_change_required"])
-        # HSSEQ (web) et NIMOVA Terrain s'ouvrent aussi au chef de parc, là où leur module est installé.
+        # HSSEQ (web) et NIMOVA Terrain s'ouvrent aussi au chef de parc, là où leur module est installé ; le
+        # service client aussi (dossiers qui lui sont assignés), là où son module l'est.
         hsseq_apps = ["hsseq", "terrain"] if "eguitra.hsseq.event" in self.env else []
-        self.assertEqual(sorted(user["apps"]), sorted(["finance", "mobile", "transport", *hsseq_apps, *agenda]))
+        service = ["service-client"] if "eguitra.sc.ticket" in self.env else []
+        self.assertEqual(sorted(user["apps"]), sorted(["finance", "mobile", "transport", *hsseq_apps, *agenda,
+                                                       *service]))
 
         status, _b = self.call("POST", "/admin/users", {
             "name": "Doublon", "login": "ibrahima", "password": "Provisoire-2026", "profiles": ["finance"],
@@ -94,6 +100,9 @@ class TestAdmin(RefusParProfil, ApiCase):
 
         status, refus = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["porteur", "finance"]}, token=token)
         self.assertEqual(status, 422, refus)
+        status, refus = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["client", "finance"]}, token=token)
+        self.assertEqual(status, 422, refus)
+        self.assertIn("client", refus["message"], "Le profil client ne se combine avec aucun autre")
 
         status, maj = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["exploitation", "chantiers"]}, token=token)
         self.assertEqual(status, 200, maj)
@@ -137,11 +146,14 @@ class TestAdmin(RefusParProfil, ApiCase):
         self.assertIn("MB AxisPro Consulting", body["message"])
         status, user = self.call("POST", "/admin/users", dict(compte, company_ids=[cabinet.id]), token=token)
         agenda = ["agenda"] if "eguitra.agenda.calendar" in self.env else []
-        self.assertEqual((status, sorted(user["apps"])), (200, sorted(["analyse", "axispro", *agenda])), user)
+        # Service client : les dossiers assignés au consultant, là où le module est installé.
+        service = ["service-client"] if "eguitra.sc.ticket" in self.env else []
+        self.assertEqual((status, sorted(user["apps"])), (200, sorted(["analyse", "axispro", *agenda, *service])), user)
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "chantiers"]}, token=token)
         self.assertEqual(status, 422, "Le profil chantiers exige EGUITRA GROUP")
         status, body = self.call("PATCH", f"/admin/users/{user['id']}", {"profiles": ["cabinet", "finance"]}, token=token)
-        self.assertEqual((status, sorted(body["apps"])), (200, sorted(["analyse", "axispro", "finance", *agenda])),
+        self.assertEqual((status, sorted(body["apps"])), (200, sorted(["analyse", "axispro", "finance", *agenda,
+                                                                       *service])),
                          "Un comptable du cabinet ouvre Finance, AxisPro Suite et Analyse, dans le seul cabinet")
         status, profils = self.call("GET", "/admin/profiles", token=token)
         self.assertEqual({p["code"]: p["entity"] for p in profils}["cabinet"], "cabinet")

@@ -16,7 +16,7 @@ from .. import moteur
 # conducteur (téléphone seul) et l'auditeur externe (HSSEQ en lecture), comme pour la discussion. Un
 # compte sans profil (salarié en libre-service) n'y entre pas.
 AGENDA_PROFILES = ("admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier", "cabinet",
-                   "associe", "rh", "hsseq")
+                   "associe", "rh", "hsseq", "service_client")
 ADMIN_GROUP = "eguitra_base.group_profile_admin"
 DIRECTION_GROUP = "eguitra_base.group_profile_direction"
 
