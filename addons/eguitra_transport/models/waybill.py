@@ -110,10 +110,14 @@ class EguitraTransportWaybill(models.Model):
             waybill.immobilized_days = days
             waybill.billable_days = max(0, days - free)
 
-    # Calcul à part : un tarif corrigé sur la lettre ne fige pas les autres valeurs de la réception.
-    @api.depends("rotation_id.partner_id")
+    # Calcul à part : un tarif corrigé sur la lettre ne fige pas les autres valeurs de la réception. Les
+    # conditions du client suivent ses réglages tant que la rotation n'est pas facturée ; facturée, elles restent.
+    @api.depends("rotation_id.partner_id", "rotation_id.partner_id.commercial_partner_id.transport_demurrage_rate",
+                 "rotation_id.partner_id.commercial_partner_id.transport_demurrage_billable")
     def _compute_demurrage_terms(self):
         for waybill in self:
+            if waybill.rotation_id.state == "invoiced" and waybill.id:
+                continue
             client = waybill.rotation_id.partner_id.commercial_partner_id
             waybill.demurrage_rate = client.transport_demurrage_rate
             waybill.demurrage_billable = client.transport_demurrage_billable

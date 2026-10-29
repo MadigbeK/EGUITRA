@@ -125,6 +125,12 @@ Pour chaque compte, voici ce qu'il faut essayer. Notez tout ce qui vous surprend
   valider (marge estimée à la saisie), rentabilité par camion, par route et par mois, flotte et
   chauffeurs, routes et tarifs. La facturation des rotations et les relevés des propriétaires
   reviennent à la finance.
+- Ordres de transport et documents de l'opération (cahier 03, partie G) : créer l'ordre du client et
+  ses opérations ; dans la fiche de l'opération, voir les quatre documents (ordre de transport, ordre
+  de mission, budget de voyage, lettre de voiture) passer d'« Incomplet » à « Télécharger » à mesure
+  que les informations sont saisies, puis « Tout imprimer ». Le budget de voyage se pré-remplit depuis
+  la route ; test.daf l'approuve, décaisse l'avance et rapproche le bon carburant ; la clôture revient
+  à une autre personne que celle qui a saisi les dépenses (test.comptable).
 
 ### Responsable HSSEQ (test.hsseq) et auditeur (test.auditeur)
 
