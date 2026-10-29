@@ -6,6 +6,7 @@ from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 
+from ..models.client_access import LinkConfirmation
 from ..models.common import AGENTS, ALL, READ_ALL, SETTINGS_WRITE, clean_line, public_url
 from .common import as_int, company, partner_of
 
@@ -148,7 +149,11 @@ class EguitraServiceClientAdmin(http.Controller):
         data = read_json()
         partner_id, email = require(data, "partner_id", "email")
         Invitation = request.env["eguitra.sc.invitation"]
-        user, created, invitation = Invitation.open_account(partner_of(partner_id), data.get("name"), email, company())
+        try:
+            user, created, invitation = Invitation.open_account(partner_of(partner_id), data.get("name"), email,
+                                                                company(), confirm_link=data.get("confirm_link") is True)
+        except LinkConfirmation as e:
+            raise ApiError(409, "confirm_required", str(e.args[0])) from e
         return dict(Invitation.account_row(user, company()), created=created,
                     invitation_sent=bool(invitation and invitation["sent"]),
                     invitation_link=invitation["link"] if invitation else None)

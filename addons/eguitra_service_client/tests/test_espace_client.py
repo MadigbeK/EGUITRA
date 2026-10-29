@@ -148,14 +148,18 @@ class TestEspaceClient(ScCase):
     def test_aucune_prise_de_controle_d_un_compte_existant(self):
         """Revue de sécurité : un compte interne, ou d'une autre société, n'est jamais rattaché ; un compte déjà
         utilisé ne reçoit son lien que par son courriel ; la double authentification reste exigée."""
-        for email in (self.dg.email, self.user_c.email):
+        interne = self._create_user("interne@eguitra.test", "finance")
+        autre_societe = self._client("cabinet@client-c.gn", self.client_c, self.cabinet)
+        for email in (interne.login, autre_societe.login, "INTERNE@eguitra.test"):
             with self.subTest(email=email):
                 status, body = self.call("POST", "/service-client/client-accounts", {
                     "partner_id": self.client_a.id, "email": email}, token=self.token(self.agent_eg))
                 self.assertEqual(status, 422, body)
                 self.assertIn("déjà utilisée", body["message"])
                 self.assertNotIn(self.cabinet.name, body["message"], "Rien n'est dit du compte existant")
-        self.assertNotIn(self.client_a, self.user_c.eguitra_sc_partner_ids)
+        self.assertNotIn(self.client_a, autre_societe.eguitra_sc_partner_ids)
+        self.assertTrue(interne.has_group("eguitra_base.group_profile_finance"), "Compte interne intact")
+        self.assertFalse(interne.eguitra_sc_partner_ids)
         # Compte d'une autre société : l'agent d'EGUITRA GROUP SARLU ne le gère pas.
         status, _b = self.call("POST", f"/service-client/client-accounts/{self.user_c.id}/invite",
                                token=self.token(self.agent_eg))
@@ -168,6 +172,28 @@ class TestEspaceClient(ScCase):
         status, body = self.call("POST", f"/service-client/client-accounts/{self.user_a.id}/invite",
                                  token=self.token(self.agent_eg))
         self.assertEqual(status, 422, "Sans serveur de courrier, pas de réinitialisation")
+
+    def test_compte_retrouve_par_son_identifiant_seulement(self):
+        """Revue de sécurité : un compte n'est retrouvé que par son identifiant, jamais par son champ courriel
+        (modifiable, ni par un joker) ; un compte qui suit déjà un autre client ne le suit en plus que sur
+        confirmation de l'agent, journalisée dans la piste d'audit."""
+        existant = self._client("fanta@client-b.gn", self.client_b, self.groupe)
+        existant.sudo().write({"email": "%@client-a.gn"})
+        body = self.api("POST", "/service-client/client-accounts", self.agent_eg, {
+            "partner_id": self.client_a.id, "email": "awa@client-a.gn", "name": "Awa Diallo"})
+        self.assertTrue(body["created"], "Le joker du champ courriel ne retrouve aucun compte")
+        self.assertEqual(existant.eguitra_sc_partner_ids, self.client_b)
+        status, body = self.call("POST", "/service-client/client-accounts", {
+            "partner_id": self.client_a.id, "email": "fanta@client-b.gn"}, token=self.token(self.agent_eg))
+        self.assertEqual((status, body["error"]), (409, "confirm_required"))
+        self.assertEqual(existant.eguitra_sc_partner_ids, self.client_b, "Rien sans confirmation")
+        body = self.api("POST", "/service-client/client-accounts", self.agent_eg, {
+            "partner_id": self.client_a.id, "email": "fanta@client-b.gn", "confirm_link": True})
+        self.assertFalse(body["created"])
+        self.assertEqual(existant.eguitra_sc_partner_ids, self.client_a | self.client_b)
+        self.assertTrue(self.env["auditlog.log"].sudo().search_count([
+            ("model_id.model", "=", "res.users"), ("res_id", "=", existant.id), ("method", "=", "write"),
+            ("user_id", "=", self.agent_eg.id)]), "Rattachement confirmé tracé avec son auteur")
 
     def test_reinitialisation_exige_la_double_authentification(self):
         secret = base64.b32encode(os.urandom(20)).decode()

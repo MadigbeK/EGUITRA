@@ -4,6 +4,7 @@ inscription libre. Le client reçoit par courriel un lien d'invitation (jeton ha
 connexion, comme le porteur de projet. Un compte suit un ou plusieurs tiers (plusieurs comptes peuvent suivre
 le même tiers : les contacts d'une même entreprise), dans la société qui l'a invité."""
 
+import logging
 import secrets
 from datetime import timedelta
 
@@ -15,10 +16,15 @@ from odoo.addons.eguitra_api.models.api_token import hash_token
 from .common import clean_email, clean_line, mail_body, mail_server_ready, public_url
 
 INVITATION_HOURS = 72
+_logger = logging.getLogger(__name__)
 
 
 class MfaRequired(UserError):
     """Code de double authentification absent ou faux à l'ouverture d'un lien de réinitialisation."""
+
+
+class LinkConfirmation(UserError):
+    """Rattachement d'un compte existant à un autre tiers, à confirmer par l'agent."""
 
 
 class ResUsers(models.Model):
@@ -67,20 +73,31 @@ class EguitraScInvitation(models.Model):
             and set(user.company_ids.ids) == {company.id}
 
     @api.model
-    def open_account(self, partner, name, email, company):
-        """Compte du client pour un tiers de la société : créé au besoin (profil client) ; un compte existant n'est
-        repris que s'il est un compte client de cette société seule. Une invitation part par courriel pour un compte
-        qui ne s'est jamais connecté."""
+    def open_account(self, partner, name, email, company, confirm_link=False):
+        """Compte du client pour un tiers de la société : créé au besoin (profil client). Un compte existant n'est
+        cherché que par son identifiant (l'adresse, en égalité exacte, jamais par son champ courriel modifiable) et
+        n'est repris que s'il est un compte client de cette société seule ; s'il suit déjà un autre tiers, l'agent
+        doit le confirmer (confirm_link), et le rattachement est journalisé. Une invitation part par courriel pour
+        un compte qui ne s'est jamais connecté."""
         partner = self._check_partner(partner, company)
         email = clean_email(email, required=True)
         name = clean_line(name, 120) or partner.name
         Users = self.env["res.users"].sudo().with_context(no_reset_password=True, active_test=False)
-        user = Users.search(["|", ("login", "=", email), ("email", "=ilike", email)], limit=1)
+        user = Users.search([("login", "=", email)], limit=1)
         created = not user
         if user and not self._owned(user, company):
             # Rien n'est dit du compte existant (interne, porteur, autre société) au-delà de ce refus.
             raise UserError("Cette adresse est déjà utilisée par un compte de la plateforme : choisissez une autre "
                             "adresse pour ce contact, ou adressez-vous à l'administration.")
+        others = user.eguitra_sc_partner_ids.commercial_partner_id - partner if user else None
+        if others and not confirm_link:
+            raise LinkConfirmation("Un compte de l'espace client existe déjà à cette adresse pour un autre client de la "
+                                   "société : confirmez qu'il doit aussi suivre ce client (cette personne verra les "
+                                   "demandes des deux clients).")
+        if others:
+            _logger.warning("Service client : compte %s (%s) rattaché au client %s en plus de %s, confirmé par %s",
+                            user.id, user.login, partner.display_name, ", ".join(others.mapped("display_name")),
+                            self.env.user.login)
         if created:
             user = Users.create({
                 "name": name, "login": email, "email": email, "company_id": company.id,

@@ -15,6 +15,7 @@ from odoo.addons.eguitra_api.tests.common import ApiCase
 from odoo.addons.eguitra_api.tests.profils import RefusParProfil
 
 from .. import whatsapp as wa
+from ..models import ticket as ticket_module
 
 WA_ENV = {
     "WHATSAPP_ACCESS_TOKEN": "jeton-essai", "WHATSAPP_APP_SECRET": "secret-essai",
@@ -103,6 +104,10 @@ class ScCase(RefusParProfil, ApiCase):
     def setUp(self):
         super().setUp()
         self._tokens = {}
+        # Calendrier ouvré sans jours fériés (ceux de la RH dépendraient de la date du test).
+        patcher = patch.object(ticket_module, "_holidays", lambda *_a, **_k: frozenset())
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     # ─── Sessions et appels ──────────────────────────────────────────────
 

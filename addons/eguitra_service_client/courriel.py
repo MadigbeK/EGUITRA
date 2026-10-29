@@ -98,6 +98,13 @@ def normalize_email(value):
     return address if EMAIL_RE.match(address) and len(address) <= 254 else ""
 
 
+def sender_of(value):
+    """Adresse d'expédition : une seule adresse lisible, sinon vide (le message est alors refusé)."""
+    addresses = [a for _n, a in getaddresses([value])] if value else []
+    addresses = [a for a in addresses if a]
+    return normalize_email(addresses[0]) if len(addresses) == 1 else ""
+
+
 def _ids(value):
     return MESSAGE_ID_RE.findall(value or "")
 
@@ -118,14 +125,19 @@ def authentication(msg, sender, trusted=()):
     """Authentification de l'expéditeur, lue dans le seul en-tête Authentication-Results du dessus, et seulement
     s'il vient de notre serveur de réception (son identifiant authserv-id, réglé par société ou par la variable
     SC_MAIL_AUTHSERV_ID) : un en-tête plus bas, ou d'un autre serveur, a pu être écrit par l'expéditeur lui-même.
-    « pass » : DMARC passe, ou DKIM passe pour le domaine de l'adresse d'expédition (header.d) ; « fail » : DMARC
-    échoue ; « none » : rien de sûr (en-tête absent, d'un autre serveur, ou sans résultat probant)."""
+    « pass » : DMARC passe pour le domaine de l'adresse d'expédition (header.from), ou DKIM passe pour ce domaine
+    (header.d) ; « fail » : DMARC échoue pour ce domaine ; « none » : rien de sûr (en-tête absent, d'un autre
+    serveur, résultat d'un autre domaine, plusieurs en-têtes From ou plusieurs adresses dans From)."""
     trusted = {t.strip().lower() for t in trusted if t and t.strip()}
     try:
         headers = msg.get_all("Authentication-Results") or []
+        froms = msg.get_all("From") or []
     except Exception:  # en-tête mal encodé
-        headers = []
+        return "none"
     if not trusted or not headers:
+        return "none"
+    # Un seul en-tête From, d'une seule adresse : sinon on ne sait pas quel domaine l'authentification couvre.
+    if len(froms) != 1 or len([a for _n, a in getaddresses([str(froms[0])]) if a]) != 1:
         return "none"
     top = " ".join(str(headers[0]).split())
     authserv, _sep, rest = top.partition(";")
@@ -141,6 +153,10 @@ def authentication(msg, sender, trusted=()):
             continue
         method, result = match.groups()
         if method == "dmarc":
+            # Le résultat DMARC ne vaut que pour le domaine qu'il nomme (header.from) : celui de l'expéditeur.
+            checked = re.search(r"\bheader\.from\s*=\s*([a-z0-9.-]+)", segment)
+            if not (checked and from_domain and checked.group(1).strip(".") == from_domain):
+                continue
             passed = passed or result == "pass"
             failed = failed or result == "fail"
         elif result == "pass":
@@ -206,7 +222,7 @@ def parse(raw, own_addresses=(), trusted_authserv=(), max_attachments=5, max_att
     auth (pass, fail, none), loop (motif de refus ou None)."""
     msg = email.message_from_bytes(raw, policy=email.policy.default)
     sender_name, _addr = parseaddr(_header(msg, "From"))
-    sender = normalize_email(_header(msg, "From"))
+    sender = sender_of(_header(msg, "From"))
     reply_to = normalize_email(_header(msg, "Reply-To"))
     # En-têtes vides écartés : l'analyse stricte des adresses rejette toute la liste sinon.
     headers = [h for h in (_header(msg, "To"), _header(msg, "Cc"), _header(msg, "Delivered-To")) if h]

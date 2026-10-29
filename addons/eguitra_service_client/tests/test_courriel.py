@@ -91,6 +91,20 @@ class TestCourriel(ScCase):
         _o, echec = self.receive(message_id="<dkim3@client-a.gn>", headers=auth("dmarc=fail header.from=client-a.gn"))
         self.assertTrue(echec.sender_unverified)
 
+    def test_dmarc_du_domaine_de_l_expediteur_et_un_seul_from(self):
+        """Revue de sécurité : un DMARC « pass » d'un autre domaine, ou sans domaine, ne vérifie rien ; deux en-têtes
+        From, ou deux adresses dans From, rendent l'expéditeur non vérifié."""
+        _o, autre = self.receive(message_id="<dm1@client-a.gn>", headers=auth("dmarc=pass header.from=pirate.test"))
+        self.assertTrue(autre.sender_unverified)
+        _o, sans = self.receive(message_id="<dm2@client-a.gn>", headers=auth("dmarc=pass"))
+        self.assertTrue(sans.sender_unverified)
+        raw = self.raw_mail("awa@client-a.gn", message_id="<dm3@client-a.gn>", headers=auth())
+        _o, deux = self.receive_mail(raw.replace(b"To: ", b"From: pirate@pirate.test\r\nTo: ", 1))
+        self.assertTrue(deux.sender_unverified, "Deux en-têtes From")
+        self.assertFalse(deux.partner_id)
+        outcome, liste = self.receive(sender="awa@client-a.gn, pirate@pirate.test", message_id="<dm4@client-a.gn>")
+        self.assertEqual((outcome, liste), ("rejected", None), "Deux adresses dans From : expéditeur illisible")
+
     def test_sans_identifiant_de_serveur_regle_tout_est_non_verifie(self):
         self.settings_eg.write({"mail_authserv_id": False})
         with patch.dict(os.environ, {"SC_MAIL_AUTHSERV_ID": ""}):
