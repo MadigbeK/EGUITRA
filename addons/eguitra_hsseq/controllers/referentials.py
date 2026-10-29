@@ -66,6 +66,10 @@ SETTINGS_FIELDS = {
     "night_end_hour": "float", "max_driving_hours": "float", "risk_review_months": "int",
     # Lot 3.
     "co2_factor": "float", "complaint_response_days": "int", "read_reminder_days": "int",
+    # Politiques et procédures (29/10).
+    "review_months_policy": "int", "review_months_procedure": "int", "review_months_work_instruction": "int",
+    "review_months_instruction": "int", "review_months_form": "int", "document_review_alert_days": "int",
+    "document_four_eyes": "bool",
 }
 
 
@@ -382,6 +386,9 @@ class EguitraHsseqReferentials(http.Controller):
                 continue
             if kind == "date":
                 values[key] = date_value(data, key)
+                continue
+            if kind == "bool":
+                values[key] = bool(data[key])
                 continue
             try:
                 values[key] = (int if kind == "int" else float)(data[key] or 0)

@@ -341,9 +341,14 @@ class EguitraHsseqReview(models.Model):
 
     def _input_documents(self, base, start_dt, end_dt):
         env = self.env
+        Document = env["eguitra.hsseq.procedure"].sudo()
+        published = Document.search(base + [("status", "=", "published")])
+        day = today(env)
         return {
-            "procedures_published": env["eguitra.hsseq.procedure"].sudo().search_count(
-                base + [("status", "=", "published")]),
+            "procedures_published": len(published),
+            # Référentiel documentaire HSE (29/10) : politiques en vigueur et revues de documents échues.
+            "policies_published": len(published.filtered(lambda d: d.doc_type == "policy")),
+            "reviews_overdue": len(published.filtered(lambda d: d._review_state(day) == "overdue")),
             "read_rate": env["eguitra.hsseq.report.template"]._procedures_read_rate(self.company_id),
             "bulletins_published": env["eguitra.hsseq.bulletin"].sudo().search_count(
                 base + [("status", "!=", "draft"), ("published_at", ">=", start_dt), ("published_at", "<=", end_dt)]),

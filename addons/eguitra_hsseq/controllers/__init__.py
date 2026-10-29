@@ -15,5 +15,6 @@ from . import environment
 from . import documents
 from . import telematics
 from . import reviews
+from . import policies
 from . import attachments
 from . import cockpit

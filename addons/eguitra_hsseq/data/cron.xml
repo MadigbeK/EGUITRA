@@ -78,4 +78,14 @@
         <!-- Chaque matin à 07 h 45 (heure de Conakry, UTC). -->
         <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 07:45:00')"/>
     </record>
+    <record id="cron_document_reviews" model="ir.cron">
+        <field name="name">HSSEQ : revues des politiques et procédures (alerte avant l'échéance, puis chaque semaine de retard)</field>
+        <field name="model_id" ref="model_eguitra_hsseq_procedure"/>
+        <field name="state">code</field>
+        <field name="code">model._cron_review_alerts()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <!-- Chaque matin à 07 h 50 (heure de Conakry, UTC), après la relance des lectures. -->
+        <field name="nextcall" eval="(DateTime.now() + timedelta(days=1)).strftime('%Y-%m-%d 07:50:00')"/>
+    </record>
 </odoo>

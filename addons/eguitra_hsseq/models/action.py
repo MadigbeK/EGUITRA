@@ -1,6 +1,6 @@
 """Plan d'actions (spécification §3, §9.2) : registre unique des actions correctives et préventives, quelle
 que soit leur origine (événement, contrôle, audit, risque, revue de direction ; au lot 3, réclamation client et
-exercice d'urgence).
+exercice d'urgence ; depuis le 29/10, document HSE et sa revue périodique).
 
 - Statuts : à faire, en cours, à vérifier, close, annulée.
 - Démarrage d'une action coûteuse (coût estimé au seuil des paramètres, 50 000 000 GNF par défaut) après
@@ -57,6 +57,11 @@ class EguitraHsseqAction(models.Model):
                                ondelete="restrict")
     review_id = fields.Many2one("eguitra.hsseq.review", "Revue de direction d'origine", check_company=True,
                                 index=True, ondelete="restrict")
+    # Politiques et procédures (29/10) : action tirée d'un document HSE, le plus souvent de sa revue périodique.
+    document_id = fields.Many2one("eguitra.hsseq.procedure", "Document HSE d'origine", check_company=True,
+                                  index=True, ondelete="restrict")
+    document_review_id = fields.Many2one("eguitra.hsseq.document.review", "Revue de document d'origine",
+                                         index=True, ondelete="set null")
     description = fields.Text("Action", required=True)
     control_level = fields.Selection(CONTROL_LEVELS, "Niveau de maîtrise")
     owner_id = fields.Many2one("res.users", "Responsable", required=True, index=True)
@@ -81,16 +86,20 @@ class EguitraHsseqAction(models.Model):
     reminder_ids = fields.One2many("eguitra.hsseq.action.reminder", "action_id", "Relances")
 
     @api.depends("event_id.site_id", "check_id.site_id", "risk_id.site_id", "finding_id.site_id",
-                 "complaint_id.site_id", "drill_id.site_id")
+                 "complaint_id.site_id", "drill_id.site_id", "document_id.site_ids")
     def _compute_site(self):
         for action in self:
+            # Document d'un seul site : ce site ; visant plusieurs sites ou tous : sans site, comme une revue.
+            document_sites = action.document_id.site_ids
             action.site_id = (action.event_id.site_id or action.check_id.site_id or action.risk_id.site_id
-                              or action.finding_id.site_id or action.complaint_id.site_id or action.drill_id.site_id)
+                              or action.finding_id.site_id or action.complaint_id.site_id or action.drill_id.site_id
+                              or (document_sites if len(document_sites) == 1 else False))
 
     @api.model_create_multi
     def create(self, vals_list):
         origin_fields = {"event": "event_id", "check": "check_id", "risk": "risk_id", "audit": "finding_id",
-                         "complaint": "complaint_id", "drill": "drill_id", "review": "review_id"}
+                         "complaint": "complaint_id", "drill": "drill_id", "review": "review_id",
+                         "document": "document_id"}
         for vals in vals_list:
             field = origin_fields.get(vals.get("origin"))
             if field and vals.get("origin_id") and not vals.get(field):

@@ -189,6 +189,16 @@
         <field name="model_id" ref="model_eguitra_hsseq_acknowledgment"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="rule_hsseq_policy_objective_company" model="ir.rule">
+        <field name="name">Objectifs des politiques : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_policy_objective"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_hsseq_document_review_company" model="ir.rule">
+        <field name="name">Revues des documents HSE : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_hsseq_document_review"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
     <record id="rule_hsseq_bulletin_company" model="ir.rule">
         <field name="name">Alertes et retours d'expérience : sociétés autorisées</field>
         <field name="model_id" ref="model_eguitra_hsseq_bulletin"/>

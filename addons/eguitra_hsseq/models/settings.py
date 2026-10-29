@@ -2,14 +2,16 @@
 verrou de départ, dates à partir desquelles une habilitation, un dossier salarié ou un document du
 véhicule absent bloque le départ, seuils de criticité, délais d'enquête, vérification d'efficacité,
 seuil d'une action coûteuse, destinataire des notifications de la direction, cibles du cockpit ; au lot 3,
-facteur d'émission du carburant, délai de réponse aux réclamations clients, relance des lectures."""
+facteur d'émission du carburant, délai de réponse aux réclamations clients, relance des lectures ; pour les
+politiques et procédures (29/10), revue périodique par type de document, alerte avant son échéance et
+approbation des procédures par une seconde personne."""
 
 from datetime import timedelta
 
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
-from .common import DIRECTION_GROUP, HsseqError, users_in_group
+from .common import DIRECTION_GROUP, DOC_REVIEW_MONTHS, HsseqError, users_in_group
 
 # Cibles proposées par le contrat d'API (§4) ; « targets » les remplace indicateur par indicateur.
 DEFAULT_TARGETS = {
@@ -106,6 +108,24 @@ class EguitraHsseqSettings(models.Model):
         help="Procédure en vigueur ou alerte diffusée : les comptes visés qui ne l'ont pas lue sont relancés à "
              "cet intervalle.")
 
+    # ─── Politiques et procédures (29/10) ─────────────────────────────────
+    review_months_policy = fields.Integer("Revue d'une politique tous les (mois)", default=DOC_REVIEW_MONTHS["policy"])
+    review_months_procedure = fields.Integer("Revue d'une procédure tous les (mois)",
+                                             default=DOC_REVIEW_MONTHS["procedure"])
+    review_months_work_instruction = fields.Integer("Revue d'une instruction de travail tous les (mois)",
+                                                    default=DOC_REVIEW_MONTHS["work_instruction"])
+    review_months_instruction = fields.Integer("Revue d'une consigne tous les (mois)",
+                                               default=DOC_REVIEW_MONTHS["instruction"])
+    review_months_form = fields.Integer("Revue d'un formulaire tous les (mois)", default=DOC_REVIEW_MONTHS["form"])
+    document_review_alert_days = fields.Integer(
+        "Alerte avant l'échéance de revue d'un document (jours)", default=30,
+        help="Le Responsable HSSEQ, le responsable du document et, pour une politique, la direction sont prévenus "
+             "ce nombre de jours avant la revue, puis chaque semaine de retard.")
+    document_four_eyes = fields.Boolean(
+        "Procédures approuvées par un autre Responsable HSSEQ que leur rédacteur", default=False,
+        help="Une politique est toujours approuvée par la direction, jamais par son rédacteur. Coché : les "
+             "autres documents aussi passent par une seconde personne du profil HSSEQ.")
+
     # ─── Cockpit (§10) ────────────────────────────────────────────────────
     targets = fields.Json("Cibles des indicateurs", help="Code de l'indicateur -> cible ; à défaut, la cible proposée.")
 
@@ -127,6 +147,19 @@ class EguitraHsseqSettings(models.Model):
             if s.co2_factor <= 0 or s.complaint_response_days < 1 or s.read_reminder_days < 1:
                 raise ValidationError("Facteur d'émission positif ; délai de réponse et intervalle de relance d'au "
                                       "moins un jour.")
+
+    @api.constrains("review_months_policy", "review_months_procedure", "review_months_work_instruction",
+                    "review_months_instruction", "review_months_form", "document_review_alert_days")
+    def _check_documents(self):
+        for s in self:
+            if min(s[f"review_months_{code}"] for code in DOC_REVIEW_MONTHS) < 1 or s.document_review_alert_days < 0:
+                raise ValidationError("Revue d'un document : au moins un mois ; alerte avant l'échéance : zéro jour "
+                                      "ou plus.")
+
+    def _review_months(self, doc_type):
+        """Périodicité de revue d'un type de document (mois), au réglage de la société."""
+        self.ensure_one()
+        return self[f"review_months_{doc_type}"] or DOC_REVIEW_MONTHS.get(doc_type, 12)
 
     @api.constrains("level_moderate_min", "level_significant_min", "level_high_min")
     def _check_levels(self):

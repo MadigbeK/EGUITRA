@@ -336,7 +336,9 @@ def pdf_context(review, inputs=None, user=None, auditor=False):
                        f"{emergency.get('drills_done', 0)} / {emergency.get('drills_planned', 0)}")],
         "stale_plans": [(p["reference"], p["title"], p["site"], dict(SCENARIOS).get(p["scenario"], ""))
                         for p in emergency.get("plans_without_recent_drill") or []],
-        "documents": [("Procédures en vigueur", documents.get("procedures_published", 0)),
+        "documents": [("Documents HSE en vigueur (politiques, procédures…)", documents.get("procedures_published", 0)),
+                      ("Politiques en vigueur", documents.get("policies_published", 0)),
+                      ("Revues de documents en retard", documents.get("reviews_overdue", 0)),
                       ("Taux de lecture des procédures", fmt(documents.get("read_rate"), "pct")),
                       ("Alertes et retours d'expérience diffusés", documents.get("bulletins_published", 0))],
         "telematics": [("Violations de conduite", telematics.get("violations", 0)),

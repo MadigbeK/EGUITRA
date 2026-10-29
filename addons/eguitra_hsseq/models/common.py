@@ -50,7 +50,7 @@ ACTION_STATUSES = [("todo", "À faire"), ("in_progress", "En cours"), ("to_verif
                    ("closed", "Close"), ("cancelled", "Annulée")]
 ACTION_ORIGINS = [("event", "Événement"), ("audit", "Audit"), ("check", "Contrôle"), ("risk", "Risque"),
                   ("review", "Revue de direction"), ("complaint", "Réclamation client"),
-                  ("drill", "Exercice d'urgence")]
+                  ("drill", "Exercice d'urgence"), ("document", "Document HSE")]
 CONTROL_LEVELS = [("elimination", "Élimination"), ("substitution", "Substitution"), ("engineering", "Ingénierie"),
                   ("administrative", "Mesure administrative"), ("ppe", "Équipement de protection")]
 REMINDER_KINDS = [("d_minus_7", "Échéance dans 7 jours"), ("d0", "Échéance du jour"), ("weekly", "Retard"),
@@ -106,6 +106,8 @@ OBJECT_MODELS = {
     "violation": "eguitra.hsseq.telematics.violation",
     "telematics_import": "eguitra.hsseq.telematics.import",
     "qualification_rule": "eguitra.hsseq.qualification.rule",
+    # Politiques et procédures (29/10).
+    "document_review": "eguitra.hsseq.document.review",
 }
 # Les alertes flash et retours d'expérience n'ont pas de pièce jointe : une photo échapperait au contrôle
 # d'anonymisation (§9.4).
@@ -175,7 +177,21 @@ COMPLAINT_STATUSES = [("received", "Reçue"), ("answered", "Répondue"), ("close
 
 # Documents et urgences (§3, §9.4).
 PROCEDURE_STATUSES = [("draft", "En rédaction"), ("published", "En vigueur"), ("archived", "Archivée")]
-VERSION_STATUSES = [("draft", "Brouillon"), ("published", "En vigueur"), ("superseded", "Remplacée")]
+# Une version se rédige, se soumet à l'approbation (direction pour une politique, Responsable HSSEQ pour les
+# autres types), entre en vigueur à l'approbation et est remplacée par la suivante.
+VERSION_STATUSES = [("draft", "Brouillon"), ("submitted", "En approbation"), ("published", "En vigueur"),
+                    ("superseded", "Remplacée")]
+# Référentiel documentaire HSE (29/10) : types, préfixe de leur référence, type du document de rattachement
+# permis (une procédure met en œuvre une politique ; une instruction, sa procédure) et revue proposée (mois).
+DOC_TYPES = [("policy", "Politique"), ("procedure", "Procédure"),
+             ("work_instruction", "Instruction de travail ou mode opératoire"), ("instruction", "Consigne"),
+             ("form", "Formulaire ou modèle")]
+DOC_TYPE_PREFIX = {"policy": "POL-HSE-", "procedure": "PR-HSE-", "work_instruction": "IT-HSE-",
+                   "instruction": "CS-HSE-", "form": "FO-HSE-"}
+DOC_PARENT_TYPES = {"policy": (), "procedure": ("policy",), "work_instruction": ("procedure",),
+                    "instruction": ("procedure", "work_instruction"), "form": ("procedure", "work_instruction")}
+DOC_REVIEW_MONTHS = {"policy": 12, "procedure": 24, "work_instruction": 24, "instruction": 24, "form": 36}
+DOC_REVIEW_OUTCOMES = [("renewed", "Reconduit sans changement"), ("revised", "Nouvelle version à rédiger")]
 BULLETIN_KINDS = [("flash_alert", "Alerte flash"), ("lesson", "Retour d'expérience")]
 BULLETIN_STATUSES = [("draft", "Brouillon"), ("published", "Diffusé"), ("archived", "Archivé")]
 # Profils qu'une procédure ou une alerte peut viser.
