@@ -178,7 +178,9 @@ Leave = env["eguitra.rh.leave"]
 
 
 def leave(emp, code, start, end, state="approved"):
-    if Leave.search_count([("employee_id", "=", emp.id), ("date_from", "=", start)]):
+    # Relancé un autre jour, le script retrouve l'absence déjà posée sur ces dates (dates relatives à aujourd'hui) :
+    # tout chevauchement compte, comme pour le noyau qui refuse deux absences sur les mêmes jours.
+    if Leave.search_count([("employee_id", "=", emp.id), ("date_from", "<=", end), ("date_to", ">=", start)]):
         return
     record = Leave.create({"employee_id": emp.id, "type_id": leave_type[code].id, "date_from": start, "date_to": end,
                            "note": "Démonstration"})

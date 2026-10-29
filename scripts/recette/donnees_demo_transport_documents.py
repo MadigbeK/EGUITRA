@@ -102,6 +102,8 @@ else:
         "quantity_uom": "l", "packaging": "Vrac liquide", "route_id": route.id, "client_ref": "DEMO-OT-1",
         "consignee": "Démo - Dépôt minier de Siguiri", "note": "Transport d'hydrocarbure (démo)",
         "client_signatory": "Responsable logistique (démo)", "with_loading": True,
+        # Le client peut venir d'un autre script de démonstration, sans adresse : celle de l'ordre est donnée ici.
+        "billing_address": "Zone industrielle démo, Conakry",
     })
     order.action_validate()
     Rotation = env["eguitra.transport.rotation"]
