@@ -8,13 +8,17 @@ import secrets
 from datetime import timedelta
 
 from odoo import api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessDenied, UserError
 
 from odoo.addons.eguitra_api.models.api_token import hash_token
 
 from .common import clean_email, clean_line, mail_body, mail_server_ready, public_url
 
 INVITATION_HOURS = 72
+
+
+class MfaRequired(UserError):
+    """Code de double authentification absent ou faux à l'ouverture d'un lien de réinitialisation."""
 
 
 class ResUsers(models.Model):
@@ -44,6 +48,8 @@ class EguitraScInvitation(models.Model):
     expires_at = fields.Datetime("Valable jusqu'au", required=True)
     used_at = fields.Datetime("Utilisée le")
     sent = fields.Boolean("Envoyée par courriel")
+    kind = fields.Selection([("invite", "Invitation"), ("reset", "Réinitialisation du mot de passe")], "Nature",
+                            required=True, default="invite")
 
     @api.model
     def _check_partner(self, partner, company):
@@ -53,20 +59,28 @@ class EguitraScInvitation(models.Model):
         return partner
 
     @api.model
+    def _owned(self, user, company):
+        """Compte de l'espace client de cette société et d'elle seule : les agents d'une société ne gèrent que ceux-là
+        (jamais un compte interne, un porteur, ni un compte d'une autre société)."""
+        user = user.sudo()
+        return bool(user) and user.share and set(user._eguitra_profiles()) <= {"client"} \
+            and set(user.company_ids.ids) == {company.id}
+
+    @api.model
     def open_account(self, partner, name, email, company):
-        """Compte du client pour un tiers de la société : créé au besoin (profil client), rattaché sinon ; une
-        invitation part par courriel. Un identifiant interne n'est jamais repris."""
+        """Compte du client pour un tiers de la société : créé au besoin (profil client) ; un compte existant n'est
+        repris que s'il est un compte client de cette société seule. Une invitation part par courriel pour un compte
+        qui ne s'est jamais connecté."""
         partner = self._check_partner(partner, company)
         email = clean_email(email, required=True)
         name = clean_line(name, 120) or partner.name
         Users = self.env["res.users"].sudo().with_context(no_reset_password=True, active_test=False)
-        user = Users.search([("login", "=", email)], limit=1)
+        user = Users.search(["|", ("login", "=", email), ("email", "=ilike", email)], limit=1)
         created = not user
-        if user and not user.share:
-            raise UserError("Cette adresse est l'identifiant d'un compte interne : choisissez une autre adresse.")
-        if user and set(user._eguitra_profiles()) - {"client"}:
-            raise UserError("Cette adresse est l'identifiant d'un compte du portail des porteurs : choisissez-en une "
-                            "autre pour l'espace client.")
+        if user and not self._owned(user, company):
+            # Rien n'est dit du compte existant (interne, porteur, autre société) au-delà de ce refus.
+            raise UserError("Cette adresse est déjà utilisée par un compte de la plateforme : choisissez une autre "
+                            "adresse pour ce contact, ou adressez-vous à l'administration.")
         if created:
             user = Users.create({
                 "name": name, "login": email, "email": email, "company_id": company.id,
@@ -76,20 +90,13 @@ class EguitraScInvitation(models.Model):
             })
             user._eguitra_set_profiles(["client"])
         else:
-            vals = {"active": True}
-            if company not in user.company_ids:
-                vals["company_ids"] = [(4, company.id)]
-            user.write(vals)
+            user.write({"active": True})
         if partner not in user.eguitra_sc_partner_ids:
             user.write({"eguitra_sc_partner_ids": [(4, partner.id)]})
         invitation = self.invite(user, company) if created or not user.login_date else None
         return user, created, invitation
 
-    @api.model
-    def invite(self, user, company):
-        """Nouvelle invitation (les précédentes sont annulées) : lien envoyé par courriel ; sans serveur de
-        courrier, le lien est rendu une fois à l'agent, qui le transmet par un autre canal."""
-        user = user.sudo()
+    def _new_link(self, user, company, kind):
         url = public_url(self.env)
         if not url:
             raise UserError("Adresse publique de l'espace client non réglée (Réglages du service client) : "
@@ -97,29 +104,71 @@ class EguitraScInvitation(models.Model):
         self.sudo().search([("user_id", "=", user.id), ("used_at", "=", False)]).write({"token_hash": False})
         raw = secrets.token_urlsafe(32)
         invitation = self.sudo().create({
-            "user_id": user.id, "company_id": company.id, "token_hash": hash_token(raw),
+            "user_id": user.id, "company_id": company.id, "token_hash": hash_token(raw), "kind": kind,
             "expires_at": fields.Datetime.now() + timedelta(hours=INVITATION_HOURS),
         })
-        link = f"{url}/invitation/{raw}"
-        sent = False
-        if user.email and mail_server_ready(self.env):
-            settings = self.env["eguitra.sc.settings"]._get(company)
-            self.env["mail.mail"].sudo().create({
-                "subject": f"Votre espace client {company.name}", "email_to": user.email, "auto_delete": True,
-                "email_from": settings.mail_address or company.email or False,
-                "body_html": mail_body(company, "Votre espace client", [
-                    f"Bonjour {user.name},",
-                    f"Le service client de {company.name} vous ouvre un espace en ligne pour déposer vos demandes et "
-                    "réclamations, suivre leur traitement et échanger avec nous.",
-                    f"Choisissez votre mot de passe en ouvrant ce lien, valable {INVITATION_HOURS} heures : {link}",
-                    f"Votre identifiant : {user.login}. À la première connexion, une application d'authentification "
-                    "(sur votre téléphone) vous sera demandée pour sécuriser votre compte.",
-                    "Si vous n'attendiez pas ce message, ignorez-le.",
-                ]),
-            })
-            sent = True
+        return invitation, f"{url}/invitation/{raw}"
+
+    def _mail_link(self, user, company, link, kind):
+        settings = self.env["eguitra.sc.settings"]._get(company)
+        if kind == "reset":
+            title, paragraphs = "Nouveau mot de passe", [
+                f"Bonjour {user.name},",
+                f"Le service client de {company.name} vous envoie, à votre demande, un lien pour choisir un nouveau mot "
+                f"de passe de votre espace client, valable {INVITATION_HOURS} heures : {link}",
+                "Si la double authentification est activée sur votre compte, le code de votre application "
+                "d'authentification vous sera demandé.",
+                "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe ne change pas.",
+            ]
+        else:
+            title, paragraphs = "Votre espace client", [
+                f"Bonjour {user.name},",
+                f"Le service client de {company.name} vous ouvre un espace en ligne pour déposer vos demandes et "
+                "réclamations, suivre leur traitement et échanger avec nous.",
+                f"Choisissez votre mot de passe en ouvrant ce lien, valable {INVITATION_HOURS} heures : {link}",
+                f"Votre identifiant : {user.login}. À la première connexion, une application d'authentification (sur "
+                "votre téléphone) vous sera demandée pour sécuriser votre compte.",
+                "Si vous n'attendiez pas ce message, ignorez-le.",
+            ]
+        self.env["mail.mail"].sudo().create({
+            "subject": f"{title} : espace client {company.name}", "email_to": user.email, "auto_delete": True,
+            "email_from": settings.mail_address or company.email or False,
+            "body_html": mail_body(company, title, paragraphs),
+        })
+
+    @api.model
+    def invite(self, user, company):
+        """Invitation d'un compte qui ne s'est jamais connecté (les précédentes sont annulées) : lien envoyé par
+        courriel ; sans serveur de courrier, le lien est rendu une fois à l'agent, qui le transmet par un autre
+        canal. Un compte déjà utilisé ne reçoit jamais de lien par cette voie (reset)."""
+        user = user.sudo()
+        if not self._owned(user, company):
+            raise UserError("Compte de l'espace client introuvable dans la société.")
+        if user.login_date:
+            raise UserError("Ce compte s'est déjà connecté : son mot de passe se réinitialise par son courriel.")
+        invitation, link = self._new_link(user, company, "invite")
+        sent = bool(user.email and mail_server_ready(self.env))
+        if sent:
+            self._mail_link(user, company, link, "invite")
         invitation.write({"sent": sent})
         return {"invitation": invitation, "link": None if sent else link, "sent": sent}
+
+    @api.model
+    def reset(self, user, company):
+        """Réinitialisation du mot de passe d'un compte déjà utilisé : le lien part par le courriel du compte, et par
+        lui seul (jamais rendu à l'agent) ; la double authentification du compte reste exigée à son ouverture."""
+        user = user.sudo()
+        if not self._owned(user, company):
+            raise UserError("Compte de l'espace client introuvable dans la société.")
+        if not user.email:
+            raise UserError("Ce compte n'a pas d'adresse électronique : la réinitialisation passe par l'administration.")
+        if not mail_server_ready(self.env):
+            raise UserError("Aucun serveur d'envoi de courriel n'est paramétré : la réinitialisation passe par le "
+                            "courriel du compte, elle est impossible pour l'instant.")
+        invitation, link = self._new_link(user, company, "reset")
+        self._mail_link(user, company, link, "reset")
+        invitation.write({"sent": True})
+        return {"invitation": invitation, "link": None, "sent": True}
 
     @api.model
     def _find(self, raw):
@@ -133,11 +182,21 @@ class EguitraScInvitation(models.Model):
             return self.browse()
         return invitation
 
-    def accept(self, password):
+    def accept(self, password, code=None):
         """Le client choisit son mot de passe (règles de robustesse de la plateforme) ; le lien ne sert qu'une
-        fois et les sessions ouvertes du compte sont fermées."""
+        fois et les sessions ouvertes du compte sont fermées. Un compte dont la double authentification est activée
+        donne aussi son code, comme à la connexion : un lien seul ne suffit pas à reprendre le compte."""
         self.ensure_one()
         invitation = self.sudo()
+        user = invitation.user_id
+        if user.totp_enabled:
+            code = str(code or "").replace(" ", "")
+            if not (code.isdigit() and len(code) == 6):
+                raise MfaRequired("Code de double authentification requis.")
+            try:
+                user.with_user(user)._check_credentials({"type": "totp", "token": int(code)}, {"interactive": True})
+            except AccessDenied as e:
+                raise MfaRequired("Code de double authentification incorrect.") from e
         password = str(password or "")
         if len(password) < 10:
             raise UserError("Mot de passe trop court : 10 caractères au moins.")
@@ -155,7 +214,7 @@ class EguitraScInvitation(models.Model):
         if partner:
             domain.append(("eguitra_sc_partner_ids", "in", partner.commercial_partner_id.ids))
         users = self.env["res.users"].sudo().with_context(active_test=False).search(domain, order="name", limit=500)
-        return users.filtered(lambda u: u._eguitra_sc_partners(company))
+        return users.filtered(lambda u: self._owned(u, company) and u._eguitra_sc_partners(company))
 
     @api.model
     def account_row(self, user, company):
@@ -165,5 +224,6 @@ class EguitraScInvitation(models.Model):
             "id": user.id, "name": user.name, "login": user.login, "active": user.active,
             "partners": [{"id": p.id, "name": p.name} for p in user._eguitra_sc_partners(company)],
             "last_login": user.login_date or None, "mfa_enabled": bool(user.totp_enabled),
-            "invitation": {"expires_at": last.expires_at, "used": bool(last.used_at), "sent": last.sent} if last else None,
+            "invitation": {"expires_at": last.expires_at, "used": bool(last.used_at), "sent": last.sent,
+                           "kind": last.kind} if last else None,
         }

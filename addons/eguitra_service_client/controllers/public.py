@@ -32,6 +32,7 @@ from odoo.addons.eguitra_api.controllers.framework import (
 )
 
 from .. import whatsapp as wa
+from ..models.client_access import MfaRequired
 from ..models.journal import RateLimited
 
 _logger = logging.getLogger(__name__)
@@ -105,13 +106,14 @@ class EguitraServiceClientPublic(http.Controller):
             raise MissingError("Lien d'invitation inconnu, déjà utilisé ou expiré : demandez-en un nouveau au service "
                                "client.")
         return {"name": invitation.user_id.name, "login": invitation.user_id.login,
-                "company": invitation.company_id.name, "expires_at": invitation.expires_at}
+                "company": invitation.company_id.name, "expires_at": invitation.expires_at,
+                "kind": invitation.kind, "mfa_required": bool(invitation.user_id.totp_enabled)}
 
     @api_route("/espace-client/invitation/accept", methods=("POST",), auth=False)
     @kept
     def invitation_accept(self, **_kw):
-        """Le client choisit son mot de passe ; il se connecte ensuite à l'espace client (double authentification à
-        activer)."""
+        """Le client choisit son mot de passe (avec le code de son application d'authentification si la double
+        authentification est activée) ; il se connecte ensuite à l'espace client."""
         env = sudo_env()
         env["eguitra.sc.public.attempt"]._limit(client_ip(), "invitation")
         data = read_json()
@@ -120,7 +122,17 @@ class EguitraServiceClientPublic(http.Controller):
         if not invitation:
             raise MissingError("Lien d'invitation inconnu, déjà utilisé ou expiré : demandez-en un nouveau au service "
                                "client.")
-        user = invitation.accept(password)
+        login = invitation.user_id.login
+        Attempt = env["eguitra.api.login.attempt"]
+        if invitation.user_id.totp_enabled and Attempt._is_blocked(login, client_ip()):
+            return json_response({"error": "too_many_attempts", "message": "Trop de tentatives. Réessayez dans 15 "
+                                                                           "minutes."}, 429)
+        try:
+            user = invitation.accept(password, data.get("code"))
+        except MfaRequired as e:
+            # Échec du code compté comme à la connexion (blocage après cinq essais), sans annuler la transaction.
+            Attempt.create({"login": login, "ip": client_ip(), "success": False, "kind": "mfa"})
+            return json_response({"error": "mfa_required", "message": str(e.args[0])}, 401)
         return {"status": "ok", "login": user.login}
 
     # ─── Satisfaction par le lien du courriel ────────────────────────────

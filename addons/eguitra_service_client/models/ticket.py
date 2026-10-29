@@ -416,6 +416,10 @@ class EguitraScTicket(models.Model):
         ticket = self.sudo()
         if not ticket._settings().ack_enabled or ticket.channel not in ("email", "whatsapp", "portal"):
             return None
+        # Courriel d'un expéditeur non vérifié (adresse peut-être forgée) : aucune réponse automatique qui porterait
+        # le numéro ou l'objet du dossier vers une adresse que rien ne garantit.
+        if ticket.channel == "email" and ticket.sender_unverified:
+            return None
         due = ticket.date_first_response_due
         when = f" Nous vous répondons au plus tard le {due:%d/%m/%Y à %H:%M}." if due else ""
         body = (f"Bonjour {ticket.contact_name or ''},\n\nNous avons bien reçu votre demande « {ticket.subject} », "
@@ -435,6 +439,10 @@ class EguitraScTicket(models.Model):
         if not ticket._settings().satisfaction_enabled or ticket.satisfaction_score or ticket.merged_into_id:
             return
         channel = ticket.channel
+        if channel == "email" and ticket.sender_unverified:
+            ticket._event("Satisfaction : pas de demande automatique à un expéditeur non vérifié ; recueillez-la par "
+                          "téléphone au besoin.")
+            return
         if channel == "email":
             url = public_url(self.env)
             if not (url and ticket.contact_email):

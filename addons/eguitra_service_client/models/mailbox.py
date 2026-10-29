@@ -14,10 +14,14 @@ Traitement d'un message (_process) :
 1. idempotence : un identifiant de message déjà vu n'est pas traité deux fois ;
 2. refus des envois automatiques (rebonds, réponses automatiques et d'absence, envois en nombre, nos propres
    messages revenus) et des expéditeurs trop bavards (20 messages par heure) : journal seul, aucun accusé ;
-3. rattachement : en réponse à un message du dossier (en-têtes In-Reply-To et References), ou par la référence
-   [SC/…] de l'objet quand l'expéditeur est le contact du dossier ; sinon un nouveau dossier ;
-4. expéditeur reconnu s'il est un contact de la société et que le serveur de réception ne signale pas d'échec
-   d'authentification ; sinon le dossier est marqué « expéditeur non vérifié » ;
+3. expéditeur vérifié seulement s'il est un contact de la société et que notre serveur de réception l'a authentifié
+   (en-tête Authentication-Results du dessus, à l'identifiant authserv-id réglé : DMARC, ou DKIM du domaine de
+   l'expéditeur). Tout le reste (en-tête absent, d'un autre serveur, « none ») est « non vérifié » : un expéditeur
+   forgé ne se rattache jamais au tiers d'un client ni à un dossier existant ; il ouvre un dossier « expéditeur non
+   vérifié », sans réponse automatique, qu'un agent rattache ou fusionne à la main ;
+4. rattachement d'un expéditeur vérifié : en réponse à un message du dossier (en-têtes In-Reply-To et References),
+   ou par la référence [SC/…] de l'objet, quand il est le contact (ou du même client) du dossier ; sinon un nouveau
+   dossier ;
 5. pièces jointes bornées en nombre, en taille et en format (PDF, images, Word, Excel), reconnu au contenu.
 """
 
@@ -76,6 +80,10 @@ class EguitraScMailGateway(models.AbstractModel):
             return {"active": False, "message": "Relève du courriel inactive : les identifiants de la boîte ne sont "
                                                 "pas posés sur le serveur (variables SC_IMAP_…, à demander à "
                                                 "E-VOLUTION XP)."}
+        if not settings._trusted_authserv():
+            return {"active": True, "message": f"Boîte {settings.mail_address} relevée toutes les 5 minutes. Serveur de "
+                                               "réception (authserv-id) non réglé : tous les expéditeurs sont « non "
+                                               "vérifiés » et rattachés à la main."}
         return {"active": True, "message": f"Boîte {settings.mail_address} relevée toutes les 5 minutes."}
 
     @api.model
@@ -154,7 +162,8 @@ class EguitraScMailGateway(models.AbstractModel):
         """Un courriel reçu par la boîte de la société -> dossier ouvert, message rattaché, ou refus journalisé.
         Rend (issue, dossier)."""
         Inbound = self.env["eguitra.sc.inbound"]
-        data = courriel.parse(raw, own_addresses=self._own_addresses())
+        settings = self.env["eguitra.sc.settings"]._get(company)
+        data = courriel.parse(raw, own_addresses=self._own_addresses(), trusted_authserv=settings._trusted_authserv())
         sender = data["sender"]
         external = data["message_id"] or f"<sans-identifiant-{hashlib.sha256(raw).hexdigest()[:32]}@nimova>"
         if Inbound._seen("email", external):
@@ -168,34 +177,33 @@ class EguitraScMailGateway(models.AbstractModel):
             return "rejected", None
 
         partner, contact = self._match_sender(company, sender)
-        verified = bool(partner) and data["auth"] != "fail"
-        ticket = self._thread_of(company, data, sender)
+        # Vérifié : authentifié par notre serveur de réception (DMARC, ou DKIM du domaine de l'expéditeur) et contact
+        # de la société. Sinon, rien ne le rattache au tiers d'un client ni à un dossier existant.
+        authenticated = data["auth"] == "pass"
+        verified = bool(partner) and authenticated
         body = data["body"] or "(message sans texte)"
-        if ticket:
-            ticket = ticket._final()
-        if ticket and ticket.state == "closed":
-            previous = ticket
-            ticket = None
-        else:
-            previous = None
-        if ticket:
-            same = sender and (sender == ticket.contact_email or (
-                ticket.partner_id and partner and partner == ticket.partner_id.commercial_partner_id))
-            attachments = self._attachments(ticket, data)
-            ticket.client_message(body, "email", author_name=data["sender_name"] or sender,
-                                  attachments=attachments, unverified=not (same and verified),
-                                  external={"email_message_id": data["message_id"] or False})
-            if not (same and verified):
-                ticket._event(f"Message reçu de {sender} : expéditeur différent du contact du dossier ou non vérifié.")
-            Inbound._log("email", external, company, sender, "attached", ticket=ticket)
-            return "attached", ticket
+        thread = self._thread_of(company, data, sender, by_reference=verified)
+        if thread:
+            thread = thread._final()
+        previous = thread if thread and thread.state == "closed" else None
+        ticket = thread if thread and not previous else None
+        if ticket and verified:
+            same = sender == ticket.contact_email or (
+                ticket.partner_id and partner == ticket.partner_id.commercial_partner_id)
+            if same:
+                attachments = self._attachments(ticket, data)
+                ticket.client_message(body, "email", author_name=data["sender_name"] or sender, attachments=attachments,
+                                      external={"email_message_id": data["message_id"] or False})
+                Inbound._log("email", external, company, sender, "attached", ticket=ticket)
+                return "attached", ticket
 
         values = {
             "company_id": company.id, "channel": "email", "subject": clean_line(data["subject"], 200) or "Sans objet",
             "description": body, "contact_email": sender or False,
-            "contact_name": clean_line(data["sender_name"] or (contact.name if contact else ""), 120) or sender,
-            "partner_id": partner.id if partner and verified else False, "sender_unverified": not verified,
-            "previous_id": previous.id if previous else False,
+            "contact_name": clean_line(data["sender_name"] or (contact.name if contact and verified else ""), 120)
+            or sender,
+            "partner_id": partner.id if verified else False, "sender_unverified": not verified,
+            "previous_id": previous.id if previous and verified else False,
         }
         if data["date"] and data["date"] <= fields.Datetime.now():
             values["date_open"] = data["date"]
@@ -204,9 +212,16 @@ class EguitraScMailGateway(models.AbstractModel):
         ticket.client_message(body, "email", author_name=values["contact_name"], attachments=attachments,
                               unverified=not verified, external={"email_message_id": data["message_id"] or False},
                               notify=False)
-        ticket._event("Dossier ouvert par courriel" + (f", suite du dossier clos {previous.name}" if previous else "")
-                      + ("." if verified else " : expéditeur non vérifié (aucun contact de la société à cette adresse, "
-                                              "ou authentification en échec)."))
+        if verified:
+            ticket._event("Dossier ouvert par courriel" + (f", suite du dossier clos {previous.name}." if previous else "."))
+        else:
+            why = ("authentification de l'expéditeur absente ou en échec" if not authenticated
+                   else "adresse inconnue des contacts de la société")
+            hint = f" Il semble répondre au dossier {thread.name} : fusionnez-le après vérification." if thread else ""
+            known = (f" L'adresse est celle d'un contact de {partner.name} : rattachez le dossier à ce client après "
+                     "vérification." if partner else "")
+            ticket._event(f"Dossier ouvert par courriel, expéditeur non vérifié ({why}) : aucune réponse automatique "
+                          f"n'est envoyée.{known}{hint}")
         if data["refused"]:
             ticket._event("Pièces jointes écartées : " + ", ".join(f"{n} ({why})" for n, why in data["refused"]) + ".")
         ticket._acknowledge()
@@ -228,9 +243,9 @@ class EguitraScMailGateway(models.AbstractModel):
         return commercial, found[:1]
 
     @api.model
-    def _thread_of(self, company, data, sender):
-        """Dossier dont le courriel est la suite : identifiant de message connu, sinon référence de l'objet avec
-        un expéditeur qui est le contact du dossier."""
+    def _thread_of(self, company, data, sender, by_reference=True):
+        """Dossier dont le courriel est la suite : identifiant de message connu, sinon (expéditeur vérifié) référence
+        de l'objet avec un expéditeur qui est le contact du dossier."""
         Message = self.env["eguitra.sc.message"].sudo()
         ids = [i for i in data["in_reply_to"] + data["references"] if i]
         if ids:
@@ -238,7 +253,7 @@ class EguitraScMailGateway(models.AbstractModel):
                                    order="id desc", limit=1)
             if known:
                 return known.ticket_id
-        if data["reference"]:
+        if data["reference"] and by_reference:
             ticket = self.env["eguitra.sc.ticket"].sudo().search(
                 [("name", "=", data["reference"]), ("company_id", "=", company.id)], limit=1)
             if ticket:

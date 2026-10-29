@@ -2,6 +2,8 @@
 clôture automatique, accusé de réception, satisfaction, adresse de la boîte de courriel, modèle WhatsApp ;
 catégories (délais propres, activité, équipe), équipes et réponses types."""
 
+import os
+
 from odoo import api, fields, models
 from odoo.exceptions import UserError
 
@@ -66,6 +68,11 @@ class EguitraScSettings(models.Model):
     mail_address = fields.Char("Adresse du service client",
                                help="Boîte relevée par la plateforme et expéditrice des réponses, par exemple "
                                     "service.client@eguitragroup.com.")
+    mail_authserv_id = fields.Char(
+        "Serveur de réception (authserv-id)",
+        help="Identifiant du serveur de réception de la boîte dans l'en-tête Authentication-Results (par exemple "
+             "mx.eguitragroup.com) : seul l'en-tête du dessus portant cet identifiant est cru. Sans lui, tout "
+             "expéditeur est « non vérifié ». La variable SC_MAIL_AUTHSERV_ID du serveur en donne un par défaut.")
     wa_template = fields.Char("Modèle WhatsApp approuvé",
                               help="Nom du modèle approuvé par Meta, envoyé hors de la fenêtre de 24 heures, avec "
                                    "deux paramètres : le nom du client et le numéro du dossier.")
@@ -82,6 +89,14 @@ class EguitraScSettings(models.Model):
     def _hours(self):
         self.ensure_one()
         return self.work_start, self.work_end
+
+    def _trusted_authserv(self):
+        """Identifiants du serveur de réception crus pour l'authentification des expéditeurs : celui de la société,
+        à défaut ceux de la variable SC_MAIL_AUTHSERV_ID (séparés par des virgules)."""
+        self.ensure_one()
+        if self.mail_authserv_id:
+            return [self.mail_authserv_id]
+        return [v.strip().lower() for v in (os.environ.get("SC_MAIL_AUTHSERV_ID") or "").split(",") if v.strip()]
 
     def _priority_hours(self, priority):
         self.ensure_one()
@@ -125,6 +140,11 @@ class EguitraScSettings(models.Model):
                 vals[key] = bool(data[key])
         if "mail_address" in data:
             vals["mail_address"] = clean_email(data.get("mail_address"))
+        if "mail_authserv_id" in data:
+            authserv = clean_line(data.get("mail_authserv_id"), 200).lower()
+            if authserv and not all(c.isalnum() or c in ".-_" for c in authserv):
+                raise UserError("Identifiant du serveur de réception : un nom de serveur, par exemple mx.eguitragroup.com.")
+            vals["mail_authserv_id"] = authserv or False
         if "wa_template" in data:
             name = clean_line(data.get("wa_template"), 512)
             if name and not all(c.isalnum() or c == "_" for c in name):
@@ -146,7 +166,8 @@ class EguitraScSettings(models.Model):
                        for p in ("urgent", "high", "normal", "low")},
             "escalation_hours": s.escalation_hours, "auto_close_days": s.auto_close_days,
             "ack_enabled": s.ack_enabled, "satisfaction_enabled": s.satisfaction_enabled,
-            "mail_address": s.mail_address or None, "wa_template": s.wa_template or None,
+            "mail_address": s.mail_address or None, "mail_authserv_id": s.mail_authserv_id or None,
+            "wa_template": s.wa_template or None,
             "wa_template_lang": s.wa_template_lang or "fr",
         }
 

@@ -155,11 +155,18 @@ class EguitraServiceClientAdmin(http.Controller):
 
     @api_route("/service-client/client-accounts/<int:user_id>/invite", methods=("POST",), profiles=AGENTS)
     def reinvite(self, user_id, **_kw):
+        """Compte qui ne s'est jamais connecté : nouvelle invitation (lien rendu une fois sans serveur de courrier).
+        Compte déjà utilisé : réinitialisation du mot de passe, par le seul courriel du compte (serveur de courrier
+        exigé) ; le lien n'est jamais rendu ici, et la double authentification du compte reste exigée."""
         Invitation = request.env["eguitra.sc.invitation"]
         user = self._account(user_id)
-        invitation = Invitation.invite(user, company())
-        return dict(Invitation.account_row(user, company()), invitation_sent=invitation["sent"],
-                    invitation_link=invitation["link"])
+        if user.login_date:
+            Invitation.reset(user, company())
+            return dict(Invitation.account_row(user, company()), invitation_sent=True, invitation_link=None,
+                        reset=True)
+        result = Invitation.invite(user, company())
+        return dict(Invitation.account_row(user, company()), invitation_sent=result["sent"],
+                    invitation_link=result["link"], reset=False)
 
     @api_route("/service-client/client-accounts/<int:user_id>/partners/<int:partner_id>", methods=("DELETE",),
                profiles=AGENTS)
@@ -177,8 +184,10 @@ class EguitraServiceClientAdmin(http.Controller):
         return request.env["eguitra.sc.invitation"].account_row(user, company())
 
     def _account(self, user_id):
+        """Compte client de la société de travail, et d'elle seule : un agent ne gère que ceux-là."""
         user = request.env["res.users"].sudo().with_context(active_test=False).browse(user_id).exists()
-        if not user or not user.share or "client" not in user._eguitra_profiles() \
+        Invitation = request.env["eguitra.sc.invitation"]
+        if not user or "client" not in user._eguitra_profiles() or not Invitation._owned(user, company()) \
                 or not user._eguitra_sc_partners(company()):
             raise ApiError(404, "not_found", "Compte de l'espace client introuvable dans la société.")
         return user

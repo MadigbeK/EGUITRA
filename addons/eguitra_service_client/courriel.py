@@ -110,20 +110,46 @@ def _header(msg, name):
     return str(value or "").strip()
 
 
-def authentication(msg):
-    """Résultat de l'authentification (Authentication-Results du serveur de réception) : « pass » si DKIM ou
-    DMARC passent, « fail » si DMARC échoue, ou SPF et DKIM échouent sans succès ; « none » sans en-tête."""
-    results = " ".join(str(v) for v in (msg.get_all("Authentication-Results") or [])).lower()
-    if not results:
+def _domain(address):
+    return address.rsplit("@", 1)[1].lower() if address and "@" in address else ""
+
+
+def authentication(msg, sender, trusted=()):
+    """Authentification de l'expéditeur, lue dans le seul en-tête Authentication-Results du dessus, et seulement
+    s'il vient de notre serveur de réception (son identifiant authserv-id, réglé par société ou par la variable
+    SC_MAIL_AUTHSERV_ID) : un en-tête plus bas, ou d'un autre serveur, a pu être écrit par l'expéditeur lui-même.
+    « pass » : DMARC passe, ou DKIM passe pour le domaine de l'adresse d'expédition (header.d) ; « fail » : DMARC
+    échoue ; « none » : rien de sûr (en-tête absent, d'un autre serveur, ou sans résultat probant)."""
+    trusted = {t.strip().lower() for t in trusted if t and t.strip()}
+    try:
+        headers = msg.get_all("Authentication-Results") or []
+    except Exception:  # en-tête mal encodé
+        headers = []
+    if not trusted or not headers:
         return "none"
-    passed = re.search(r"\b(dkim|dmarc)=pass\b", results)
-    if re.search(r"\bdmarc=fail\b", results):
+    top = " ".join(str(headers[0]).split())
+    authserv, _sep, rest = top.partition(";")
+    authserv_id = (authserv.strip().split() or [""])[0].lower()
+    if authserv_id not in trusted:
+        return "none"
+    from_domain = _domain(sender)
+    passed = failed = False
+    for segment in rest.split(";"):
+        segment = segment.strip().lower()
+        match = re.match(r"(dmarc|dkim)\s*=\s*([a-z]+)", segment)
+        if not match:
+            continue
+        method, result = match.groups()
+        if method == "dmarc":
+            passed = passed or result == "pass"
+            failed = failed or result == "fail"
+        elif result == "pass":
+            signed = re.search(r"\bheader\.d\s*=\s*([a-z0-9.-]+)", segment)
+            if signed and from_domain and signed.group(1).strip(".") == from_domain:
+                passed = True
+    if failed:
         return "fail"
-    if passed:
-        return "pass"
-    if re.search(r"\bspf=(fail|softfail)\b", results) or re.search(r"\bdkim=fail\b", results):
-        return "fail"
-    return "none"
+    return "pass" if passed else "none"
 
 
 def loop_reason(msg, sender, own_addresses=()):
@@ -173,7 +199,7 @@ def _part_text(part):
         return payload.decode("utf-8", errors="replace")
 
 
-def parse(raw, own_addresses=(), max_attachments=5, max_attachment_size=10 * 1024 * 1024):
+def parse(raw, own_addresses=(), trusted_authserv=(), max_attachments=5, max_attachment_size=10 * 1024 * 1024):
     """Message brut -> dict : message_id, in_reply_to, references, subject, reference (dossier cité),
     sender, sender_name, recipients, date, body, attachments [(nom, type annoncé, octets)], refused
     (pièces écartées : trop nombreuses ou trop lourdes ; le format est contrôlé à l'enregistrement),
@@ -234,7 +260,7 @@ def parse(raw, own_addresses=(), max_attachments=5, max_attachment_size=10 * 102
         "body": body,
         "attachments": attachments,
         "refused": refused,
-        "auth": authentication(msg),
+        "auth": authentication(msg, sender, trusted_authserv),
         "loop": loop_reason(msg, sender, own_addresses),
     }
 
