@@ -149,6 +149,10 @@ class EguitraTransportBudget(models.Model):
     disbursed_by = fields.Many2one("res.users", "Décaissé par", readonly=True, copy=False)
     voucher_ids = fields.One2many("eguitra.transport.fuel.voucher", "budget_id", "Bons carburant")
     note = fields.Text("Observations")
+    is_complement = fields.Boolean(
+        "Additif de régularisation", readonly=True, copy=False,
+        help="Créé à la clôture pour des dépenses justifiées au-delà de l'avance, dans la tolérance : ni les auteurs "
+             "des dépenses ni son approbateur ne le décaissent.")
 
     @api.depends("line_ids.amount", "line_ids.kind")
     def _compute_amounts(self):
@@ -327,6 +331,11 @@ class EguitraTransportBudget(models.Model):
                     "amount": line.amount, "description": line.description or line.rubric_id.name,
                 })
 
+    def _approvers(self):
+        """Comptes qui ont tranché une étape de la dernière demande d'approbation du budget."""
+        self.ensure_one()
+        return self._eguitra_last_request().step_ids.filtered(lambda s: s.state == "approved").decided_by
+
     def _eguitra_on_rejected(self):
         self.filtered(lambda b: b.state == "submitted").sudo().write({"state": "rejected"})
 
@@ -376,6 +385,9 @@ class EguitraTransportBudget(models.Model):
                 raise UserError(f"Budget {budget.name} : avance déjà décaissée.")
             if not budget.amount_cash:
                 raise UserError(f"Budget {budget.name} : aucune ligne en espèces à décaisser.")
+            if budget.is_complement and not self.env.su and self.env.user in budget._approvers():
+                raise UserError(f"Budget {budget.name} : vous avez approuvé ce complément ; il se décaisse par une "
+                                "autre personne.")
             rot = budget.rotation_id
             if not rot.driver_id:
                 raise UserError(f"Opération {rot._label()} : désignez le chauffeur, bénéficiaire de l'avance.")
@@ -788,6 +800,7 @@ class EguitraTransportRotation(models.Model):
         décaisse après approbation, comme tout budget ; la clôture attend."""
         self.ensure_one()
         budget = self._new_budget("additive", "Complément à la justification des dépenses du voyage")
+        budget.sudo().is_complement = True
         rubric = self._trip_complement_rubric()
         budget.write({"line_ids": [Command.create({
             "rubric_id": rubric.id, "kind": "cash", "unit": "fixed", "quantity": 1, "price_unit": complement,
@@ -886,6 +899,17 @@ class EguitraApprovalRequest(models.Model):
 
     document = fields.Selection(selection_add=[("travel_budget", "Budgets de voyage (transport)")],
                                 ondelete={"travel_budget": "cascade"})
+
+    def _authors(self):
+        """Budget de voyage : les comptes qui ont saisi ou modifié les dépenses réelles de l'opération ne tranchent
+        aucune étape (quatre yeux sur l'additif de régularisation de la clôture, revue du 29/10/2026)."""
+        authors = super()._authors()
+        if self.res_model == BUDGET_MODEL:
+            record = self._record()
+            if record:
+                expenses = record.rotation_id.sudo().expense_ids
+                authors |= expenses.mapped("create_uid") | expenses.mapped("write_uid")
+        return authors
 
     def _current_amount(self):
         if self.res_model == BUDGET_MODEL:

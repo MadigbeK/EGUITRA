@@ -30,6 +30,8 @@ class DocumentsCase(TransportCase):
         cls._create_user("ousmane", "exploitation")
         # Seconde comptable : la clôture d'un voyage revient à un autre compte que celui qui a saisi les dépenses.
         cls._create_user("kadiatou", "finance")
+        # Troisième comptable : approuve ce que ni l'auteur des dépenses ni le demandeur ne tranchent.
+        cls._create_user("aissatou", "finance")
 
     # ─── Outils ───────────────────────────────────────────────────────────
 

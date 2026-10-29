@@ -60,9 +60,11 @@ def _datetime(data, key):
     value = data.get(key)
     if not value:
         return False
-    text = str(value).replace("T", " ").rstrip("Z")
+    text = str(value).replace("T", " ").rstrip("Z")[:19]
+    # « 2026-10-22 », « 2026-10-22 08:30 » ou « 2026-10-22 08:30:00 ».
+    text = {10: f"{text} 00:00:00", 16: f"{text}:00"}.get(len(text), text)
     try:
-        return fields.Datetime.to_datetime(text if len(text) > 10 else f"{text} 00:00:00")
+        return fields.Datetime.to_datetime(text)
     except ValueError as e:
         raise ApiError(400, "invalid_parameter", f"{key} : date et heure illisibles.") from e
 

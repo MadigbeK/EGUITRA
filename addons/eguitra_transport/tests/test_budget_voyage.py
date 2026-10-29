@@ -205,7 +205,10 @@ class TestBudgetVoyage(DocumentsCase):
             "rubric_id": self._rubric("road_fees").id, "kind": "cash", "unit": "fixed", "quantity": 1,
             "price_unit": 300_000})]})
         additive.with_user(self.agent).action_submit()
-        self._request(additive).with_user(fatou).action_approve()
+        # La comptable qui a saisi les dépenses ne tranche pas l'additif qui les couvre.
+        with self.assertRaises(AccessError):
+            self._request(additive).with_user(fatou).action_approve()
+        self._request(additive).with_user(self.env["res.users"].search([("login", "=", "aissatou")])).action_approve()
         additive.with_user(fatou).action_disburse(self.cash, self.today)
         self.assertFalse(self.rot.with_user(kadiatou).action_trip_close(self.cash, self.today))
         self.assertEqual(self.rot.trip_state, "closed")
@@ -221,17 +224,27 @@ class TestBudgetVoyage(DocumentsCase):
         budget.with_user(fatou).action_disburse(self.cash, self.today)
         self.env["eguitra.transport.trip.expense"].with_user(fatou).create(
             {"rotation_id": self.rot.id, "rubric_id": self._rubric("road_fees").id, "amount": 1_250_000})
+        aissatou = self.env["res.users"].search([("login", "=", "aissatou")])
         complement = self.rot.with_user(kadiatou).action_trip_close(self.cash, self.today)
         self.assertEqual((complement.kind, complement.state, complement.amount_cash), ("additive", "submitted", 50_000))
+        self.assertTrue(complement.is_complement)
         self.assertEqual(complement.line_ids.rubric_id, self._rubric("road_fees"), "Rubrique en dépassement")
         self.assertFalse(self.rot.trip_closed_at, "La clôture attend l'approbation")
         request = self._request(complement)
         self.assertEqual(request.document, "travel_budget")
+        # Quatre yeux (revue du 29/10) : ni le demandeur (qui clôture) ni l'auteur des dépenses réelles ne tranchent.
         with self.assertRaises(AccessError):
             request.with_user(kadiatou).action_approve()
+        with self.assertRaises(AccessError):
+            request.with_user(fatou).action_approve()
+        self.assertFalse(complement.with_user(fatou)._eguitra_approval_info()["can_decide"])
         with self.assertRaises(UserError):
             self.rot.with_user(kadiatou).action_trip_close(self.cash, self.today)
-        request.with_user(fatou).action_approve()
+        request.with_user(aissatou).action_approve()
+        self.assertEqual(complement.state, "approved")
+        # Celui qui a approuvé le complément ne le décaisse pas lui-même.
+        with self.assertRaises(UserError):
+            complement.with_user(aissatou).action_disburse(self.cash, self.today)
         complement.with_user(fatou).action_disburse(self.cash, self.today)
         self.assertFalse(self.rot.with_user(kadiatou).action_trip_close(self.cash, self.today))
         self.assertEqual(self.rot.trip_state, "closed")

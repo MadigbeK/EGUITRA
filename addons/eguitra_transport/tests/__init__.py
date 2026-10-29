@@ -20,3 +20,7 @@ from . import test_facture_transport
 from . import test_ordre_transport
 from . import test_tracteur_remorque
 from . import test_budget_voyage
+from . import test_ordre_mission
+from . import test_lettre_voiture
+from . import test_documents_operation
+from . import test_documents_droits
