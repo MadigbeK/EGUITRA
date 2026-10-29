@@ -30,6 +30,9 @@ NIMOVA · HSSEQ : test.hsseq (Responsable HSSEQ, deux sociétés) et test.conduc
 EGUITRA GROUP), que scripts/recette/donnees_demo_hsseq.py lie au dossier d'un chauffeur de démonstration ;
 test.parc et test.exploitation y sont chefs de parc du site de démonstration ; test.auditeur (lecture seule
 de NIMOVA · HSSEQ), que donnees_demo_hsseq.py borne au site de démonstration pour trente jours.
+
+NIMOVA · Service client : test.serviceclient (agent, deux sociétés) ; test.client et test.client.cabinet (espace
+client, profil externe), liés chacun à un tiers fictif de sa société (créé au besoin).
 """
 
 import os
@@ -75,7 +78,17 @@ COMPTES = [
     ("test.salarie", "Test - Salarié", [], ["groupe"]),
     ("test.admin", "Test - Administrateur", ["admin"], ["groupe", "cabinet"]),
     ("test.porteur", "Test - Porteur de projet", ["porteur"], ["cabinet"]),
+    # NIMOVA · Service client : l'agent (deux sociétés) et un client de l'espace client par société, chacun lié à
+    # son tiers de démonstration (CLIENTS ci-dessous, repris par donnees_demo_service_client.py).
+    ("test.serviceclient", "Test - Agent du service client", ["service_client"], ["groupe", "cabinet"]),
+    ("test.client", "Test - Client de l'espace client (EGUITRA GROUP SARLU)", ["client"], ["groupe"]),
+    ("test.client.cabinet", "Test - Client de l'espace client (MB AxisPro Consulting)", ["client"], ["cabinet"]),
 ]
+# Comptes de l'espace client -> tiers de démonstration suivi (créé au besoin, dans la société du compte).
+CLIENTS = {
+    "test.client": ("Démo - Transports Kaloum (client)", "groupe"),
+    "test.client.cabinet": ("Démo - Coopérative de Kindia (client du cabinet)", "cabinet"),
+}
 # Le porteur de test suit le second dossier de démonstration (le premier a déjà porteur.demo).
 DOSSIER_PORTEUR = "Unité de séchage de mangues (démo)"
 
@@ -123,6 +136,13 @@ for login, nom, profils, entites in COMPTES:
             consultant = env["res.users"].sudo().search([("login", "=", "test.consultant")], limit=1)
             if consultant and dossier.consultant_id != consultant:
                 dossier.with_context(axispro_unlocked=True).write({"consultant_id": consultant.id})
+    if login in CLIENTS and "eguitra_sc_partner_ids" in user._fields:
+        tiers_nom, entite = CLIENTS[login]
+        Partner = env["res.partner"].sudo()
+        tiers = Partner.search([("name", "=", tiers_nom)], limit=1) or Partner.create({
+            "name": tiers_nom, "is_company": True, "company_id": SOCIETES[entite].id, "customer_rank": 1,
+        })
+        user.write({"eguitra_sc_partner_ids": [Command.set(tiers.ids)], "email": f"{login}@exemple.invalid"})
     if password and not COMMUN:
         print(f"COMPTE\t{login}\t{password}\t{nom}")
     print(f"RESUME\t{login}\t{'créé' if nouveau else ('réinitialisé' if password else 'inchangé')}\t"
