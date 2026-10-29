@@ -155,6 +155,19 @@ export const ETAT_TON: Readonly<Record<string, TonEtat>> = {
   "À jour": "ok",
   Manquante: "danger",
   "Sous le seuil": "danger",
+
+  // Transport : ordres de transport, budgets de voyage, bons carburant (29/10/2026).
+  Validé: "ok",
+  Exécuté: "neutral",
+  Clôturé: "neutral",
+  Approuvé: "ok",
+  "En approbation": "warn",
+  "À décaisser": "warn",
+  "À justifier": "warn",
+  "Budget en préparation": "neutral",
+  "Sans budget": "neutral",
+  "Remis au chauffeur": "warn",
+  Rapproché: "ok",
 };
 
 const ETAT_TON_MINUSCULES = new Map(Object.entries(ETAT_TON).map(([mot, ton]) => [mot.toLocaleLowerCase("fr"), ton]));

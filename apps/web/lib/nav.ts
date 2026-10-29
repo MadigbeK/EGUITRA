@@ -72,6 +72,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
         { href: "/finance/achats", label: "Achats et dépenses", icon: "ShoppingCart", profiles: [...FIN, "achats"] },
         { href: "/finance/fournisseurs", label: "Fournisseurs", icon: "Users", profiles: ACHATS },
         { href: "/finance/tresorerie", label: "Trésorerie", icon: "Landmark", profiles: FIN },
+        { href: "/finance/budgets-voyage", label: "Budgets de voyage", icon: "Wallet", profiles: FIN, entity: "groupe" },
         { href: "/finance/relances", label: "Relances clients", icon: "Mail", profiles: FIN },
         { href: "/finance/tiers", label: "Tiers", icon: "Users", profiles: FIN },
         { href: "/finance/immobilisations", label: "Immobilisations", icon: "Boxes", profiles: FIN },
@@ -139,7 +140,10 @@ export const NAV: Record<AppCode, NavSection[]> = {
       label: "Exploitation",
       items: [
         { href: "/transport", label: "Tableau de bord", icon: "LayoutDashboard" },
+        { href: "/transport/ordres", label: "Ordres de transport", icon: "FileText" },
         { href: "/transport/rotations", label: "Rotations", icon: "Truck" },
+        { href: "/transport/budgets", label: "Budgets de voyage", icon: "Wallet" },
+        { href: "/transport/lettres-de-voiture", label: "Lettres de voiture", icon: "FileStack" },
         // Verrou de départ HSSEQ : le noyau répond 403 aux autres profils.
         { href: "/transport/departs", label: "Départs du jour", icon: "Lock", profiles: ["admin", "direction", "exploitation"] },
         { href: "/transport/manquants", label: "Manquants", icon: "Droplet" },
@@ -149,6 +153,7 @@ export const NAV: Record<AppCode, NavSection[]> = {
       label: "Gestion",
       items: [
         { href: "/transport/rentabilite", label: "Rentabilité", icon: "TrendingUp" },
+        { href: "/transport/bons-carburant", label: "Bons carburant", icon: "Receipt" },
         { href: "/transport/proprietaires", label: "Propriétaires et répartition", icon: "HandCoins", profiles: FIN },
         { href: "/transport/taxes", label: "Taxes spécifiques", icon: "Receipt" },
       ],

@@ -124,7 +124,7 @@ export const dernierEnvoi = {
 };
 
 /** Nom du cache du service worker (public/mobile-sw.js, constante VERSION). */
-const SHELL_CACHE = "rotations-v8";
+const SHELL_CACHE = "rotations-v9";
 
 /**
  * Les listes gardées sur le téléphone n'appartiennent qu'à un utilisateur : à l'ouverture par un autre

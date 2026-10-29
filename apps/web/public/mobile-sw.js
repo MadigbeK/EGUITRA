@@ -4,7 +4,7 @@
  * Les appels à l'API ne sont jamais mis en cache ici : les saisies hors réseau vivent dans
  * IndexedDB et partent à la synchronisation.
  */
-const VERSION = "rotations-v8"; // aussi dans lib/offline-store.ts (effacé à la déconnexion)
+const VERSION = "rotations-v9"; // aussi dans lib/offline-store.ts (effacé à la déconnexion)
 const SHELL = "/mobile";
 // Au-delà, la page gardée s'ouvre sans attendre le réseau (réseau faible au parc).
 const DELAI_PAGE = 3500;

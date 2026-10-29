@@ -15,8 +15,11 @@ export interface Product {
 }
 
 export interface Referentials {
-  vehicles: Array<{ id: number; name: string; tractor_plate: string | null; capacity_liters: number; driver_id: number | null; state: string; vehicle_kind?: VehicleKind; payload_tonnes?: number | null }>;
-  drivers: Array<{ id: number; name: string; phone: string | null }>;
+  vehicles: Array<{ id: number; name: string; tractor_plate: string | null; capacity_liters: number; driver_id: number | null; state: string; vehicle_kind?: VehicleKind; payload_tonnes?: number | null; tractor_id?: number | null; trailer_id?: number | null }>;
+  /** crew_role : chauffeur ou convoyeur (aide-chauffeur). */
+  drivers: Array<{ id: number; name: string; phone: string | null; crew_role?: "driver" | "assistant" }>;
+  /** Remorques : une remorque change de tracteur ; celle de l'ensemble par défaut. */
+  trailers?: Array<{ id: number; name: string; capacity_liters: number }>;
   routes: Array<{ id: number; name: string; distance_km: number; default_rate: number; tariffs: Array<{ partner_id: number; product: string | null; rate: number; date_from?: string | null }> } & RouteStandards>;
   clients: Ref[];
   products: Array<{ id: number; code: string; label: string }>;

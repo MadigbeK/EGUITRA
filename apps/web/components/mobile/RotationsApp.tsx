@@ -12,6 +12,8 @@ import { SESSION_EXPIREE, appelBureau, sessionExpiree } from "./bureau";
 interface Referentials {
   vehicles: Array<{ id: number; name: string; tractor_plate: string | false | null; capacity_liters: number; driver_id: number | null }>;
   drivers: Array<{ id: number; name: string }>;
+  /** Remorques (une remorque change de tracteur) ; absentes des listes gardées par une version antérieure. */
+  trailers?: Array<{ id: number; name: string }>;
   routes: Array<{ id: number; name: string; distance_km: number }>;
   clients: Array<{ id: number; name: string }>;
   products: Array<{ code: string; label: string }>;
@@ -51,6 +53,9 @@ interface Form {
   date_loading: string;
   vehicle_id: string;
   driver_id: string;
+  /** Convoyeur (aide-chauffeur) et remorque qui a roulé (vide : celle de l'ensemble) ; absents des saisies d'avant. */
+  co_driver_id?: string;
+  trailer_id?: string;
   partner_id: string;
   route_id: string;
   product: string;
@@ -173,7 +178,7 @@ function jourA(d: Date): string {
 
 const today = () => jourA(new Date());
 const blank = (): Form => ({
-  uuid: null, nouveau_uuid: newUuid(), date_loading: today(), vehicle_id: "", driver_id: "", partner_id: "", route_id: "", product: "gasoil",
+  uuid: null, nouveau_uuid: newUuid(), date_loading: today(), vehicle_id: "", driver_id: "", co_driver_id: "", trailer_id: "", partner_id: "", route_id: "", product: "gasoil",
   delivery_note: "", loading_voucher: "", volume_loaded: "", volume_delivered: "", note: "", costs: {}, measures: {},
 });
 /**
@@ -330,6 +335,8 @@ function toPayload(f: Form): Record<string, unknown> {
   // omises une fois vides (une masse volumique à 0 remplacerait celle du produit).
   const correction = Boolean(f.uuid);
   if (f.driver_id) p.driver_id = Number(f.driver_id);
+  if (f.co_driver_id) p.co_driver_id = Number(f.co_driver_id);
+  if (f.trailer_id) p.trailer_id = Number(f.trailer_id);
   if (f.delivery_note.trim() || correction) p.delivery_note = f.delivery_note.trim();
   if ((f.loading_voucher ?? "").trim() || correction) p.loading_voucher = (f.loading_voucher ?? "").trim();
   if (f.volume_loaded.trim() || correction) p.volume_loaded = num(f.volume_loaded);
@@ -348,6 +355,7 @@ function fromPayload(item: QueuedRotation, refs: Referentials): Form {
   return {
     uuid: item.client_uuid, revision: item.revision ?? 1, envoyee: item.envoyee, created_at: item.created_at,
     date_loading: s("date_loading") || today(), vehicle_id: s("vehicle_id"), driver_id: s("driver_id"),
+    co_driver_id: s("co_driver_id"), trailer_id: s("trailer_id"),
     partner_id: s("partner_id"), route_id: s("route_id"), product: s("product") || "gasoil", delivery_note: s("delivery_note"),
     loading_voucher: s("loading_voucher"), volume_loaded: s("volume_loaded"), volume_delivered: s("volume_delivered"), note: s("note"),
     // Une saisie d'avant la mise à jour garde son ancien total des taxes (« specific_taxes ») : il
@@ -362,6 +370,7 @@ function keepReferentials(r: Referentials): Referentials {
   return {
     vehicles: r.vehicles.map(({ id, name, tractor_plate, capacity_liters, driver_id }) => ({ id, name, tractor_plate, capacity_liters, driver_id })),
     drivers: r.drivers.map(({ id, name }) => ({ id, name })),
+    trailers: (r.trailers ?? []).map(({ id, name }) => ({ id, name })),
     routes: r.routes.map(({ id, name, distance_km }) => ({ id, name, distance_km })),
     clients: r.clients.map(({ id, name }) => ({ id, name })),
     products: r.products.map(({ code, label }) => ({ code, label })),
@@ -965,6 +974,10 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                   }} options={refs.vehicles.map((v) => ({ value: v.id, label: v.tractor_plate ? `${v.name}, ${v.tractor_plate}` : v.name }))} />
                 </Field>
                 <Field label="Chauffeur" className={LIBELLE}><Select className={champ} value={form.driver_id} placeholder="Chauffeur habituel" onChange={(e) => setForm({ ...form, driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Convoyeur" className={LIBELLE}><Select className={champ} value={form.co_driver_id ?? ""} placeholder="Aucun" onChange={(e) => setForm({ ...form, co_driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
+                  <Field label="Remorque" className={LIBELLE}><Select className={champ} value={form.trailer_id ?? ""} placeholder="Celle de l'ensemble" onChange={(e) => setForm({ ...form, trailer_id: e.target.value })} options={(refs.trailers ?? []).map((t) => ({ value: t.id, label: t.name }))} /></Field>
+                </div>
                 <Field label="Client" error={erreurs.partner_id} className={LIBELLE}><Select id="rotation-partner_id" aria-invalid={invalide("partner_id")} className={champ} value={form.partner_id} placeholder="Choisir le client" onChange={(e) => { corriger("partner_id"); setForm({ ...form, partner_id: e.target.value }); }} options={refs.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
                 <Field label="Route" error={erreurs.route_id} className={LIBELLE}><Select id="rotation-route_id" aria-invalid={invalide("route_id")} className={champ} value={form.route_id} placeholder="Choisir la route" onChange={(e) => { corriger("route_id"); setForm({ ...form, route_id: e.target.value }); }} options={refs.routes.map((r) => ({ value: r.id, label: r.distance_km ? `${r.name} (${r.distance_km} km)` : r.name }))} /></Field>
                 <div className="grid grid-cols-2 gap-3">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CheckCheck, ChevronLeft, ChevronRight, FileText, Plus, Smartphone, Truck } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, Textarea, cx, demanderConfirmation, type Tri } from "@/components/ui";
@@ -76,6 +77,8 @@ interface RotationDetail extends Rotation {
   departure_blockers: DepartureIssue[] | null;
   departed_at: string | null;
   departed_by: Ref | null;
+  /** Coûts tenus par le budget de voyage clôturé : ils suivent ses dépenses justifiées. */
+  budget_cost_fields?: string[];
 }
 
 interface Liste {
@@ -380,11 +383,13 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
             <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge>
             <span>{r.source === "mobile" ? "Saisie au téléphone" : "Saisie au bureau"}{r.created_by ? ` par ${r.created_by}` : ""}</span>
             {r.invoice && <span>· Facture {r.invoice.name ?? "en brouillon"}</span>}
+            <Link className="font-semibold text-accent underline" href={`/transport/operations?id=${r.id}`}>Documents, budget et lettre de voiture</Link>
             <BoutonDiscussion model="eguitra.transport.rotation" id={r.id} libelle={titre} petit className="ml-auto" />
           </div>
           {r.state === "draft" && r.self_entered && saisie && <Notice tone="accent">Vous avez saisi cette rotation : elle se valide par un autre compte.</Notice>}
           {r.state === "draft" && !r.can_depart && r.depart_refusal && <Notice tone="accent">{r.depart_refusal}</Notice>}
           {r.state === "done" && modifiable && <Notice tone="accent">Corriger une rotation validée la remet en saisie : un autre compte la revalide.</Notice>}
+          {(r.budget_cost_fields?.length ?? 0) > 0 && <Notice tone="accent">Carburant, péages et frais couverts par le budget de voyage clôturé suivent ses dépenses justifiées : ils ne se corrigent plus ici.</Notice>}
           {r.state === "draft" && r.departure_blockers && r.departure_blockers.length > 0 && (
             <Notice tone={r.departure_blockers.some((b) => b.severity === "block") ? "danger" : "warn"}>
               {r.departure_blockers.some((b) => b.severity === "block") ? "Départ impossible pour l'instant : " : "À noter avant le départ : "}
@@ -425,7 +430,9 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
               </div>
               <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
                 {ref.costs.map((c) => (
-                  <ChampNombre key={c.code} label={c.label} value={f[c.code]} onChange={set(c.code)} />
+                  r.budget_cost_fields?.includes(c.code)
+                    ? <Field key={c.code} label={c.label} hint="Budget de voyage"><Input disabled value={f[c.code] ?? ""} /></Field>
+                    : <ChampNombre key={c.code} label={c.label} value={f[c.code]} onChange={set(c.code)} />
                 ))}
               </div>
               <Field label="Note"><Textarea rows={2} value={f.note} onChange={set("note")} /></Field>
