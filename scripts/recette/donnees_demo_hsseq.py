@@ -14,6 +14,9 @@ Lot 3 : un déversement, un déchet entreposé, deux mesures de poussières, une
 client ; une procédure en vigueur (document PDF fictif), une alerte flash anonymisée, un plan d'intervention,
 deux exercices et l'annuaire de crise du site (numéros fictifs) ; deux violations de conduite fictives ; une
 revue de direction préparée sur les trois derniers mois.
+Politiques et procédures (29/10) : une politique HSE fictive (POL-HSE-DEMO-01) rédigée et soumise par
+test.hsseq, approuvée par test.dg (quatre yeux), avec deux objectifs dont un relié au cockpit ; la procédure
+PR-HSE-DEMO-01 s'y rattache ; sa revue est à faire dans vingt jours (alerte en cours).
 
   docker compose exec -T odoo-recette odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \\
       < ../scripts/recette/donnees_demo_hsseq.py
@@ -280,6 +283,34 @@ if not procedure:
     file.res_id = document.id
     document._link("procedure_version", version, "document")
     version.with_user(hsseq).sudo().action_publish()
+
+# ─── Politiques et procédures (29/10) : politique approuvée, procédure rattachée, revue à venir ─────────
+
+policy = Procedure.search([("company_id", "=", groupe.id), ("code", "=", "POL-HSE-DEMO-01")], limit=1)
+director = user("test.dg")
+if not policy and "doc_type" in Procedure._fields:
+    policy = Procedure.with_user(hsseq).sudo().create({
+        "company_id": groupe.id, "doc_type": "policy", "code": "POL-HSE-DEMO-01",
+        "title": "Politique santé, sécurité et environnement (démo)", "domain": "safety",
+        "description": "Transport d'hydrocarbures et de minerais, parcs et dépôts, salariés et sous-traitants (démo).",
+        "audience_profiles": ["conducteur", "exploitation", "hsseq", "direction", "rh", "admin"]})
+    policy_version = env["eguitra.hsseq.procedure.version"].with_user(hsseq).sudo().create({
+        "procedure_id": policy.id, "version": "1", "effective_date": TODAY, "change_summary": "Première édition (démo)",
+        "body": "La direction s'engage à protéger la santé et la sécurité de chaque salarié et sous-traitant, à "
+                "prévenir les pollutions et à livrer sans écart. Chacun peut arrêter une opération dangereuse "
+                "(démo).",
+        "objective_ids": [(0, 0, {"sequence": 10, "label": "Zéro accident du travail avec arrêt (démo)"}),
+                          (0, 0, {"sequence": 20, "label": "Tous les départs contrôlés (démo)",
+                                  "indicator_code": "check_completion", "target": 100.0})]})
+    policy_version.with_user(hsseq).sudo().action_submit()
+    if director and director != hsseq:
+        policy_version.with_user(director).sudo().action_approve()
+if policy and procedure and not procedure.parent_id:
+    procedure.with_user(hsseq).sudo().write({"parent_id": policy.id})
+if policy.status == "published" and not policy.review_ids and (
+        not policy.next_review_date or policy.next_review_date > TODAY + timedelta(days=20)):
+    # Revue à faire dans vingt jours : dans le délai d'alerte des réglages (30 jours par défaut).
+    policy.with_user(hsseq).sudo().write({"next_review_date": TODAY + timedelta(days=20)})
 Bulletin = env["eguitra.hsseq.bulletin"]
 if not Bulletin.search_count([("title", "=", "Recul sans guide au dépôt (démo)")]):
     bulletin = Bulletin.with_user(hsseq).sudo().create({
@@ -337,6 +368,7 @@ print("HSSEQ (démo) :", Event.search_count([("title", "like", "(démo)")]), "é
       Audit.search_count([("title", "like", "(démo)")]), "audit(s), modèle de rapport", generic.name, "; site", site.name,
       "; lot 3 :", Spill.search_count([("location", "like", "(démo)")]), "déversement(s),",
       Procedure.search_count([("code", "=", "PR-HSE-DEMO-01")]), "procédure,",
+      Procedure.search_count([("code", "=", "POL-HSE-DEMO-01"), ("status", "=", "published")]), "politique en vigueur,",
       Bulletin.search_count([("title", "like", "(démo)")]), "alerte(s),",
       Review.search_count([("title", "like", "(démo)")]), "revue(s) de direction,",
       "; verrou",
