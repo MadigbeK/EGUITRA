@@ -591,4 +591,6 @@ export const ICONES: Record<string, Icon> = {
   Calculator,
   Wallet,
   Home,
+  Inbox,
+  Plus,
 };

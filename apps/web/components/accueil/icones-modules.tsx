@@ -776,6 +776,30 @@ const DESSINS: Record<string, ReactNode> = {
       </g>
     </>
   ),
+  /* Service client : la bulle d'échange, ses lignes de texte et la pastille de la réponse attendue. */
+  "service-client": (
+    <>
+      <path className="a-pop" style={k(0)} d="M6 10a5 5 0 0 1 5-5h26a5 5 0 0 1 5 5v18a5 5 0 0 1-5 5H20l-8 7v-7h-1a5 5 0 0 1-5-5Z" fill={C} />
+      <rect className="a-pousse-x" style={k(1)} x="12" y="12" width="22" height="3.5" rx="1.75" fill={B} />
+      <rect className="a-pousse-x" style={k(2)} x="12" y="19" width="15" height="3.5" rx="1.75" fill={B} opacity=".85" />
+      <g className="a-saute" style={k(3)}>
+        <circle cx="38" cy="36" r="8" fill={G} stroke={B} strokeWidth="2.5" />
+        <path d="M34.6 36.2l2.3 2.3 4.4-4.7" stroke={F} strokeWidth="2.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </>
+  ),
+  /* Nouveau dossier : la fiche et le signe plus. */
+  "sc-nouveau": (
+    <>
+      <rect className="a-pop" style={k(0)} x="7" y="5" width="28" height="36" rx="5" fill={S} />
+      <rect className="a-pousse-x" style={k(1)} x="12" y="12" width="17" height="3.5" rx="1.75" fill={B} />
+      <rect className="a-pousse-x" style={k(2)} x="12" y="19" width="12" height="3.5" rx="1.75" fill={B} opacity=".85" />
+      <g className="a-saute" style={k(3)}>
+        <circle cx="36" cy="35" r="8.5" fill={C} stroke={B} strokeWidth="2.5" />
+        <path d="M36 31v8M32 35h8" stroke={B} strokeWidth="2.6" strokeLinecap="round" />
+      </g>
+    </>
+  ),
   /* Planning d'équipe : trois lignes de personnes et leurs plages occupées. */
   "ag-planning": (
     <>
@@ -883,6 +907,12 @@ const PAR_ADRESSE: Record<string, string> = {
   rh: "rh",
   hsseq: "hsseq",
   agenda: "agenda",
+  "service-client": "service-client",
+  "/service-client": "service-client",
+  "/service-client/nouveau": "sc-nouveau",
+  "/service-client/tableau": "tableau",
+  "/service-client/clients": "tiers",
+  "/service-client/reglages": "parametres",
   "/agenda": "agenda",
   "/agenda/planning": "ag-planning",
   "/agenda/reglages": "parametres",

@@ -18,7 +18,11 @@ export type Profile =
   /** Conducteur : le téléphone seul (Rotations), sans accès à l'application web HSSEQ. */
   | "conducteur"
   /** Auditeur externe : NIMOVA · HSSEQ en lecture seule, sur ses sites et jusqu'à sa date de fin d'accès. */
-  | "auditeur";
+  | "auditeur"
+  /** Agent du service client : demandes et réclamations des clients (NIMOVA · Service client). */
+  | "service_client"
+  /** Client de l'espace client en ligne : les dossiers de son tiers seulement. */
+  | "client";
 
 export interface Company {
   id: number;

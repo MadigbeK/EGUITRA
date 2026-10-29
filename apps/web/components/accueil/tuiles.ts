@@ -59,6 +59,10 @@ const COURT: Record<string, string> = {
   "/agenda": "Agenda",
   "/agenda/planning": "Planning d'équipe",
   "/agenda/reglages": "Réglages de l'agenda",
+  "/service-client": "Service client",
+  "/service-client/nouveau": "Nouveau dossier",
+  "/service-client/tableau": "Tableau du service client",
+  "/service-client/clients": "Comptes clients",
 };
 
 /**

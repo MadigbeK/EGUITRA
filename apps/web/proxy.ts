@@ -21,7 +21,7 @@ export async function proxy(req: NextRequest) {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   if (pathname === "/") {
     const app = appFromHost(host);
-    return NextResponse.redirect(new URL(app === "portail" ? "/portail" : "/accueil", req.url));
+    return NextResponse.redirect(new URL(app === "portail" ? "/portail" : app === "espace-client" ? "/espace-client" : "/accueil", req.url));
   }
 
   const fromCookie = req.cookies.get(COOKIES.app)?.value;
@@ -105,5 +105,5 @@ const PAGE_INDISPONIBLE = `<!doctype html>
 </html>`;
 
 export const config = {
-  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/hsseq/:path*", "/agenda/:path*", "/compte/:path*", "/discussions", "/acces-refuse"],
+  matcher: ["/", "/accueil", "/finance/:path*", "/axispro/:path*", "/portail/:path*", "/mobile/:path*", "/analyse/:path*", "/transport/:path*", "/rh/:path*", "/hsseq/:path*", "/agenda/:path*", "/service-client/:path*", "/espace-client/:path*", "/compte/:path*", "/discussions", "/acces-refuse"],
 };
