@@ -617,11 +617,11 @@ class EguitraHsseqDocuments(http.Controller):
                                                       "updated_at": "write_date", "doc_type": "doc_type",
                                                       "next_review_date": "next_review_date"})
         rows = self._procedures(kw, order)
-        # Compteurs aux autres filtres de la liste : par état sans celui de l'état, par type sans celui du type,
-        # versions à approuver et revues sans leur propre filtre.
-        every = self._procedures(kw, with_status=False)
+        # Compteurs aux autres filtres de la liste : par état, versions à approuver et revues échues (les onglets
+        # de l'écran) sans aucun de ces trois filtres ; par type sans celui du type.
+        every = self._procedures(kw, skip=("status", "pending_approval", "review"))
         by_type = self._procedures(kw, skip=("doc_type",))
-        loose = self._procedures(kw, skip=("pending_approval", "review"))
+        loose = every
         day = today()
         pending = loose.filtered(lambda p: p._draft_version().status == "submitted")
         counts = {"by_status": {code: len(every.filtered(lambda p, c=code: p.status == c))
