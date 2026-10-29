@@ -202,6 +202,15 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 29 octobre 2026, 15 h : service client, documents du transport et politiques HSE en production (version 20261029-1513)
+
+- En production : version 20261029-1513 (code ad24fc3), sauvegarde prise avant (20261029T1513), carte blanche du gérant. Seize modules : eguitra_service_client installé ; eguitra_transport 19.0.1.8.0 (ordre de transport, ordre de mission, budget de voyage, bons carburant, lettre de voiture, tracteurs et remorques : 8 engins créés par la migration, numéros de parc à corriger dans Flotte) ; eguitra_hsseq 19.0.1.3.0 (référentiel des politiques, procédures, instructions, consignes et formulaires) ; eguitra_base 19.0.1.12.0 (profils service_client et client).
+- Origine : documents de GuineaSoft et messages vocaux du client (29/10, transcrits) pour la chaîne documentaire du transport et les politiques HSE ; demande de service client (choix du gérant : demandes et réclamations, quatre canaux, deux sociétés).
+- Sécurité : sept revues automatiques traitées avant la recette (expéditeur de courriel forgé, comptes de l'espace client, rattachement d'un compte par son adresse, seuils d'approbation sur le cumul des budgets, complément de clôture approuvé et quatre yeux, rattachement à un ordre de transport, quatre yeux des politiques, objectifs dans la portée du lecteur).
+- Vérifications : 523 tests du transport du premier coup ; série complète de 1 063 tests, trois échecs au premier passage corrigés (PDF des politiques, relève du courriel sans registry.in_test_mode, test des liens), puis 199 tests du service client et d'HSSEQ sans erreur ; recette mise à jour (comptes test.serviceclient, test.client, test.client.cabinet ; données de démonstration des trois chantiers, deux scripts corrigés) ; droits contrôlés par profil ; répétition réussie ; après la mise en production, seize modules, noyau, web et sauvegardes sains.
+- À régler à la mise en service : service client (boîtes de courriel par société, authserv-id du serveur de réception, compte Meta Business vérifié, numéros WhatsApp, modèle approuvé, adresse du webhook, comptes de l'espace client) ; transport (rubriques et comptes, frais de route par route, consommations, stations, compte d'avances 4213 à valider par l'expert-comptable, tolérance, franchise et clients facturés, préfixes, numéros de parc réels) ; HSE (politiques réelles à rédiger et faire approuver par la direction).
+- Cahiers de test : douze cahiers, 516 scénarios (03 Transport 55, 09 HSSEQ 68, 12 Service client 54).
+
 ### 29 octobre 2026 : chaîne documentaire du transport (branche transport-documents, ni recette ni production)
 
 - Demande du client (documents d'une opération d'un autre logiciel, message vocal : « les documents doivent apparaître lorsqu'on finit de remplir les informations »), carte blanche du gérant. eguitra_transport 19.0.1.8.0, qui dépend désormais d'eguitra_approval. Les documents du client ont servi de modèles, rien n'en est versionné.
