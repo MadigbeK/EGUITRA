@@ -1,0 +1,533 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Documents d'une opération de transport : ordre de transport, ordre de mission, budget de voyage, lettre
+        de voiture, et les quatre en un seul PDF. Gabarit et charte de la société (eguitra_base : logo et slogan
+        en en-tête, identité de la société dans le corps, mêmes blocs et même feuille de style que les factures).
+        Les valeurs, déjà mises en forme, viennent de models/documents.py.
+    -->
+
+    <!-- En-tête commun : identité de la société, titre, numéro, sous-titre, lieu et date. -->
+    <template id="doc_head">
+        <style t-out="d['css']"/>
+        <div t-if="d['banner']" class="o_eg_banner" t-out="d['banner']"/>
+        <table class="o_eg_head" name="eguitra_head">
+            <tr>
+                <td style="width: 58%;">
+                    <div class="o_eg_company_name" t-out="d['company_name']"/>
+                    <div t-foreach="d['company_lines']" t-as="company_line" t-out="company_line"/>
+                </td>
+                <td class="o_eg_title">
+                    <div class="o_eg_title_main" style="font-size: 17pt;" t-out="d['title']"/>
+                    <div t-if="d['number']" class="o_eg_key">N° <t t-out="d['number']"/></div>
+                    <div t-if="d['status']" class="o_eg_key" t-out="d['status']"/>
+                    <div t-out="d['place_date']"/>
+                </td>
+            </tr>
+        </table>
+    </template>
+
+    <!-- Bloc encadré à étiquette, avec des couples (libellé, valeur). -->
+    <template id="doc_box">
+        <div class="o_td_section">
+            <div class="o_eg_box">
+                <div class="o_eg_label" t-out="box_title"/>
+                <table class="o_td_kv">
+                    <tr t-foreach="box_items" t-as="item">
+                        <td class="o_td_k"><t t-out="item[0]"/> :</td>
+                        <td t-out="item[1]"/>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <!-- ═══ Ordre de transport ═══ -->
+    <template id="order_body">
+        <div class="page o_eg_invoice">
+            <t t-call="eguitra_transport.doc_head"/>
+            <table class="o_eg_parties">
+                <tr>
+                    <td style="width: 58%;">
+                        <div class="o_eg_box">
+                            <div class="o_eg_label">CLIENT</div>
+                            <div t-foreach="d['client']" t-as="item">
+                                <span class="o_eg_key"><t t-out="item[0]"/> :</span> <t t-out="item[1]"/>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="o_eg_refs">
+                        <div class="o_eg_key">Statut de l'ordre</div>
+                        <div t-foreach="d['states']" t-as="item"><span class="o_td_check" t-out="item[1]"/> <t t-out="item[0]"/></div>
+                        <div t-foreach="d['references']" t-as="item" style="margin-top: 2mm;">
+                            <span class="o_eg_key"><t t-out="item[0]"/> :</span> <t t-out="item[1]"/>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            <p class="o_td_intro" t-out="d['intro']"/>
+            <div class="o_td_section">
+                <div class="o_eg_box">
+                    <div class="o_eg_label">PRESTATION</div>
+                    <span t-foreach="d['service']" t-as="item" style="margin-right: 6mm;">
+                        <span class="o_td_check" t-out="item[1]"/> <t t-out="item[0]"/>
+                    </span>
+                </div>
+            </div>
+            <t t-set="box_title" t-value="'MARCHANDISE'"/>
+            <t t-set="box_items" t-value="d['goods']"/>
+            <t t-call="eguitra_transport.doc_box"/>
+            <t t-set="box_title" t-value="'ORIGINE ET DESTINATION'"/>
+            <t t-set="box_items" t-value="d['destination']"/>
+            <t t-call="eguitra_transport.doc_box"/>
+            <div t-if="d['note']" class="o_td_section">
+                <span class="o_eg_key">Observation :</span> <span class="o_eg_desc" style="white-space: pre-line;" t-out="d['note']"/>
+            </div>
+            <table t-if="d['operations']" class="o_eg_lines">
+                <thead>
+                    <tr>
+                        <th>Opération</th><th>Ensemble</th><th>Tracteur</th><th>Remorque</th><th>Chauffeur</th>
+                        <th>Départ prévu</th><th class="o_eg_num">Quantité</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr t-foreach="d['operations']" t-as="row">
+                        <td t-out="row['name']"/><td t-out="row['vehicle']"/><td t-out="row['tractor']"/>
+                        <td t-out="row['trailer']"/><td t-out="row['driver']"/><td t-out="row['etd']"/>
+                        <td class="o_eg_num" t-out="row['volume']"/>
+                    </tr>
+                </tbody>
+            </table>
+            <table class="o_td_sign">
+                <tr>
+                    <td>
+                        <div class="o_eg_key">Pour le client</div>
+                        <div class="o_td_space"/>
+                        <div t-out="d['sign_client']"/>
+                    </td>
+                    <td>
+                        <div class="o_eg_key" t-out="d['sign_company_title']"/>
+                        <div t-out="d['sign_company']"/>
+                        <div class="o_td_space"/>
+                        <div t-out="d['sign_company_name']"/>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </template>
+
+    <!-- ═══ Ordre de mission ═══ -->
+    <template id="mission_body">
+        <div class="page o_eg_invoice">
+            <t t-call="eguitra_transport.doc_head"/>
+            <p class="o_td_intro" style="font-size: 11pt;" t-out="d['intro']"/>
+            <div class="o_td_section">
+                <div class="o_eg_box">
+                    <div class="o_eg_label">MOYENS</div>
+                    <table class="o_td_kv">
+                        <tr>
+                            <td class="o_td_k">Tracteur :</td>
+                            <td>N° de parc : <t t-out="d['op']['tractor_fleet']"/></td>
+                            <td>Immatriculation : <t t-out="d['op']['tractor_plate']"/></td>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Remorque :</td>
+                            <td>N° de parc : <t t-out="d['op']['trailer_fleet']"/></td>
+                            <td>Immatriculation : <t t-out="d['op']['trailer_plate']"/></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            <div class="o_td_section">
+                <table class="o_eg_lines">
+                    <thead>
+                        <tr><th>Lieu</th><th>Ville</th><th>Pays</th><th>Sens</th><th>Motif d'escale</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="d['steps']" t-as="step">
+                            <td t-out="step['place']"/><td t-out="step['city']"/><td t-out="step['country']"/>
+                            <td t-out="step['direction']"/><td t-out="step['stop_reason']"/>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <t t-set="box_title" t-value="'PÉRIODE DE LA MISSION'"/>
+            <t t-set="box_items" t-value="d['period']"/>
+            <t t-call="eguitra_transport.doc_box"/>
+            <t t-set="box_title" t-value="'RÉFÉRENCES'"/>
+            <t t-set="box_items" t-value="d['references']"/>
+            <t t-call="eguitra_transport.doc_box"/>
+            <div t-if="d['note']" class="o_td_section"><span class="o_eg_key">Observations :</span> <t t-out="d['note']"/></div>
+            <div t-if="d['authorities']" class="o_td_note" t-out="d['authorities']"/>
+            <table class="o_td_sign">
+                <tr>
+                    <td/>
+                    <td>
+                        <div class="o_eg_key" t-out="d['sign_title']"/>
+                        <div t-out="d['sign_label']"/>
+                        <div class="o_td_space"/>
+                        <div t-out="d['sign_name']"/>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </template>
+
+    <!-- ═══ Budget de voyage (une page par budget) ═══ -->
+    <template id="budget_body">
+        <div class="page o_eg_invoice">
+            <t t-call="eguitra_transport.doc_head"/>
+            <div class="o_td_section">
+                <div class="o_eg_box">
+                    <div class="o_eg_label">OPÉRATION <t t-out="d['op']['number']"/></div>
+                    <table class="o_td_kv">
+                        <tr>
+                            <td class="o_td_k">Ordre de transport :</td><td t-out="d['op']['order']"/>
+                            <td class="o_td_k">Client :</td><td t-out="d['op']['client']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Marchandise :</td><td t-out="d['op']['product']"/>
+                            <td class="o_td_k">Conditionnement :</td><td t-out="d['op']['packaging']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Départ :</td><td t-out="d['op']['origin']"/>
+                            <td class="o_td_k">Destination :</td><td t-out="d['op']['destination']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Distance :</td><td t-out="d['op']['distance']"/>
+                            <td class="o_td_k">Quantité :</td><td t-out="d['op']['quantity']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">ETD :</td><td t-out="d['op']['etd']"/>
+                            <td class="o_td_k">Retour à la base (ETR) :</td><td t-out="d['op']['etr']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Durée prévue :</td><td><t t-out="d['op']['days']"/> jour(s)</td>
+                            <td class="o_td_k">Chauffeur :</td>
+                            <td><t t-out="d['op']['driver']"/><t t-if="d['op']['driver_phone']"> (tél. <t t-out="d['op']['driver_phone']"/>)</t></td>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Tracteur :</td><td t-out="d['op']['tractor']"/>
+                            <td class="o_td_k">Remorque :</td><td t-out="d['op']['trailer']"/>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            <div class="o_td_section">
+                <div class="o_eg_key">Évolution des budgets de l'opération</div>
+                <table class="o_eg_lines">
+                    <thead>
+                        <tr>
+                            <th class="o_eg_num">N°</th><th>N° du budget</th><th>Du</th><th>Au</th>
+                            <th class="o_eg_num">Jours</th><th>Libellé</th><th>État</th>
+                            <th class="o_eg_num">Valeur (<t t-out="d['currency']"/>)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="d['evolution']" t-as="row" t-att-style="'font-weight: bold;' if row['current'] else None">
+                            <td class="o_eg_num" t-out="row['number']"/><td t-out="row['name']"/>
+                            <td t-out="row['date_start']"/><td t-out="row['date_end']"/>
+                            <td class="o_eg_num" t-out="row['days']"/><td t-out="row['label']"/>
+                            <td t-out="row['state']"/><td class="o_eg_num" t-out="row['amount']"/>
+                        </tr>
+                        <tr class="o_td_total">
+                            <td colspan="4">Nombre de jours budgétisés</td><td class="o_eg_num" t-out="d['evolution_days']"/>
+                            <td colspan="2">Total budgétisé</td><td class="o_eg_num" t-out="d['evolution_total']"/>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="o_td_section">
+                <div class="o_eg_key">Détail du budget <t t-out="d['budget_name']"/></div>
+                <table class="o_eg_lines">
+                    <thead>
+                        <tr>
+                            <th>Rubrique</th><th>Libellé</th><th>Station</th><th class="o_eg_num">Qté</th><th>Unité</th>
+                            <th class="o_eg_num">Prix</th><th class="o_eg_num">Montant</th><th>Référence</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <t t-foreach="d['sections']" t-as="section">
+                            <tr class="o_eg_section"><td colspan="8" t-out="section['label']"/></tr>
+                            <tr t-foreach="section['rows']" t-as="row">
+                                <td t-out="row['rubric']"/><td t-out="row['description']"/><td t-out="row['station']"/>
+                                <td class="o_eg_num" t-out="row['quantity']"/><td t-out="row['unit']"/>
+                                <td class="o_eg_num" t-out="row['price']"/><td class="o_eg_num" t-out="row['amount']"/>
+                                <td t-out="row['reference']"/>
+                            </tr>
+                            <tr class="o_eg_subtotal">
+                                <td colspan="6" class="o_eg_num">Total <t t-out="section['label'].lower()"/></td>
+                                <td class="o_eg_num" t-out="section['total']"/><td/>
+                            </tr>
+                        </t>
+                    </tbody>
+                </table>
+            </div>
+            <table class="o_eg_bottom">
+                <tr>
+                    <td class="o_eg_words" style="width: 55%;">
+                        <div class="o_eg_key">Arrêté le présent budget à la somme de :</div>
+                        <div class="o_eg_accent" t-out="d['words']"/>
+                    </td>
+                    <td>
+                        <table class="o_eg_totals">
+                            <tr class="o_eg_main">
+                                <td>TOTAL (<t t-out="d['currency']"/>)</td>
+                                <td class="o_eg_num" t-out="d['total']"/>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+            <div t-if="d['vouchers']" class="o_td_section o_td_small">
+                <span class="o_eg_key">Bons carburant :</span> <t t-out="'; '.join(d['vouchers'])"/>
+            </div>
+            <div t-if="d['approvers']" class="o_td_section o_td_small">
+                <span class="o_eg_key">Approuvé :</span> <t t-out="'; '.join(d['approvers'])"/>
+            </div>
+            <table class="o_td_sign">
+                <tr>
+                    <td/>
+                    <td>
+                        <div class="o_eg_key" t-out="d['sign_label']"/>
+                        <div class="o_td_space"/>
+                        <div t-out="d['sign_name']"/>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </template>
+
+    <!-- ═══ Lettre de voiture ═══ -->
+    <template id="waybill_body">
+        <div class="page o_eg_invoice">
+            <t t-call="eguitra_transport.doc_head"/>
+            <div class="o_td_section">
+                <div class="o_eg_box">
+                    <div class="o_eg_label">OPÉRATION <t t-out="d['op']['number']"/></div>
+                    <table class="o_td_kv">
+                        <tr>
+                            <td class="o_td_k">Tracteur :</td><td t-out="d['op']['tractor']"/>
+                            <td class="o_td_k">Date de départ :</td><td t-out="d['op']['departure']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Remorque :</td><td t-out="d['op']['trailer']"/>
+                            <td class="o_td_k">ETD :</td><td t-out="d['op']['etd']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Chauffeur :</td>
+                            <td><t t-out="d['op']['driver']"/><t t-if="d['op']['driver_phone']"> (tél. <t t-out="d['op']['driver_phone']"/>)</t></td>
+                            <td class="o_td_k">ETA :</td><td t-out="d['op']['eta']"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Convoyeur :</td><td t-out="d['op']['co_driver']"/>
+                            <td class="o_td_k">Retour à la base (ETR) :</td><td t-out="d['op']['etr']"/>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            <t t-set="box_title" t-value="'RÉFÉRENCES'"/>
+            <t t-set="box_items" t-value="d['references']"/>
+            <t t-call="eguitra_transport.doc_box"/>
+            <div class="o_td_section">
+                <table class="o_eg_lines">
+                    <thead>
+                        <tr>
+                            <th>Nature</th><th>Description</th>
+                            <th class="o_eg_num">Poids brut (<t t-out="d['uom']"/>)</th>
+                            <th class="o_eg_num">Poids net (<t t-out="d['uom']"/>)</th>
+                            <th>Conditionnement</th><th>Emballage</th><th>Dimensions et volumes</th>
+                            <th class="o_eg_num">Nombre</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="d['packages']" t-as="row">
+                            <td t-out="row['nature']"/><td t-out="row['description']"/>
+                            <td class="o_eg_num" t-out="row['gross']"/><td class="o_eg_num" t-out="row['net']"/>
+                            <td t-out="row['packaging']"/><td t-out="row['wrapping']"/><td t-out="row['dimensions']"/>
+                            <td class="o_eg_num" t-out="row['count']"/>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <table class="o_eg_parties">
+                <tr>
+                    <td style="width: 50%; padding-right: 2mm;">
+                        <t t-set="box_title" t-value="'CHARGEMENT'"/>
+                        <t t-set="box_items" t-value="d['loading']"/>
+                        <t t-call="eguitra_transport.doc_box"/>
+                    </td>
+                    <td style="width: 50%; padding-left: 2mm;">
+                        <t t-set="box_title" t-value="'LIVRAISON'"/>
+                        <t t-set="box_items" t-value="d['delivery']"/>
+                        <t t-call="eguitra_transport.doc_box"/>
+                    </td>
+                </tr>
+            </table>
+            <table class="o_td_kv o_td_section" style="width: 100%;">
+                <tr>
+                    <td t-foreach="d['parties']" t-as="item" style="width: 33%; text-align: center;">
+                        <div class="o_eg_key" t-out="item[0]"/>
+                        <div t-out="item[1]"/>
+                    </td>
+                </tr>
+            </table>
+            <div class="o_td_section">
+                <div class="o_eg_box">
+                    <div class="o_eg_label">RÉCEPTION</div>
+                    <t t-set="r" t-value="d['reception'] or {}"/>
+                    <table class="o_td_kv">
+                        <tr>
+                            <td class="o_td_k">Réceptionnaire :</td><td colspan="3" t-out="r.get('receiver', '')"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Arrivée du véhicule :</td><td t-out="r.get('arrival', '')"/>
+                            <td class="o_td_k">Déchargement :</td><td t-out="r.get('unloading', '')"/>
+                        </tr>
+                        <tr>
+                            <td class="o_td_k">Départ du véhicule :</td><td t-out="r.get('departure', '')"/>
+                            <td class="o_td_k">Immobilisation :</td><td t-out="r.get('immobilized', '')"/>
+                        </tr>
+                    </table>
+                    <table class="o_eg_lines">
+                        <thead>
+                            <tr>
+                                <th class="o_eg_num">Reçu conforme (L)</th><th class="o_eg_num">Manquant (L)</th>
+                                <th class="o_eg_num">Avarie (L)</th><th>Causes de l'avarie</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="o_eg_num" t-out="r.get('received', '')"/>
+                                <td class="o_eg_num" t-out="r.get('shortage', '')"/>
+                                <td class="o_eg_num" t-out="r.get('damaged', '')"/>
+                                <td t-out="r.get('cause', '')"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 3mm;"><span class="o_eg_key">Visa du réceptionnaire :</span> <t t-out="r.get('visa', '')"/></div>
+                    <div class="o_td_space" style="height: 12mm;"/>
+                </div>
+            </div>
+            <div t-if="d['note']" class="o_td_section"><span class="o_eg_key">Observations :</span> <t t-out="d['note']"/></div>
+            <div class="o_td_section">
+                <div class="o_eg_box">
+                    <div class="o_eg_label">NB</div>
+                    <ol class="o_td_list"><li t-foreach="d['notes']" t-as="line" t-out="line"/></ol>
+                </div>
+            </div>
+            <div t-if="d['instructions']" class="o_td_section o_td_small">
+                <div class="o_eg_key" style="text-align: center;">CONSIGNES AU CHAUFFEUR</div>
+                <ol class="o_td_list"><li t-foreach="d['instructions']" t-as="line" t-out="line"/></ol>
+            </div>
+        </div>
+    </template>
+
+    <!-- ═══ Rapports ═══ -->
+    <template id="report_transport_order">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="eguitra_document_header" t-value="True"/>
+                <t t-set="d" t-value="o._doc_values()"/>
+                <t t-call="web.external_layout"><t t-call="eguitra_transport.order_body"/></t>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_operation_mission">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="eguitra_document_header" t-value="True"/>
+                <t t-set="d" t-value="o._doc_mission_values()"/>
+                <t t-call="web.external_layout"><t t-call="eguitra_transport.mission_body"/></t>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_operation_budget">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="eguitra_document_header" t-value="True"/>
+                <t t-foreach="o._live_budgets()" t-as="budget">
+                    <t t-set="d" t-value="o._doc_budget_values(budget)"/>
+                    <t t-call="web.external_layout"><t t-call="eguitra_transport.budget_body"/></t>
+                </t>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_operation_waybill">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="eguitra_document_header" t-value="True"/>
+                <t t-set="d" t-value="o._doc_waybill_values()"/>
+                <t t-call="web.external_layout"><t t-call="eguitra_transport.waybill_body"/></t>
+            </t>
+        </t>
+    </template>
+
+    <!-- Les documents prêts de l'opération, en un seul PDF : OT, OM, budgets, LV. -->
+    <template id="report_operation_documents">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-set="eguitra_document_header" t-value="True"/>
+                <t t-set="ready" t-value="o._ready_documents()"/>
+                <t t-if="'order' in ready">
+                    <t t-set="d" t-value="o.order_id._doc_values()"/>
+                    <t t-call="web.external_layout"><t t-call="eguitra_transport.order_body"/></t>
+                </t>
+                <t t-if="'mission' in ready">
+                    <t t-set="d" t-value="o._doc_mission_values()"/>
+                    <t t-call="web.external_layout"><t t-call="eguitra_transport.mission_body"/></t>
+                </t>
+                <t t-if="'budget' in ready">
+                    <t t-foreach="o._live_budgets()" t-as="budget">
+                        <t t-set="d" t-value="o._doc_budget_values(budget)"/>
+                        <t t-call="web.external_layout"><t t-call="eguitra_transport.budget_body"/></t>
+                    </t>
+                </t>
+                <t t-if="'waybill' in ready">
+                    <t t-set="d" t-value="o._doc_waybill_values()"/>
+                    <t t-call="web.external_layout"><t t-call="eguitra_transport.waybill_body"/></t>
+                </t>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_transport_order" model="ir.actions.report">
+        <field name="name">Ordre de transport</field>
+        <field name="model">eguitra.transport.order</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_transport.report_transport_order</field>
+        <field name="report_file">eguitra_transport.report_transport_order</field>
+        <field name="print_report_name">'Ordre de transport %s' % (object.name or '').replace('/', '-')</field>
+    </record>
+    <record id="action_report_operation_mission" model="ir.actions.report">
+        <field name="name">Ordre de mission</field>
+        <field name="model">eguitra.transport.rotation</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_transport.report_operation_mission</field>
+        <field name="report_file">eguitra_transport.report_operation_mission</field>
+    </record>
+    <record id="action_report_operation_budget" model="ir.actions.report">
+        <field name="name">Budget de voyage</field>
+        <field name="model">eguitra.transport.rotation</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_transport.report_operation_budget</field>
+        <field name="report_file">eguitra_transport.report_operation_budget</field>
+    </record>
+    <record id="action_report_operation_waybill" model="ir.actions.report">
+        <field name="name">Lettre de voiture</field>
+        <field name="model">eguitra.transport.rotation</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_transport.report_operation_waybill</field>
+        <field name="report_file">eguitra_transport.report_operation_waybill</field>
+    </record>
+    <record id="action_report_operation_documents" model="ir.actions.report">
+        <field name="name">Documents de l'opération</field>
+        <field name="model">eguitra.transport.rotation</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_transport.report_operation_documents</field>
+        <field name="report_file">eguitra_transport.report_operation_documents</field>
+    </record>
+</odoo>

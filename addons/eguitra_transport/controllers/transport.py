@@ -16,6 +16,7 @@ from odoo.addons.eguitra_api.files import ACCEPTED, XLSX_OPTIONS, checked_name, 
 from odoo.addons.eguitra_finance.controllers.common import as_float, companies, move_summary, parse_date, today
 
 from ..blocking import RotationBlocked
+from ..models.equipment import CREW_ROLES
 from ..models.fleet_safety import DOCUMENT_KINDS, VEHICLE_KINDS
 from ..models.official_rate import DEPOTS, gap_pct, slug
 from ..models.ownership import OWNERSHIPS, PERIODICITIES
@@ -36,6 +37,8 @@ ROTATION_FIELDS = (
     "date_loading", "date_delivery", "date_return", "delivery_note", "volume_loaded", "volume_delivered", "rate", "note",
     "temperature_loaded", "temperature_delivered", "density_15", "vcf_loaded", "vcf_delivered",
     "fuel_liters", "distance_km", "weigh_ticket", "weight_gross", "weight_tare", "loading_voucher",
+    # Opération (29/10/2026) : dates prévues et volume prévu par l'ordre de transport.
+    "date_planned_departure", "date_planned_arrival", "date_planned_return", "volume_planned",
     # « specific_taxes » (saisies de l'application mobile, reprise) vaut forfait hors barème.
     *[c for c, _l in COSTS], "specific_taxes_manual",
 )
@@ -43,12 +46,18 @@ ROTATION_FIELDS = (
 FINANCE_ROTATION_FIELDS = ("shortage_tolerance", "shortage_unit_price", "shortage_rule", "tax_rules",
                            "volume_correction")
 REF_FIELDS = {"vehicle_id": "eguitra.transport.vehicle", "driver_id": "eguitra.transport.driver",
-              "partner_id": "res.partner", "route_id": "eguitra.transport.route"}
+              "partner_id": "res.partner", "route_id": "eguitra.transport.route",
+              "tractor_id": "eguitra.transport.unit", "trailer_id": "eguitra.transport.unit",
+              "co_driver_id": "eguitra.transport.driver", "order_id": "eguitra.transport.order"}
+# Références qu'une saisie peut vider (null) : convoyeur, remorque, ordre de transport.
+CLEARABLE_REFS = ("co_driver_id", "trailer_id", "order_id")
 # Nom de chaque référence et message quand elle est inconnue (audit du 25 octobre, M2).
 REF_LABELS = {"vehicle_id": ("Ensemble routier", "Ensemble routier inconnu."),
               "driver_id": ("Chauffeur", "Chauffeur inconnu."), "partner_id": ("Client", "Client inconnu."),
               "route_id": ("Route", "Route inconnue."), "product_ids": ("Produit", "Produit inconnu."),
-              "route_ids": ("Route", "Route inconnue.")}
+              "route_ids": ("Route", "Route inconnue."), "tractor_id": ("Tracteur", "Tracteur inconnu."),
+              "trailer_id": ("Remorque", "Remorque inconnue."), "co_driver_id": ("Convoyeur", "Convoyeur inconnu."),
+              "order_id": ("Ordre de transport", "Ordre de transport inconnu.")}
 # Mesures saisies au parc (application Rotations), hors montants ; températures et masse volumique
 # seulement si les manquants se calculent à 15 °C.
 MEASURES = [("fuel_liters", "Carburant (litres)")]
@@ -56,6 +65,9 @@ MEASURES_15 = [("temperature_loaded", "Température au chargement (°C)"),
                ("temperature_delivered", "Température à la livraison (°C)"),
                ("density_15", "Masse volumique à 15 °C (kg/m³)")]
 VEHICLE_STATES = ("service", "maintenance", "off", "sold")
+# Champs dont la correction ne remet pas une rotation validée en saisie (sans effet sur volumes et montants).
+PLANNING_FIELDS = {"note", "date_planned_departure", "date_planned_arrival", "date_planned_return", "co_driver_id",
+                   "volume_planned", "order_id"}
 # Tri de la liste des rotations (paramètre sort, « -clé » pour l'ordre décroissant) : colonnes de
 # l'écran et champ du modèle. Le volume est le volume facturable (livré, à défaut chargé), la marge
 # et son taux ceux qu'affiche la ligne (estimés tant qu'aucun frais n'est saisi).
@@ -135,9 +147,21 @@ def _rotation_row(rot, detail=False, official=None):
         **_rotation_official(rot, official),
         "note": rot.note or None, "invoice": _move_ref(rot.sudo().invoice_id),
         "client_uuid": rot.client_uuid or None,
+        # Opération (29/10/2026) : engins qui ont roulé, convoyeur, dates prévues, ordre de transport, budget.
+        "tractor": _unit_ref(rot.tractor_id), "trailer": _unit_ref(rot.trailer_id), "co_driver": _ref(rot.co_driver_id),
+        "date_planned_departure": rot.date_planned_departure or None,
+        "date_planned_arrival": rot.date_planned_arrival or None,
+        "date_planned_return": rot.date_planned_return or None, "volume_planned": rot.volume_planned,
+        "order": {"id": rot.order_id.id, "name": rot.order_id.name} if rot.order_id else None,
+        "trip_state": rot.trip_state, "budget_cost_fields": rot._budget_cost_fields(),
         # Saisie par le compte connecté : il ne la valide pas lui-même (validation par un autre compte).
         "created_by": rot.create_uid.name or None, "self_entered": rot.create_uid == rot.env.user,
     }
+
+
+def _unit_ref(unit):
+    return {"id": unit.id, "name": unit.display_name, "fleet_number": unit.fleet_number,
+            "plate": unit.plate or None} if unit else None
 
 
 def _rotation_official(rot, cache=None):
@@ -257,6 +281,8 @@ def _rotation_values(data):
             if not record:
                 raise ApiError(422, "business_rule", REF_LABELS[key][1])
             values[key] = record.id
+        elif key in CLEARABLE_REFS and key in data:
+            values[key] = False
     return values
 
 
@@ -355,7 +381,11 @@ def _account_ref(account):
 def _client_row(partner):
     return {"id": partner.id, "name": partner.name,
             "shortage_tolerance": partner.transport_shortage_tolerance if partner.transport_tolerance_custom else None,
-            "shortage_rule": partner.transport_shortage_rule or None}
+            "shortage_rule": partner.transport_shortage_rule or None,
+            # Immobilisation au-delà de la franchise (lettre de voiture, 29/10/2026).
+            "demurrage_billable": partner.transport_demurrage_billable,
+            "demurrage_rate": partner.transport_demurrage_rate or None,
+            "demurrage_free_days": partner.transport_demurrage_free_days or None}
 
 
 def _tax_row(t):
@@ -423,8 +453,13 @@ class EguitraTransport(http.Controller):
         return {
             "vehicles": [{"id": v.id, "name": v.name, "tractor_plate": v.tractor_plate, "capacity_liters": v.capacity_liters,
                           "driver_id": v.driver_id.id or None, "state": v.state, "vehicle_kind": v.vehicle_kind,
-                          "payload_tonnes": v.payload_tonnes or None} for v in vehicles],
-            "drivers": [{"id": d.id, "name": d.name, "phone": d.phone} for d in env["eguitra.transport.driver"].search([])],
+                          "payload_tonnes": v.payload_tonnes or None, "tractor_id": v.tractor_id.id or None,
+                          "trailer_id": v.trailer_id.id or None} for v in vehicles],
+            "drivers": [{"id": d.id, "name": d.name, "phone": d.phone, "crew_role": d.crew_role}
+                        for d in env["eguitra.transport.driver"].search([])],
+            # Remorques (une remorque change de tracteur) ; la remorque habituelle est celle de l'ensemble.
+            "trailers": [{"id": u.id, "name": u.display_name, "capacity_liters": u.capacity_liters}
+                         for u in env["eguitra.transport.unit"].search([("kind", "=", "trailer")])],
             "routes": [{"id": r.id, "name": r.name, "distance_km": r.distance_km, "default_rate": r.default_rate,
                         "tariffs": [{"partner_id": t.partner_id.id, "product": t.product or None, "rate": t.rate,
                                      "date_from": t.date_from or None} for t in r.tariff_ids],
@@ -455,7 +490,9 @@ class EguitraTransport(http.Controller):
              "ownership": v.ownership, "owner": _ref(v.owner_id), "charges": [_charge_row(c) for c in v.charge_ids],
              "monthly_charges": sum(c._monthly() for c in v.charge_ids),
              "vehicle_kind": v.vehicle_kind, "payload_tonnes": v.payload_tonnes or None,
-             "documents": [_document_row(d) for d in v._active_documents()], "document_issues": v._document_issues()}
+             "documents": [_document_row(d) for d in v._active_documents()], "document_issues": v._document_issues(),
+             "tractor": _unit_ref(v.tractor_id), "trailer": _unit_ref(v.trailer_id),
+             "fuel_consumption": v.fuel_consumption or None}
             for v in request.env["eguitra.transport.vehicle"].with_context(active_test=False).search([])
         ]
 
@@ -488,6 +525,16 @@ class EguitraTransport(http.Controller):
             values["vehicle_kind"] = data["vehicle_kind"]
         if "payload_tonnes" in data:
             values["payload_tonnes"] = as_float(data["payload_tonnes"] or 0, "payload_tonnes")
+        if "fuel_consumption" in data:
+            values["fuel_consumption"] = as_float(data["fuel_consumption"] or 0, "fuel_consumption")
+        for key, kind in (("tractor_id", "tractor"), ("trailer_id", "trailer")):
+            if key in data:
+                unit = request.env["eguitra.transport.unit"]
+                if data[key]:
+                    unit = unit.browse(_int(data[key], "Engin")).exists()
+                    if not unit or unit.kind != kind:
+                        raise ApiError(422, "business_rule", "Tracteur ou remorque inconnu.")
+                values[key] = unit.id or False
         if {"ownership", "owner_id", "charges"} & set(data) and not _is_finance():
             raise ApiError(403, "forbidden", "Propriété et charges d'un ensemble relèvent de la finance.")
         if "ownership" in data:
@@ -607,7 +654,8 @@ class EguitraTransport(http.Controller):
     def drivers(self, **_kw):
         return [
             {"id": d.id, "name": d.name, "phone": d.phone or None, "license_number": d.license_number or None,
-             "license_expiry": d.license_expiry, "partner": _ref(d.partner_id), "active": d.active}
+             "license_expiry": d.license_expiry, "partner": _ref(d.partner_id), "active": d.active,
+             "crew_role": d.crew_role}
             for d in request.env["eguitra.transport.driver"].with_context(active_test=False).search([])
         ]
 
@@ -625,6 +673,10 @@ class EguitraTransport(http.Controller):
             values["partner_id"] = partner.id or False
         if "active" in data:
             values["active"] = bool(data["active"])
+        if "crew_role" in data:
+            if data["crew_role"] not in dict(CREW_ROLES):
+                raise ApiError(400, "invalid_parameter", "Fonction inconnue (chauffeur ou convoyeur).")
+            values["crew_role"] = data["crew_role"]
         return values
 
     @api_route("/transport/drivers", methods=("POST",), profiles=WRITE)
@@ -648,6 +700,10 @@ class EguitraTransport(http.Controller):
              "duration_days": r.duration_days or None, "default_rate": r.default_rate, "active": r.active,
              "tariffs": [_tariff_row(t) for t in r.tariff_ids],
              **{k: r[k] for k in ROUTE_STANDARDS}, "fuel_per_km": r._fuel_per_km(),
+             "road_fee_per_day": r.road_fee_per_day, "origin_country": r.origin_country or None,
+             "destination_country": r.destination_country or None,
+             "steps": [{"id": st.id, "place": st.place, "city": st.city or None, "country": st.country or None,
+                        "direction": st.direction, "stop_reason": st.stop_reason or None} for st in r.step_ids],
              **self._route_official(r)}
             for r in request.env["eguitra.transport.route"].with_context(active_test=False).search([])
         ]
@@ -697,9 +753,28 @@ class EguitraTransport(http.Controller):
             values["duration_days"] = as_float(data["duration_days"] or 0, "duration_days")
         if "default_rate" in data:
             values["default_rate"] = as_float(data["default_rate"] or 0, "default_rate")
-        for key in ROUTE_STANDARDS:
+        for key in (*ROUTE_STANDARDS, "road_fee_per_day"):
             if key in data:
                 values[key] = as_float(data[key] or 0, key)
+        for key in ("origin_country", "destination_country"):
+            if key in data:
+                values[key] = str(data[key] or "").strip() or False
+        if "steps" in data:
+            # Étapes types du plan de voyage, renvoyées en entier.
+            if not isinstance(data["steps"], list):
+                raise ApiError(400, "invalid_parameter", "Liste d'étapes attendue.")
+            commands = [(5, 0, 0)]
+            for i, st in enumerate(data["steps"]):
+                if not isinstance(st, dict) or not str(st.get("place") or "").strip():
+                    raise ApiError(400, "invalid_parameter", "Chaque étape a un lieu.")
+                if st.get("direction", "out") not in ("out", "back"):
+                    raise ApiError(400, "invalid_parameter", "Sens d'étape inconnu (aller ou retour).")
+                commands.append((0, 0, {"sequence": (i + 1) * 10, "place": str(st["place"]).strip(),
+                                        "city": str(st.get("city") or "").strip() or False,
+                                        "country": str(st.get("country") or "").strip() or False,
+                                        "direction": st.get("direction") or "out",
+                                        "stop_reason": str(st.get("stop_reason") or "").strip() or False}))
+            values["step_ids"] = commands
         if "active" in data:
             values["active"] = bool(data["active"])
         if "official_rate_id" in data:
@@ -884,6 +959,12 @@ class EguitraTransport(http.Controller):
             if data["shortage_rule"] and data["shortage_rule"] not in dict(SHORTAGE_RULES):
                 raise ApiError(400, "invalid_parameter", "Traitement du manquant inconnu.")
             values["transport_shortage_rule"] = data["shortage_rule"] or False
+        if "demurrage_billable" in data:
+            values["transport_demurrage_billable"] = bool(data["demurrage_billable"])
+        if "demurrage_rate" in data:
+            values["transport_demurrage_rate"] = as_float(data["demurrage_rate"] or 0, "demurrage_rate")
+        if "demurrage_free_days" in data:
+            values["transport_demurrage_free_days"] = _int(data["demurrage_free_days"] or 0, "Franchise")
         partner.write(values)
         return _client_row(partner)
 
@@ -1079,9 +1160,14 @@ class EguitraTransport(http.Controller):
         if rot.state not in ("draft", "en_route", "done"):
             raise ApiError(422, "business_rule", "Seule une rotation saisie ou validée se modifie.")
         values = _rotation_values(read_json())
+        governed = set(values) & set(rot._budget_cost_fields())
+        if governed:
+            raise ApiError(422, "business_rule", "Ces coûts sont tenus par le budget de voyage clôturé de l'opération : "
+                                                 "ils suivent ses dépenses justifiées.")
         # Règle des quatre yeux (audit du 25 octobre, I-T5) : corriger une rotation validée la remet en
-        # saisie ; un autre compte que celui qui l'a saisie la revalide. Une note seule ne la change pas.
-        if rot.state == "done" and set(values) - {"note"}:
+        # saisie ; un autre compte que celui qui l'a saisie la revalide. Une note ou la planification de
+        # l'opération (dates prévues, convoyeur, ordre de transport) ne la change pas.
+        if rot.state == "done" and set(values) - PLANNING_FIELDS:
             rot.action_reset()
         rot.write(values)
         return _rotation_row(rot)

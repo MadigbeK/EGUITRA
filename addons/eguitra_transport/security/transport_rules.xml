@@ -70,4 +70,71 @@
         <field name="model_id" ref="model_eguitra_transport_fuel_price"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
     </record>
+
+    <!-- Chaîne documentaire d'une opération (29/10/2026). -->
+    <record id="rule_unit_company" model="ir.rule">
+        <field name="name">Tracteurs et remorques : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_unit"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_order_company" model="ir.rule">
+        <field name="name">Ordres de transport : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_order"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_mission_company" model="ir.rule">
+        <field name="name">Ordres de mission : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_mission"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_mission_step_company" model="ir.rule">
+        <field name="name">Étapes des ordres de mission : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_mission_step"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_route_step_company" model="ir.rule">
+        <field name="name">Étapes types des routes : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_route_step"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_budget_rubric_company" model="ir.rule">
+        <field name="name">Rubriques des budgets de voyage : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_budget_rubric"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_budget_company" model="ir.rule">
+        <field name="name">Budgets de voyage : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_budget"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_budget_line_company" model="ir.rule">
+        <field name="name">Lignes des budgets de voyage : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_budget_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_fuel_voucher_company" model="ir.rule">
+        <field name="name">Bons carburant : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_fuel_voucher"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_trip_expense_company" model="ir.rule">
+        <field name="name">Dépenses justifiées : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_trip_expense"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_waybill_company" model="ir.rule">
+        <field name="name">Lettres de voiture : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_waybill"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_waybill_package_company" model="ir.rule">
+        <field name="name">Colis des lettres de voiture : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_waybill_package"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_driver_instruction_company" model="ir.rule">
+        <field name="name">Consignes au chauffeur : sociétés autorisées</field>
+        <field name="model_id" ref="model_eguitra_transport_driver_instruction"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>

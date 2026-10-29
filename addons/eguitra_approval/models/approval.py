@@ -160,6 +160,11 @@ class EguitraApprovalRequest(models.Model):
             ],
         })
 
+    def _document_detail(self):
+        """Détail de la pièce pour la corbeille de validation, quand un module en soumet d'autres natures (budget
+        de voyage du transport) : {name, date, state, object, note, lines} ; None par défaut."""
+        return None
+
     def _decided_by(self, user):
         """Le compte a-t-il déjà tranché une étape de cette demande ?"""
         self.ensure_one()

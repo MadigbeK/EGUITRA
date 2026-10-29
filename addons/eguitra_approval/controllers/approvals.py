@@ -71,6 +71,11 @@ def _row(rec, detail=False):
         elif rec.res_model == "account.payment" and record:
             data["document_detail"] = {"name": record.name, "date": record.date, "state": record.state,
                                        "journal": record.journal_id.name, "memo": record.memo or None}
+        else:
+            # Pièce d'un autre module (budget de voyage du transport…) : détail fourni par le module.
+            detail = rec._document_detail()
+            if detail:
+                data["document_detail"] = detail
     return data
 
 

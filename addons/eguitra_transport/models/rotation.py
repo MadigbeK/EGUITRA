@@ -43,6 +43,14 @@ COSTS = [
 # « specific_taxes » reste acceptée avec son sens d'origine (total des taxes, voir _legacy_vals).
 ENTRY_COSTS = [(code if code != "specific_taxes" else "specific_taxes_manual",
                 label if code != "specific_taxes" else "Autres taxes payées (hors barème)") for code, label in COSTS]
+# Champs tenus par d'autres pièces (facture, créance sur le chauffeur, budget de voyage) : ils changent sur une
+# rotation facturée ou figée.
+BOOKKEEPING_FIELDS = {"note", "state", "invoice_id", "shortage_claim_move_id", "trip_settlement_line_id",
+                      "trip_expense_move_id", "trip_closed_at", "trip_closed_by", "trip_costs_reported",
+                      "trip_cost_fields"}
+# Coûts déclarés que la clôture du budget de voyage remplace par les montants réels.
+TRIP_REPORT_FIELDS = {"fuel_cost", "toll_cost", "driver_fees", "maintenance_cost", "tyre_cost", "other_costs",
+                      "fuel_liters"}
 # Champs dont dépendent les taxes du barème : leur modification recalcule les lignes de taxe.
 TAX_TRIGGERS = {"volume_loaded", "volume_delivered", "route_id", "product_id", "date_loading", "rate", "tax_rules",
                 "company_id"}
@@ -436,10 +444,15 @@ class EguitraTransportRotation(models.Model):
 
     def write(self, vals):
         vals = self._legacy_vals(vals)
+        free = set(BOOKKEEPING_FIELDS)
+        # Clôture du budget de voyage (models/budget.py) : les coûts réels remplacent les coûts déclarés, sans
+        # effet sur la facture ; le budget a vérifié que la rotation n'est pas figée.
+        if self.env.context.get("eguitra_transport_trip_costs"):
+            free |= TRIP_REPORT_FIELDS
         locked = self.filtered(lambda r: r.state == "invoiced")
-        if locked and set(vals) - {"note", "state", "invoice_id", "shortage_claim_move_id"}:
+        if locked and set(vals) - free:
             raise UserError("Une rotation facturée ne se modifie plus ; établissez un avoir si nécessaire.")
-        if set(vals) - {"note", "state", "invoice_id", "shortage_claim_move_id"}:
+        if set(vals) - free:
             self._check_unlocked("modification")
         result = super().write(vals)
         if TAX_TRIGGERS & set(vals):

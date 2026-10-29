@@ -63,7 +63,9 @@ class AccountMove(models.Model):
                 "number": index,
                 "delivery_note": rot.delivery_note or "",
                 "voucher": rot.loading_voucher or "",
-                "truck": " / ".join(p for p in (vehicle.tractor_plate, vehicle.trailer_plate) if p) or vehicle.name,
+                # Tracteur et remorque qui ont roulé (une remorque change de tracteur), à défaut ceux de l'ensemble.
+                "truck": " / ".join(p for p in (rot.tractor_id.plate or vehicle.tractor_plate,
+                                                rot.trailer_id.plate or vehicle.trailer_plate) if p) or vehicle.name,
                 "origin": route.origin or parts[0],
                 "destination": route.destination or parts[1],
                 "liters": number_trim(liters),
