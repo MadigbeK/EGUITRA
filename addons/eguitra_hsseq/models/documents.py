@@ -68,6 +68,8 @@ INDICATOR_INFO = {code: (label, unit, direction) for code, label, unit, directio
 INDICATOR_CHOICES = [(code, label) for code, (label, _u, _d) in INDICATOR_INFO.items()]
 # Relance d'une revue de document en retard : chaque semaine tant qu'elle n'est pas faite.
 REVIEW_REMINDER_DAYS = 7
+# Champs du contenu d'une version : qui les modifie compte parmi ses rédacteurs (quatre yeux).
+CONTENT_FIELDS = ("version", "effective_date", "change_summary", "body", "objective_ids")
 PARENT_RULE = ("Une procédure se rattache à une politique ; une instruction de travail, à une procédure ; une "
                "consigne ou un formulaire, à une procédure ou à une instruction de travail ; une politique, à "
                "aucun document.")
@@ -445,18 +447,19 @@ class EguitraHsseqProcedure(models.Model):
     # ─── Objectifs reliés au cockpit ──────────────────────────────────────
 
     @api.model
-    def _indicator_values(self, company, codes):
+    def _indicator_values(self, company, codes, sites=None):
         """Valeur des indicateurs du cockpit sur les douze derniers mois, mois en cours compris (situation du
-        jour pour les habilitations) : {code: valeur}."""
+        jour pour les habilitations) : {code: valeur}. sites : la portée du lecteur, comme au cockpit (None :
+        toute la société, pour un profil de lecture complète)."""
         codes = {c for c in codes if c in INDICATOR_INFO}
         if not codes:
             return {}
         Cockpit = self.env["eguitra.hsseq.cockpit"]
         months = months_back(month_start(today(self.env)), 12)
-        comps, _frozen = Cockpit._components(company, months)
+        comps, _frozen = Cockpit._components(company, months, sites or None)
         total = Cockpit._sum(comps, company, months)
         if "qualifications_valid" in codes:
-            total["drivers"], total["drivers_valid"] = Cockpit._qualifications(company)
+            total["drivers"], total["drivers_valid"] = Cockpit._qualifications(company, sites or None)
         return {code: Cockpit._value(code, total) for code in codes}
 
 
@@ -482,6 +485,10 @@ class EguitraHsseqProcedureVersion(models.Model):
     submitted_by = fields.Many2one("res.users", "Soumise par", readonly=True)
     approved_at = fields.Datetime("Approuvée le", readonly=True)
     approved_by = fields.Many2one("res.users", "Approuvée par", readonly=True)
+    # Quatre yeux : tout compte qui a modifié le contenu (texte, objectifs, numéro, date, changements, pièce
+    # jointe) compte parmi les rédacteurs et n'approuve pas la version.
+    edited_by = fields.Many2many("res.users", "eguitra_hsseq_procedure_version_editor_rel", "version_id", "user_id",
+                                 "Modifiée par", readonly=True)
     reject_reason = fields.Text("Motif du dernier refus", readonly=True)
     published_at = fields.Datetime("Publiée le", readonly=True)
     published_by = fields.Many2one("res.users", "Publiée par", readonly=True)
@@ -490,6 +497,23 @@ class EguitraHsseqProcedureVersion(models.Model):
     acknowledgment_ids = fields.One2many("eguitra.hsseq.acknowledgment", "version_id", "Accusés de lecture")
 
     _version_unique = models.Constraint("unique(procedure_id, version)", "Cette version du document existe déjà.")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        uid = self.env.uid
+        return super().create([dict(vals, edited_by=[(4, uid)]) for vals in vals_list])
+
+    def write(self, vals):
+        """Une modification du contenu inscrit son auteur parmi les rédacteurs de la version (quatre yeux)."""
+        if set(vals) & set(CONTENT_FIELDS):
+            vals = dict(vals, edited_by=[(4, self.env.uid)])
+        return super().write(vals)
+
+    def _mark_edited(self):
+        """Contenu modifié hors des champs de la version (objectif, pièce jointe) : son auteur est inscrit
+        parmi les rédacteurs."""
+        if self:
+            self.sudo().write({"edited_by": [(4, self.env.uid)]})
 
     def _document(self):
         return self.env["eguitra.hsseq.attachment"]._for("procedure_version", self)
@@ -521,9 +545,10 @@ class EguitraHsseqProcedureVersion(models.Model):
         return None
 
     def _authors(self):
-        """Rédacteur et auteur de la soumission : jamais l'approbateur d'une politique (quatre yeux)."""
+        """Rédacteurs (création et chaque modification du contenu) et auteur de la soumission : jamais
+        l'approbateur d'une politique (quatre yeux)."""
         self.ensure_one()
-        return (self.create_uid | self.submitted_by).filtered(lambda u: u.id)
+        return (self.create_uid | self.submitted_by | self.edited_by).filtered(lambda u: u.id)
 
     def _check_approver(self, four_eyes=True):
         """Profil de l'approbateur (refus 403) et quatre yeux (refus 422) : la direction, ni rédacteur ni auteur
@@ -539,8 +564,9 @@ class EguitraHsseqProcedureVersion(models.Model):
         if not four_eyes:
             return
         if user in self._authors() and (procedure.doc_type == "policy" or procedure._settings().document_four_eyes):
-            raise HsseqError("four_eyes", "Quatre yeux : la version est approuvée par une autre personne que son "
-                                          "rédacteur et que celle qui l'a soumise.")
+            raise HsseqError("four_eyes", "Quatre yeux : la version est approuvée par une autre personne que ses "
+                                          "rédacteurs (création ou modification du contenu) et que celle qui l'a "
+                                          "soumise.")
 
     def action_submit(self, notify=True):
         """Soumission à l'approbation : contenu complet (texte d'une politique, document des autres types) ;
@@ -704,6 +730,23 @@ class EguitraHsseqPolicyObjective(models.Model):
                                       help="Facultatif : l'objectif se lit alors avec la valeur de l'indicateur sur "
                                            "les douze derniers mois.")
     target = fields.Float("Cible", digits=(16, 2), help="Cible de l'indicateur relié, dans son unité.")
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        objectives = super().create(vals_list)
+        objectives.version_id._mark_edited()
+        return objectives
+
+    def write(self, vals):
+        result = super().write(vals)
+        self.version_id._mark_edited()
+        return result
+
+    def unlink(self):
+        versions = self.version_id
+        result = super().unlink()
+        versions.exists()._mark_edited()
+        return result
 
 
 class EguitraHsseqDocumentReview(models.Model):

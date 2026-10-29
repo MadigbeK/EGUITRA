@@ -59,6 +59,7 @@ from .common import (
     scope_domain,
     sheet_filters,
     site_ref,
+    site_scope,
     terrain_source,
     text,
     user_ref,
@@ -140,6 +141,8 @@ def version_row(version, detail=False, values=None):
            "change_summary": version.change_summary or None, "status": version.status,
            "submitted_at": version.submitted_at or None, "submitted_by": user_ref(version.submitted_by),
            "approved_at": version.approved_at or None, "approved_by": user_ref(version.approved_by),
+           # Rédacteurs (création et modifications du contenu) : aucun n'approuve la version (quatre yeux).
+           "edited_by": [user_ref(u) for u in (version.create_uid | version.edited_by) if u.id],
            "reject_reason": version.reject_reason or None,
            "published_at": version.published_at or None, "published_by": user_ref(version.published_by),
            "has_text": bool((version.body or "").strip()),
@@ -242,9 +245,13 @@ def procedure_row(procedure, detail=False, index=None):
     targets = procedure._audience_users(index) if current and procedure.status == "published" else None
     values = None
     if detail:
-        # Indicateurs du cockpit des objectifs, calculés une fois pour la version en vigueur et le brouillon.
-        values = procedure._indicator_values(procedure.company_id,
-                                             (current | draft).objective_ids.mapped("indicator_code"))
+        # Indicateurs du cockpit des objectifs, calculés une fois pour la version en vigueur et le brouillon, dans
+        # la portée du lecteur comme au cockpit : toute la société pour la lecture complète, les sites de
+        # l'auditeur sinon, aucune valeur sans site rattaché.
+        scope = site_scope()
+        codes = (current | draft).objective_ids.mapped("indicator_code")
+        values = {} if scope is not None and not scope else procedure._indicator_values(procedure.company_id, codes,
+                                                                                         scope)
     row = {"id": procedure.id, "doc_type": procedure.doc_type, "code": procedure.code, "title": procedure.title,
            "domain": procedure.domain or None, "parent": doc_ref(procedure.parent_id),
            "audience": audience_row(procedure), "status": procedure.status, "owner": user_ref(procedure.owner_id),

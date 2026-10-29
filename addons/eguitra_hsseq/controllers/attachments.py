@@ -199,5 +199,8 @@ class EguitraHsseqAttachments(http.Controller):
             raise ApiError(422, "invalid_transition", "Pièce probante d'une levée ou d'une réalisation : conservée.")
         if record is not None:
             request.env["eguitra.hsseq.journal"]._log(attachment.object, record, "attachment_removed", note=attachment.name)
+            if attachment.object == "procedure_version":
+                # Retirer la pièce d'une version de document HSE modifie son contenu (quatre yeux).
+                record._mark_edited()
         attachment.attachment_id.unlink()
         return {"status": "ok"}

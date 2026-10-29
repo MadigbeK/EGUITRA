@@ -4,9 +4,10 @@ from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
 
+from odoo import fields
 from odoo.tests import tagged
 
-from ..models.common import AUDIENCE_PROFILES
+from ..models.common import AUDIENCE_PROFILES, HsseqError
 from .common import HsseqCase
 
 PDF = b"%PDF-1.4\n%%EOF\n"
@@ -201,6 +202,60 @@ class TestPolicies(HsseqCase):
         status, audited = self.api("awa.auditrice", "GET", path)
         self.assertEqual((status, audited["current_version"]["approved_by"]["id"], audited["readers"],
                           audited["version_actions"]), (200, self.dg.id, None, []))
+
+    def test_quatre_yeux_retient_chaque_modificateur(self):
+        """Revue de sécurité : un compte qui a modifié le texte, les objectifs ou une pièce d'une version ne
+        l'approuve pas, même s'il ne l'a ni créée ni soumise."""
+        doc = self._create(title="Politique de conduite défensive")
+        path = f"/hsseq/procedures/{doc['id']}"
+        status, edited = self.api("moussa.dirhsseq", "PATCH", f"{path}/versions/{doc['draft_version']['id']}",
+                                  {"body": f"{TEXT} Conduite défensive pour tous."})
+        self.assertEqual(status, 200, edited)
+        self.assertEqual({u["id"] for u in edited["draft_version"]["edited_by"]}, {self.hsseq.id, self.dirhsseq.id})
+        status, submitted = self._go("kadi.hsseq", edited, "submit")
+        self.assertEqual(status, 200, submitted)
+        status, seen = self.api("moussa.dirhsseq", "GET", path)
+        self.assertEqual(seen["version_actions"], ["withdraw"], "Ni approbation ni refus pour un modificateur")
+        status, body = self._go("moussa.dirhsseq", submitted, "approve")
+        self.assertEqual((status, body["error"]), (422, "four_eyes"), "Modificateur du texte")
+        status, approved = self._go("dg.hsseq", submitted, "approve")
+        self.assertEqual(status, 200, approved)
+        # Les objectifs seuls, puis une pièce jointe seule, suffisent à faire d'un compte un rédacteur.
+        for change in ("objectives", "attachment"):
+            other = self._create(title=f"Politique d'essai ({change})")
+            version_id = other["draft_version"]["id"]
+            if change == "objectives":
+                status, body = self.api("moussa.dirhsseq", "PATCH", f"/hsseq/procedures/{other['id']}/versions/{version_id}",
+                                        {"objectives": [{"label": "Zéro déversement", "indicator_code": "spills",
+                                                         "target": 0}]})
+            else:
+                status, body = self.upload("moussa.dirhsseq", content=PDF, name="politique.pdf",
+                                           model="procedure_version", id=version_id)
+            self.assertEqual(status, 200, body)
+            status, other = self._go("kadi.hsseq", other, "submit")
+            status, body = self._go("moussa.dirhsseq", other, "approve")
+            self.assertEqual((status, body["error"]), (422, "four_eyes"), change)
+        # Le noyau le refuse aussi hors de l'API.
+        version = self.env["eguitra.hsseq.procedure.version"].browse(other["draft_version"]["id"])
+        with self.assertRaises(HsseqError):
+            version.with_user(self.dirhsseq).action_approve()
+
+    def test_objectifs_lus_dans_la_portee_du_lecteur(self):
+        """Revue de sécurité : la valeur d'un objectif relié au cockpit se calcule dans la portée du lecteur,
+        comme au cockpit : toute la société pour la lecture complète, les seuls sites de l'auditeur sinon."""
+        doc = self._approved_policy(objectives=[{"label": "Zéro déversement", "indicator_code": "spills",
+                                                 "target": 0}])
+        self.env["eguitra.hsseq.spill"].create({
+            "company_id": self.company.id, "site_id": self.site2.id, "occurred_at": fields.Datetime.now() - timedelta(hours=2),
+            "volume_liters": 20, "location": "Quai de Boffa", "status": "open"})
+        path = f"/hsseq/procedures/{doc['id']}"
+        status, full = self.api("kadi.hsseq", "GET", path)
+        [objective] = full["current_version"]["objectives"]
+        self.assertEqual((objective["value"], objective["status"]), (1, "missed"), "Toute la société")
+        status, audited = self.api("awa.auditrice", "GET", path)
+        self.assertEqual(status, 200, audited)
+        [objective] = audited["current_version"]["objectives"]
+        self.assertEqual(objective["value"], 0, "Déversement d'un autre site : hors de la portée de l'auditeur")
 
     # ─── Revue périodique ─────────────────────────────────────────────────
 
