@@ -156,6 +156,11 @@ class EguitraTransportVehicle(models.Model):
         result = super().write(vals)
         if {"tractor_id", "trailer_id"} & set(vals):
             self._release_units()
+        if "capacity_liters" in vals:
+            # Capacité de l'ensemble (écrans et reprise antérieurs) : celle de sa remorque.
+            for vehicle in self.filtered("trailer_id"):
+                if vehicle.trailer_id.capacity_liters != vehicle.capacity_liters:
+                    vehicle.trailer_id.sudo().capacity_liters = vehicle.capacity_liters
         return result
 
 
