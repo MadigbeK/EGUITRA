@@ -407,6 +407,36 @@ class TestDiscussion(ApiCase):
         status, body = self.call("GET", f"/chat/conversations/{direct}", token=admin)
         self.assertEqual(status, 404, "L'administration ne lit pas pour autant la conversation")
 
+    # ─── Photos des comptes ──────────────────────────────────────────────
+
+    def test_photos_des_comptes(self):
+        """Chaque compte cité porte la version de sa photo (None : initiales) ; l'image passe par la route
+        /users/<id>/avatar."""
+        self.set_photo(self.bruno)
+        alice, bruno = self.session("alice.chat"), self.session("bruno.chat")
+        conversation = self.direct(alice, self.bruno)
+        version = conversation["correspondent"]["avatar"]
+        self.assertEqual(conversation["correspondent"]["id"], self.bruno.id, "Correspondant d'une conversation à deux")
+        self.assertTrue(version)
+        members = {m["id"]: m["avatar"] for m in conversation["members"]}
+        self.assertEqual(members, {self.alice.id: None, self.bruno.id: version}, "Avatar dessiné du noyau : None")
+        status, rows = self.call("GET", "/chat/conversations", token=alice)
+        row = next(r for r in rows if r["id"] == conversation["id"])
+        self.assertEqual((row["correspondent"]["avatar"], {m["id"]: m["avatar"] for m in row["members"]}),
+                         (version, members))
+        message = self.write(bruno, conversation["id"], "Bonjour Alice")
+        self.assertEqual(message["author"], {"id": self.bruno.id, "name": self.bruno.name, "avatar": version})
+        listed = self.messages(alice, conversation["id"])["messages"]
+        self.assertEqual(listed[-1]["author"]["avatar"], version)
+        status, body = self.call("GET", f"/chat/conversations/{conversation['id']}/updates?after=0", token=alice)
+        self.assertEqual(body["messages"][-1]["author"]["avatar"], version)
+        status, found = self.call("GET", "/chat/users?q=bruno.chat", token=alice)
+        self.assertEqual([(u["id"], u["avatar"]) for u in found], [(self.bruno.id, version)])
+        response = self.url_open(f"/api/v1/users/{self.bruno.id}/avatar?size=128", timeout=60,
+                                 headers={"Authorization": f"Bearer {alice}", "X-Eguitra-App": "test"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(version, response.headers["ETag"])
+
     # ─── Journal des accès ───────────────────────────────────────────────
 
     def test_relectures_hors_du_journal_des_acces(self):
