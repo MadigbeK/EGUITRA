@@ -10,6 +10,7 @@ AUDITED_MODELS = [
     "eguitra.commerce.receipt",
     "eguitra.commerce.receipt.line",
     "eguitra.commerce.supplier.quote",
+    "eguitra.commerce.purchase.document",
 ]
 
 # Menus des modules sale et purchase du noyau : l'utilisateur ne voit jamais le noyau ; réservés à
@@ -26,6 +27,7 @@ def hide_core_menus(env):
 
 
 def post_init_hook(env):
+    # Comprend le circuit par défaut des bons de commande (models/approval.py, PURCHASE_ORDER_RULES).
     env["res.company"].sudo().search([])._eguitra_commerce_setup()
     hide_core_menus(env)
     env["eguitra.setup"].ensure_audit_rules(AUDITED_MODELS)

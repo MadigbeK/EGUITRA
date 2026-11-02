@@ -2,3 +2,5 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_receipt_user,réceptions lecture,model_eguitra_commerce_receipt,base.group_user,1,0,0,0
 access_receipt_line_user,lignes de réception lecture,model_eguitra_commerce_receipt_line,base.group_user,1,0,0,0
 access_supplier_quote_user,devis fournisseurs,model_eguitra_commerce_supplier_quote,base.group_user,1,1,1,1
+access_purchase_document_user,pièces jointes des bons de commande lecture,model_eguitra_commerce_purchase_document,base.group_user,1,0,0,0
+access_purchase_event_user,historique des bons de commande lecture,model_eguitra_commerce_purchase_event,base.group_user,1,0,0,0

@@ -11,7 +11,8 @@ from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 from odoo.addons.eguitra_finance.controllers.common import as_float, as_int, check_mandatory_analytic, parse_date, today
 
 from ..models.documents import document_filename, send_document
-from ..models.purchase_order import STATUS
+from ..models.purchase_document import DOCUMENT_CATEGORIES, EDITABLE_STATES
+from ..models.purchase_order import QUOTE_KINDS, STATUS
 from .common import (
     PURCHASE_ALL,
     PURCHASE_BILL,
@@ -30,6 +31,8 @@ from .common import (
 )
 
 STATUS_LABELS = dict(STATUS)
+CATEGORY_LABELS = dict(DOCUMENT_CATEGORIES)
+QUOTE_KIND_LABELS = dict(QUOTE_KINDS)
 VIEWS = {
     "draft": [("eguitra_status", "in", ("draft", "rejected"))],
     "approval": [("eguitra_status", "=", "to_approve")],
@@ -41,10 +44,10 @@ PO_REPORT = "eguitra_commerce.action_report_purchase_order"
 MAX_FILE = 15 * 1024 * 1024
 
 
-def _own_domain():
+def _own_domain(prefix=""):
     """Profil métier seul : ses bons de commande (saisis par lui) et ceux de ses engagements."""
     user = request.env.user
-    return ["|", ("create_uid", "=", user.id), ("eguitra_commitment_id.requested_by", "=", user.id)]
+    return ["|", (f"{prefix}create_uid", "=", user.id), (f"{prefix}eguitra_commitment_id.requested_by", "=", user.id)]
 
 
 def _po(order_id):
@@ -90,6 +93,43 @@ def _download(attachment, default):
     ])
 
 
+def _document(document_id):
+    """Pièce jointe d'un bon de la société de travail, que l'utilisateur voit (les métiers : leurs bons)."""
+    document = request.env["eguitra.commerce.purchase.document"].sudo().browse(document_id).exists()
+    check_company(document, "Pièce jointe")
+    _po(document.order_id.id)
+    return document
+
+
+def document_row(document):
+    return {
+        "id": document.id, "category": document.category, "category_label": CATEGORY_LABELS.get(document.category),
+        "name": document.name, "mimetype": document.mimetype or None, "size": document.file_size or 0,
+        "note": document.note or None, "origin": document.origin or None,
+        "uploaded_by": user_ref(document.uploaded_by), "uploaded_at": document.uploaded_at,
+        "removable": document.order_id.state in EDITABLE_STATES,
+        "order": {"id": document.order_id.id, "name": document.order_id.name,
+                  "partner": document.order_id.partner_id.display_name,
+                  "partner_ref": document.order_id.partner_ref or None},
+    }
+
+
+def attach_document(order, name, content, mimetype, category, note=None, origin=None):
+    """Pièce jointe au bon (format lu dans le contenu par l'appelant) ; refusée sur un bon annulé."""
+    if category not in CATEGORY_LABELS:
+        raise ApiError(400, "invalid_parameter", "Catégorie de pièce inconnue.", fields=["category"])
+    if order.state == "cancel":
+        raise ApiError(422, "business_rule", "Un bon de commande annulé ne reçoit plus de pièce.")
+    attachment = request.env["ir.attachment"].sudo().create({
+        "name": checked_name(name, mimetype, CATEGORY_LABELS[category].lower()), "datas": base64.b64encode(content),
+        "mimetype": mimetype, "res_model": order._name, "res_id": order.id,
+    })
+    return request.env["eguitra.commerce.purchase.document"].sudo().create({
+        "order_id": order.id, "category": category, "name": attachment.name, "attachment_id": attachment.id,
+        "note": text(note, 250), "origin": text(origin, 250),
+    })
+
+
 def receipt_row(receipt):
     return {
         "id": receipt.id, "name": receipt.name, "date": receipt.date, "state": receipt.state,
@@ -120,8 +160,12 @@ def po_row(order, detail=False):
     data = {
         "id": order.id, "name": order.name, "status": status, "status_label": STATUS_LABELS.get(status, status),
         "partner": ref(order.partner_id), "object": order.eguitra_object or None, "partner_ref": order.partner_ref or None,
+        "quote_kind": order.eguitra_quote_kind or "quote",
+        "quote_kind_label": QUOTE_KIND_LABELS.get(order.eguitra_quote_kind or "quote"),
+        "quote_date": order.eguitra_quote_date or None,
         "date": order.date_order.date() if order.date_order else None, "date_approve": order.date_approve,
         "date_planned": order.date_planned.date() if order.date_planned else None,
+        "documents_count": len(order.eguitra_document_ids),
         "commitment": ({"id": order.eguitra_commitment_id.id, "name": order.eguitra_commitment_id.name,
                         "object": order.eguitra_commitment_id.object} if order.eguitra_commitment_id else None),
         "currency": order.currency_id.name, "amount_untaxed": order.amount_untaxed, "amount_tax": order.amount_tax,
@@ -142,10 +186,16 @@ def po_row(order, detail=False):
     if detail:
         data.update({
             "conditions": order.eguitra_conditions or None,
+            "payment_term": ref(order.payment_term_id), "payment_note": order.eguitra_payment_note or None,
+            "delivery_days": order.eguitra_delivery_days or None, "delivery_place": order.eguitra_delivery_place or None,
+            "tax_exemption": order.eguitra_tax_exemption or None,
             "lines": [line_row(l, "purchase") for l in order.order_line.sorted(lambda l: (l.sequence, l.id))],
             "receipts": [receipt_row(r) for r in order.eguitra_receipt_ids.sorted(lambda r: (r.date, r.id))],
             "bills": [bill_row(m) for m in (order.eguitra_bill_ids | order.invoice_ids).sorted("id")],
+            "documents": [document_row(d) for d in order.eguitra_document_ids],
             "covered_by_commitment": order._eguitra_commitment_covers() if order.state == "draft" else None,
+            # Circuit prévu pour ce montant, avant la soumission ; ensuite, l'avancement est dans « approval ».
+            "circuit": order._eguitra_circuit_preview() if order.state == "draft" else None,
         })
     return data
 
@@ -158,9 +208,32 @@ def _header(data, creating, commitment=None):
             raise ApiError(400, "missing_fields", "Le fournisseur est obligatoire.", fields=["partner_id"])
         values["partner_id"] = partner_of(partner_id, "Fournisseur").id
     for key, field, size in (("object", "eguitra_object", 250), ("conditions", "eguitra_conditions", 4000),
-                             ("partner_ref", "partner_ref", 120)):
+                             ("partner_ref", "partner_ref", 120), ("payment_note", "eguitra_payment_note", 250),
+                             ("delivery_place", "eguitra_delivery_place", 250),
+                             ("tax_exemption", "eguitra_tax_exemption", 250)):
         if key in data:
             values[field] = text(data[key], size)
+    if "quote_kind" in data:
+        if (data["quote_kind"] or "quote") not in QUOTE_KIND_LABELS:
+            raise ApiError(400, "invalid_parameter", "Nature de la pièce du fournisseur : devis ou facture proforma.",
+                           fields=["quote_kind"])
+        values["eguitra_quote_kind"] = data["quote_kind"] or "quote"
+    if "quote_date" in data:
+        quote_date = parse_date(data, "quote_date")
+        if quote_date and quote_date > today():
+            raise ApiError(422, "business_rule", "La date du devis ou de la proforma n'est pas dans le futur.")
+        values["eguitra_quote_date"] = quote_date or False
+    if "delivery_days" in data:
+        days = as_int(data["delivery_days"], "delivery_days") if data["delivery_days"] not in (None, "") else 0
+        if not 0 <= days <= 3650:
+            raise ApiError(422, "business_rule", "Le délai de livraison est un nombre de jours, de 0 à 3 650.")
+        values["eguitra_delivery_days"] = days
+    if "payment_term_id" in data:
+        Term = request.env["account.payment.term"].sudo()
+        term = Term.browse(as_int(data["payment_term_id"], "payment_term_id")).exists() if data["payment_term_id"] else Term
+        if data["payment_term_id"] and (not term or (term.company_id and term.company_id != company())):
+            raise ApiError(422, "business_rule", "Conditions de paiement inconnues dans la société.")
+        values["payment_term_id"] = term.id or False
     if creating and "eguitra_object" not in values and commitment:
         values["eguitra_object"] = commitment.object
     return values
@@ -185,9 +258,12 @@ class EguitraCommercePurchases(http.Controller):
             domain.append(("eguitra_commitment_id", "=", int_arg(kw, "commitment_id")))
         if kw.get("partner_id"):
             domain.append(("partner_id", "=", int_arg(kw, "partner_id")))
+        if kw.get("quote_ref"):
+            domain.append(("partner_ref", "ilike", kw["quote_ref"]))
         if kw.get("search"):
             s = kw["search"]
-            domain += ["|", "|", ("name", "ilike", s), ("eguitra_object", "ilike", s), ("partner_id.name", "ilike", s)]
+            domain += ["|", "|", "|", ("name", "ilike", s), ("eguitra_object", "ilike", s), ("partner_id.name", "ilike", s),
+                       ("partner_ref", "ilike", s)]
         Order = request.env["purchase.order"].sudo()
         limit, offset = int_arg(kw, "limit", 100, 1, 500), int_arg(kw, "offset", 0, 0)
         orders = Order.search(domain, limit=limit, offset=offset, order="id desc")
@@ -221,6 +297,11 @@ class EguitraCommercePurchases(http.Controller):
             data = dict(data, lines=[{"name": commitment.object, "quantity": 1, "price_unit": rest}])
         if commitment:
             values["eguitra_commitment_id"] = commitment.id
+        if "payment_term_id" not in values:
+            # Conditions de paiement de la fiche du fournisseur (société de travail), modifiables ensuite.
+            partner = request.env["res.partner"].sudo().browse(values["partner_id"]).with_company(comp)
+            if partner.property_supplier_payment_term_id:
+                values["payment_term_id"] = partner.property_supplier_payment_term_id.id
         values.update({"company_id": comp.id, "date_planned": planned,
                        "order_line": purchase_line_commands(data, comp, commitment=commitment, planned=planned)})
         order = request.env["purchase.order"].sudo().with_company(comp)._eguitra_quiet().create(values)
@@ -268,7 +349,7 @@ class EguitraCommercePurchases(http.Controller):
                               ])
             order.action_eguitra_mark_sent(emailed_to=email_to)
         elif action == "cancel":
-            order.action_eguitra_cancel()
+            order.action_eguitra_cancel(reason=text(data.get("reason"), 500) or None)
         else:
             raise ApiError(404, "not_found", "Action inconnue.")
         return po_row(order, detail=True)
@@ -281,6 +362,87 @@ class EguitraCommercePurchases(http.Controller):
             ("Content-Type", "application/pdf"),
             ("Content-Disposition", content_disposition(document_filename(order, "Bon de commande"))),
         ])
+
+    # ─── Circuit prévu, historique, pièces jointes ────────────────────────
+
+    @api_route("/commerce/purchase-orders/circuit", profiles=PURCHASE_ALL)
+    def purchase_order_circuit(self, **kw):
+        """Circuit prévu pour un bon de ce montant HT, avant sa création : étapes, profil attendu, seuils.
+        commitment_id et partner_id : approbation d'office si l'engagement approuvé couvre le bon."""
+        amount = as_float(kw.get("amount") or 0, "amount")
+        if amount < 0:
+            raise ApiError(422, "business_rule", "Montant positif ou nul.")
+        comp = company()
+        preview = request.env["eguitra.approval.rule"]._eguitra_po_circuit(comp, amount)
+        if kw.get("commitment_id"):
+            commitment = _commitment(int_arg(kw, "commitment_id")).sudo()
+            partner_id = int_arg(kw, "partner_id", 0) or commitment.partner_id.id
+            partner = request.env["res.partner"].sudo().browse(partner_id).exists()
+            others = commitment.eguitra_purchase_order_ids.filtered(lambda o: o.state != "cancel")
+            allowed = commitment.amount * (1 + commitment.tolerance_pct() / 100)
+            if (commitment.state == "approved" and partner
+                    and partner.commercial_partner_id == commitment.partner_id.commercial_partner_id
+                    and sum(others.mapped("amount_untaxed")) + amount <= allowed + 0.5):
+                preview["covered"] = True
+                for rule in preview["rules"]:
+                    rule["applies"] = False
+        return preview
+
+    @api_route("/commerce/purchase-orders/<int:order_id>/history", profiles=PURCHASE_ALL)
+    def purchase_order_history(self, order_id, **_kw):
+        """Historique du bon : création, modifications des champs clés et des lignes, soumissions, décisions
+        commentées, approbation d'office, envoi, réceptions, pièces d'achat, pièces jointes, annulation."""
+        order = _po(order_id)
+        return {"order": {"id": order.id, "name": order.name}, "items": order._eguitra_history()}
+
+    @api_route("/commerce/purchase-orders/<int:order_id>/documents", profiles=PURCHASE_ALL)
+    def purchase_order_documents(self, order_id, **_kw):
+        order = _po(order_id)
+        return [document_row(d) for d in order.eguitra_document_ids]
+
+    @api_route("/commerce/purchase-orders/<int:order_id>/documents", methods=("POST",), profiles=PURCHASE_ALL)
+    def add_purchase_order_document(self, order_id, **_kw):
+        """Pièce jointe au bon (fichier, catégorie : quote, proforma, contract, delivery, other ; note), format lu
+        dans le contenu. Toujours possible, sauf sur un bon annulé ; retirée seulement avant la soumission."""
+        order = _po(order_id)
+        form = request.httprequest.form
+        name, content, mimetype = _upload()
+        document = attach_document(order, name, content, mimetype, form.get("category") or "other", note=form.get("note"))
+        return document_row(document)
+
+    @api_route("/commerce/purchase-documents", profiles=PURCHASE_ALL)
+    def purchase_documents(self, **kw):
+        """Pièces jointes des bons de la société, retrouvées par nom, bon, fournisseur ou référence du devis ;
+        les métiers ne voient que celles de leurs bons."""
+        domain = [("company_id", "=", company().id)]
+        if purchase_restricted():
+            domain += _own_domain("order_id.")
+        if kw.get("category"):
+            domain.append(("category", "in", kw["category"].split(",")))
+        if kw.get("order_id"):
+            domain.append(("order_id", "=", int_arg(kw, "order_id")))
+        if kw.get("search"):
+            s = kw["search"]
+            domain += ["|", "|", "|", "|", ("name", "ilike", s), ("note", "ilike", s), ("order_id.name", "ilike", s),
+                       ("order_id.partner_id.name", "ilike", s), ("order_id.partner_ref", "ilike", s)]
+        Document = request.env["eguitra.commerce.purchase.document"].sudo()
+        limit, offset = int_arg(kw, "limit", 100, 1, 500), int_arg(kw, "offset", 0, 0)
+        documents = Document.search(domain, limit=limit, offset=offset, order="uploaded_at desc, id desc")
+        return {"items": [document_row(d) for d in documents], "total": Document.search_count(domain),
+                "limit": limit, "offset": offset}
+
+    @api_route("/commerce/purchase-documents/<int:document_id>", profiles=PURCHASE_ALL)
+    def purchase_document_download(self, document_id, **_kw):
+        document = _document(document_id)
+        return _download(document.attachment_id, document.name)
+
+    @api_route("/commerce/purchase-documents/<int:document_id>", methods=("DELETE",), profiles=PURCHASE_ALL)
+    def purchase_document_delete(self, document_id, **_kw):
+        """Pièce retirée d'un bon en brouillon ; archivée (jamais supprimée) une fois le bon soumis."""
+        document = _document(document_id)
+        order = document.order_id
+        document.unlink()
+        return [document_row(d) for d in order.eguitra_document_ids]
 
     # ─── Réceptions ───────────────────────────────────────────────────────
 
@@ -315,6 +477,11 @@ class EguitraCommercePurchases(http.Controller):
             "mimetype": mimetype, "res_model": receipt._name, "res_id": receipt.id,
         })
         receipt.attachment_id = attachment
+        # Le bon de livraison rejoint aussi les pièces du bon de commande (archives, recherche des documents).
+        request.env["eguitra.commerce.purchase.document"].sudo().create({
+            "order_id": receipt.purchase_order_id.id, "category": "delivery", "name": attachment.name,
+            "attachment_id": attachment.id, "origin": f"Réception {receipt.name}",
+        })
         return receipt_row(receipt)
 
     @api_route("/commerce/receipts/<int:receipt_id>/attachment", profiles=PURCHASE_ALL)

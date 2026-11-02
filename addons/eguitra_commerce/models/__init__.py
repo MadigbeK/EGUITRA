@@ -3,9 +3,11 @@ from . import res_company
 from . import product
 from . import sale_order
 from . import chantier
+from . import purchase_document
 from . import purchase_order
 from . import receipt
 from . import supplier_quote
 from . import approval
 from . import account_move
 from . import deadlines
+from . import res_users

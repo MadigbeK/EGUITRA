@@ -41,6 +41,9 @@ PURCHASE_DASH = PURCHASE_FULL
 CATALOGUE_READ = PURCHASE_ALL
 # Comparaison des devis fournisseurs : sur les engagements, mêmes profils que leurs routes (eguitra_approval).
 QUOTES = ("admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet", "achats")
+# Signature manuscrite scannée : les profils approbateurs déposent la leur ; l'administration, celle des autres.
+SIGNATURE = ("admin", "direction", "finance")
+SIGNATURE_ADMIN = ("admin",)
 DISPLAY = ("line_section", "line_note")
 MAX_TEXT = 500
 
