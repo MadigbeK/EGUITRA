@@ -58,8 +58,9 @@ class TestTableauDeBordDesign(FinanceDataMixin, ApiCase):
             [("code", "=like", "585%"), ("company_ids", "in", cls.company.ids)], limit=1)
         misc = cls.env["account.journal"].search([("type", "=", "general"), ("company_id", "=", cls.company.id)], limit=1)
         cls.transit = transit
+        # Daté du 1er : la trésorerie du jour (sans date) le compte aussi quand les tests tournent avant le 7.
         move = cls.env["account.move"].create({
-            "move_type": "entry", "journal_id": misc.id, "date": cls.day.replace(day=7),
+            "move_type": "entry", "journal_id": misc.id, "date": cls.day.replace(day=1),
             "line_ids": [(0, 0, {"account_id": transit.id, "debit": 12_000_000, "name": "Fonds en transit"}),
                          (0, 0, {"account_id": cls.acc_services.id, "credit": 12_000_000, "name": "Fonds en transit"})],
         })

@@ -19,6 +19,12 @@ def image(fmt="PNG", size=(800, 600), color=(30, 120, 60)):
     return out.getvalue()
 
 
+def is_photo(value):
+    """Vraie photo (JPEG ou PNG), et non l'avatar dessiné que le noyau donne à tout compte."""
+    content = base64.b64decode(value) if value else b""
+    return content.startswith((b"\xff\xd8\xff", b"\x89PNG"))
+
+
 def dimensions(content):
     from PIL import Image
 
@@ -98,6 +104,10 @@ class TestPhotoSalarie(ApiCase):
         self.assertEqual(self._get(f"/rh/employees/{self.plain.id}/photo", token).status_code, 404)
 
     def test_webp_accepte(self):
+        from PIL import features
+
+        if not features.check("webp"):
+            self.skipTest("Bibliothèque d'images sans WebP sur cette machine")
         token = self._token("photo.admin")
         status, row = self._send(f"/rh/employees/{self.plain.id}/photo", token, image("WEBP", (400, 400)),
                                  name="photo.webp", mimetype="image/webp")
@@ -182,19 +192,20 @@ class TestPhotoSalarie(ApiCase):
 
     def test_photo_du_compte_reportee_et_retiree(self):
         token = self._token("photo.rh")
-        self.assertFalse(self.worker_user.image_1920)
+        # Le noyau donne à tout compte un avatar dessiné (SVG, initiale) : ce n'est pas une photo.
+        self.assertFalse(is_photo(self.worker_user.image_1920))
         status, _row = self._send(f"/rh/employees/{self.worker.id}/photo", token, image("PNG", (500, 500)))
         self.assertEqual(status, 200)
         self.worker_user.invalidate_recordset()
-        self.assertTrue(self.worker_user.image_1920, "La photo du salarié devient celle de son compte")
+        self.assertTrue(is_photo(self.worker_user.image_1920), "La photo du salarié devient celle de son compte")
         status, _row = self.call("DELETE", f"/rh/employees/{self.worker.id}/photo", token=token)
         self.assertEqual(status, 200)
         self.worker_user.invalidate_recordset()
-        self.assertFalse(self.worker_user.image_1920, "Retirée du compte avec elle")
+        self.assertFalse(is_photo(self.worker_user.image_1920), "Retirée du compte avec elle")
         # Compte lié après coup : il reçoit la photo du dossier.
         self.plain.photo = base64.b64encode(image())
         self.plain.user_id = self.loner_user
-        self.assertTrue(self.loner_user.image_1920)
+        self.assertTrue(is_photo(self.loner_user.image_1920))
 
     def test_piste_d_audit_sans_l_image(self):
         Rule = self.env["auditlog.rule"].sudo()
