@@ -735,6 +735,184 @@ la fenêtre reste ouverte avec la saisie. À l'étape 3, la demande part une seu
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## G. Photos et import des salariés
+
+Ces scénarios ont été ajoutés le 2 novembre 2026. Pour les photos, utilisez des images sans personne
+(paysage, objet, logo) ou votre propre photo : jamais celle d'un collègue sans son accord.
+
+### RH-32. Voir le personnel en cartes ou en liste
+
+Objectif : vérifier le trombinoscope, le panneau des départements, la recherche et la bascule entre
+cartes et liste, sur ordinateur et sur téléphone.
+
+Compte : test.rh.
+
+Données : les salariés de démonstration ; cinq d'entre eux ont une silhouette en guise de photo.
+
+1. Personnel > Salariés. Regardez les cartes : photo ou initiales sur un rond de couleur, nom, poste,
+   courriel, téléphone, contrat.
+2. Dans le panneau « Département », cliquez « Transport », puis « Tous ».
+3. Tapez « parc » dans la recherche, puis videz-la.
+4. Cliquez « Liste », rechargez la page, puis revenez à « Cartes ».
+5. Ouvrez la même page sur un téléphone.
+
+Résultat attendu : « Tous » vient en premier et chaque département affiche son nombre de salariés ;
+le choix d'un département et la recherche filtrent les cartes. Après rechargement, la vue « Liste »
+est conservée. Sur téléphone, les départements défilent en bandeau au-dessus d'une carte par ligne,
+sans débordement de l'écran.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### RH-33. Ajouter, remplacer et retirer la photo d'un salarié
+
+Objectif : vérifier l'ajout d'une photo avec aperçu, son remplacement et son retrait par la RH.
+
+Compte : test.rh.
+
+Données : le dossier de « Fatoumata Camara (démo) » ou un autre dossier sans photo ; deux images
+JPEG ou PNG de moins de 5 Mo.
+
+1. Ouvrez le dossier : ses initiales sont affichées en grand. Cliquez « Ajouter une photo », choisissez
+   la première image.
+2. Lisez l'aperçu, puis « Enregistrer la photo ».
+3. Cliquez « Remplacer », choisissez la seconde image, enregistrez.
+4. Revenez à la liste des salariés, puis rouvrez le dossier et cliquez « Retirer », confirmez.
+
+Résultat attendu : l'aperçu montre l'image recadrée en carré dans un rond. Après l'enregistrement, la
+photo s'affiche sur le dossier et sur sa carte de la liste ; remplacée, la nouvelle s'affiche partout.
+Retirée après confirmation, les initiales reviennent.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### RH-34. Photo refusée : mauvais format ou trop lourde
+
+Objectif : vérifier que seules les images JPEG, PNG ou WebP de 5 Mo au plus sont acceptées, avec un
+message clair.
+
+Compte : test.rh.
+
+Données : une copie d'un document PDF dont vous changez l'extension en .jpg ; une image de plus de
+5 Mo.
+
+1. Sur un dossier, « Ajouter une photo », choisissez le PDF renommé, puis « Enregistrer la photo ».
+2. Recommencez avec l'image de plus de 5 Mo.
+
+Résultat attendu : le PDF renommé est refusé avec le message « Format non reconnu : photo au format
+JPEG, PNG ou WebP seulement. » ; l'image trop lourde est refusée dès son choix, avec sa taille et
+« 5 Mo au plus ». Aucune photo n'est enregistrée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### RH-35. Changer sa photo dans Mon espace
+
+Objectif : vérifier que le salarié change sa propre photo, et jamais celle d'un autre.
+
+Compte : test.salarie, puis test.rh.
+
+Données : une image de votre choix (sans personne, ou votre propre photo).
+
+1. test.salarie : Mon espace affiche vos initiales. Cliquez « Ajouter ma photo », choisissez l'image,
+   enregistrez.
+2. Cliquez « Changer ma photo » et remplacez-la de la même façon.
+3. Remplacez la fin de l'adresse par /rh/salaries.
+4. test.rh : ouvrez le dossier de « Thierno Baldé (démo) ».
+
+Résultat attendu : la photo apparaît dans Mon espace, puis la nouvelle après « Changer ma photo ». À
+l'étape 3, la liste du personnel n'est pas ouverte (renvoi vers Mon espace) : aucun moyen de changer
+la photo d'un collègue. À l'étape 4, la RH voit la photo choisie par le salarié.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### RH-36. La direction voit les photos sans les changer
+
+Objectif : vérifier que la direction voit les photos en lecture seule, et que la finance ne les voit
+pas.
+
+Compte : test.dg, puis test.daf.
+
+Données : un dossier avec photo (RH-33 ou démonstration).
+
+1. test.dg : Personnel > Salariés, puis le dossier.
+2. test.daf : remplacez la fin de l'adresse par /rh/salaries.
+
+Résultat attendu : test.dg voit les photos des cartes et du dossier, sans bouton « Ajouter une
+photo », « Remplacer », « Retirer » ni « Importer ». test.daf voit la page « Accès non ouvert à votre
+profil ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### RH-37. Importer des salariés avec leurs photos
+
+Objectif : vérifier l'import des fiches existantes depuis le modèle, avec l'aperçu, les photos et les
+fiches à compléter.
+
+Compte : test.rh.
+
+Données : trois salariés fictifs, par exemple « Aïssata Test », « Mamadi Test », « Kadiatou Test » ;
+deux images nommées aissata_test.png et mamadi_test.jpg, réunies dans une archive ZIP.
+
+1. Personnel > Salariés > « Importer » > « Modèle Excel ». Ouvrez le modèle et lisez les feuilles
+   « Valeurs admises » et « Notice ».
+2. Remplissez trois lignes : nom complet, poste, un département nouveau « Logistique test », courriel,
+   téléphone, contrat CDI. Donnez une date d'entrée et un salaire de base aux deux premiers seulement.
+3. Dans « Importer », choisissez le classeur et l'archive, puis « Voir l'aperçu ».
+4. Lisez l'aperçu, puis « Importer ».
+5. Revenez à la liste, ouvrez « Kadiatou Test ».
+
+Résultat attendu : l'aperçu annonce 3 salariés à créer, 2 photos trouvées et 1 manquante, le
+département « Logistique test » à créer et 1 fiche à compléter (date d'entrée, salaire de base) ; rien
+n'est enregistré avant « Importer ». Après l'import, les trois cartes apparaissent, deux avec leur
+photo, et la carte de Kadiatou porte « À compléter ». Son dossier annonce qu'aucune paie n'est validée
+tant que la date d'entrée et le salaire manquent.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### RH-38. Import tout ou rien, sans doublon
+
+Objectif : vérifier qu'une ligne refusée bloque tout l'import, et qu'un réimport met à jour sans
+dupliquer.
+
+Compte : test.rh, puis test.dg.
+
+Données : le classeur de RH-37.
+
+1. Changez le contrat de « Mamadi Test » en « Intérim » et son poste. Ajoutez une quatrième ligne
+   « Fanta Test », contrat CDD, sans fin du contrat.
+2. « Importer », choisissez le classeur, « Voir l'aperçu ».
+3. Corrigez : contrat CDI pour Mamadi, une fin du contrat pour Fanta. Relancez l'aperçu, puis
+   « Importer ».
+4. test.rh prépare la paie du mois en cours d'EGUITRA GROUP SARLU (Personnel > Paie) sans compléter
+   la fiche de Kadiatou Test ; test.dg ouvre cette paie et clique « Valider ».
+
+Résultat attendu : à l'étape 2, les deux lignes sont refusées avec leur motif (contrat inconnu avec la
+liste des valeurs admises ; un CDD a une date de fin) et le bouton « Importer » reste grisé. À l'étape
+3, Mamadi est mis à jour (poste) et non dupliqué, Aïssata et Kadiatou sont inchangées, Fanta est
+créée. À l'étape 4, la validation est refusée avec le message « fiches à compléter » qui nomme
+Kadiatou Test.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -745,7 +923,8 @@ la fenêtre reste ouverte avec la saisie. À l'étape 3, la demande part une seu
 | D. Salarié et responsable | 3 | | | |
 | E. Refus attendus | 5 | | | |
 | F. Contrôles de saisie et de sécurité | 5 | | | |
-| Total | 31 | | | |
+| G. Photos et import des salariés | 7 | | | |
+| Total | 38 | | | |
 
 Réserves et anomalies relevées :
 
