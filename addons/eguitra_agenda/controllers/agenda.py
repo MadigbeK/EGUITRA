@@ -9,6 +9,11 @@ ressources, les délégations posées pour un dirigeant et le retrait d'un compt
 
 Le compteur de l'en-tête (/agenda/notifications/unread) est relu toutes les 30 secondes, comme celui de
 la discussion : hors du journal des accès, sauf refus ou erreur.
+
+Chaque personne citée (propriétaire d'un agenda, partage, délégation, organisateur et participants internes
+d'un événement, annuaire) porte la version de sa photo (« avatar », None sans vraie photo : l'écran montre
+ses initiales), lue en une requête pour toute la réponse (eguitra_api/avatars.py) ; l'image passe par
+/users/<id>/avatar. Les ressources n'en ont pas.
 """
 
 from datetime import datetime, time, timedelta
@@ -16,6 +21,7 @@ from datetime import datetime, time, timedelta
 from odoo import fields, http
 from odoo.http import content_disposition, request
 
+from odoo.addons.eguitra_api.avatars import avatar_versions, user_ref
 from odoo.addons.eguitra_api.controllers.admin import _scope_domain
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require, sudo_env
 from odoo.addons.eguitra_api.files import ACCEPTED, detect_type
@@ -59,8 +65,23 @@ def _me():
     return request.env.user
 
 
-def _user_ref(user):
-    return {"id": user.id, "name": user.name} if user else None
+def _avatars(users):
+    """Versions des photos des personnes d'une réponse, vues par le compte connecté (une requête)."""
+    return avatar_versions(users, _me())
+
+
+def _user_ref(user, avatars):
+    return user_ref(user, avatars)
+
+
+def _calendar_people(cals):
+    cals = cals.sudo()
+    return cals.owner_id | cals.share_ids.user_id
+
+
+def _delegation_people(delegations):
+    delegations = delegations.sudo()
+    return delegations.owner_id | delegations.delegate_id | delegations.granted_by_id
 
 
 def _ids(value, field):
@@ -85,10 +106,13 @@ def _moment(kw, key, label):
     return parse_datetime(value, label)
 
 
-def _calendar_row(cal, level, me):
+def _calendar_row(cal, level, me, avatars=None):
+    """Agenda vu par le compte. avatars : photos déjà lues pour toute la liste (sinon lues pour cet agenda)."""
     cal = cal.sudo()
+    if avatars is None:
+        avatars = _avatars(_calendar_people(cal))
     row = {"id": cal.id, "name": cal.name, "color": cal.color, "kind": cal.kind, "level": level,
-           "level_label": LEVEL_LABELS[level], "owner": _user_ref(cal.owner_id), "mine": cal.owner_id == me,
+           "level_label": LEVEL_LABELS[level], "owner": _user_ref(cal.owner_id, avatars), "mine": cal.owner_id == me,
            "can_write": level in ("owner", "manage", "write")}
     if cal.kind == "resource":
         row.update(resource_type=cal.resource_type, resource_label=dict(RESOURCE_TYPES).get(cal.resource_type),
@@ -100,16 +124,18 @@ def _calendar_row(cal, level, me):
         d = cal._delegation_for(me)
         row["delegation"] = {"see_private": d.see_private, "receive_invitations": d.receive_invitations}
     if level == "owner" and cal.kind != "resource":
-        row["shares"] = [{"id": s.id, "user": _user_ref(s.user_id), "level": s.level,
+        row["shares"] = [{"id": s.id, "user": _user_ref(s.user_id, avatars), "level": s.level,
                           "level_label": dict(SHARE_LEVELS)[s.level]} for s in cal.share_ids]
     return row
 
 
-def _delegation_row(d):
+def _delegation_row(d, avatars=None):
     d = d.sudo()
-    return {"id": d.id, "owner": _user_ref(d.owner_id), "delegate": _user_ref(d.delegate_id),
+    if avatars is None:
+        avatars = _avatars(_delegation_people(d))
+    return {"id": d.id, "owner": _user_ref(d.owner_id, avatars), "delegate": _user_ref(d.delegate_id, avatars),
             "receive_invitations": d.receive_invitations, "see_private": d.see_private,
-            "granted_by": _user_ref(d.granted_by_id), "reason": d.reason or None, "since": d.create_date}
+            "granted_by": _user_ref(d.granted_by_id, avatars), "reason": d.reason or None, "since": d.create_date}
 
 
 def _result(ev, conflicts, warnings, mail, me, occurrence=None):
@@ -163,17 +189,22 @@ class EguitraAgendaController(http.Controller):
         sub = request.env["eguitra.agenda.subscription"].sudo().search([("user_id", "=", me.id)], limit=1)
         Sources = request.env["eguitra.agenda.source"]
         chosen = {row[0] for row in Sources.chosen(me)}
+        visible = Cal._visible(me)
+        given = Delegation.search([("owner_id", "=", me.id)])
+        received = Delegation.search([("delegate_id", "=", me.id)])
+        calendars = Cal.sudo().browse([c.id for c, _level in visible])
+        avatars = _avatars(me | _calendar_people(calendars) | _delegation_people(given | received))
         return {
-            "user": {"id": me.id, "name": me.name, "email": me.email or None},
+            "user": dict(_user_ref(me, avatars), email=me.email or None),
             "personal_calendar_id": personal.id,
             "preferences": pref._row(),
-            "calendars": [_calendar_row(c, level, me) for c, level in Cal._visible(me)],
+            "calendars": [_calendar_row(c, level, me, avatars) for c, level in visible],
             "categories": [{"id": c.id, "name": c.name, "color": c.color, "mine": c.owner_id == me}
                            for c in request.env["eguitra.agenda.category"]._for(me)],
             "sources": [{"code": code, "label": label, "color": color, "default": default, "shown": code in chosen}
                         for code, label, color, default in Sources.available(me)],
-            "delegations_given": [_delegation_row(d) for d in Delegation.search([("owner_id", "=", me.id)])],
-            "delegations_received": [_delegation_row(d) for d in Delegation.search([("delegate_id", "=", me.id)])],
+            "delegations_given": [_delegation_row(d, avatars) for d in given],
+            "delegations_received": [_delegation_row(d, avatars) for d in received],
             "subscription": sub._row() if sub else {"active": False},
             "booking": {"open": booking_open(request.env)},
             "mail_server": mail_server_ready(request.env),
@@ -200,7 +231,9 @@ class EguitraAgendaController(http.Controller):
             domain += ["|", ("name", "ilike", query), ("login", "ilike", query)]
         limit = int_arg(kw, "limit", 20, 1, 100)
         users = request.env["res.users"].sudo().search(domain, limit=limit * 2, order="name, id")
-        return [{"id": u.id, "name": u.name, "email": u.email or None} for u in users.filtered(agenda_allowed)[:limit]]
+        users = users.filtered(agenda_allowed)[:limit]
+        avatars = _avatars(users)
+        return [dict(_user_ref(u, avatars), email=u.email or None) for u in users]
 
     @api_route("/agenda/contacts", profiles=AGENDA)
     def contacts(self, **kw):
@@ -286,11 +319,13 @@ class EguitraAgendaController(http.Controller):
         me = _me()
         Cal = _cal().sudo().with_context(active_test=not (kw.get("all") and is_admin(me)))
         rows = []
-        for res in Cal.search([("kind", "=", "resource")], order="resource_type, name"):
+        found = Cal.search([("kind", "=", "resource")], order="resource_type, name")
+        avatars = _avatars(_calendar_people(found))
+        for res in found:
             level = res._level_of(me) if res.active else "none"
             if level == "none" and not is_admin(me):
                 continue
-            row = _calendar_row(res, level if level != "none" else "book", me)
+            row = _calendar_row(res, level if level != "none" else "book", me, avatars)
             row["active"] = res.active
             rows.append(row)
         return rows
@@ -661,8 +696,11 @@ class EguitraAgendaController(http.Controller):
         users = request.env["res.users"].sudo().search([("group_ids", "in", group.ids), ("share", "=", False),
                                                         ("company_ids", "in", me.company_ids.ids)], order="name")
         Delegation = request.env["eguitra.agenda.delegation"].sudo()
-        return [{"id": u.id, "name": u.name, "delegations": [_delegation_row(d) for d in Delegation.search(
-            [("owner_id", "=", u.id)])]} for u in users.filtered(agenda_allowed)]
+        users = users.filtered(agenda_allowed)
+        delegations = {u.id: Delegation.search([("owner_id", "=", u.id)]) for u in users}
+        avatars = _avatars(users | _delegation_people(Delegation.union(*delegations.values())))
+        return [dict(_user_ref(u, avatars), delegations=[_delegation_row(d, avatars) for d in delegations[u.id]])
+                for u in users]
 
     # ─── Abonnement ──────────────────────────────────────────────────────
 

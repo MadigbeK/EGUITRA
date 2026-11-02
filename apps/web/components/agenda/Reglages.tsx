@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AvatarCompte } from "@/components/AvatarCompte";
 import { Copy, Plus, Trash2 } from "@/components/icons";
 import { Button, Card, ErrorBox, Field, FileButton, Input, Loading, Notice, Select, Textarea, cx } from "@/components/ui";
 import { apiSend, apiUpload, messageErreur, useApi } from "@/lib/api-client";
@@ -43,7 +44,10 @@ function ChoixCollegue({ onChoix, libelle }: { onChoix: (p: Personne) => void; l
         <ul className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-line bg-panel p-1 shadow-[var(--ombre-flottante)]">
           {data.map((u) => (
             <li key={u.id}>
-              <button type="button" className="w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-panel-2" onClick={() => { onChoix(u); setQ(""); }}>{u.name}</button>
+              <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-panel-2" onClick={() => { onChoix(u); setQ(""); }}>
+                <AvatarCompte id={u.id} nom={u.name} avatar={u.avatar} className="bg-accent grid h-6 w-6 flex-none place-items-center rounded-full font-display text-[9px] font-bold tracking-[0.04em] text-white" />
+                <span className="min-w-0 flex-1 truncate">{u.name}</span>
+              </button>
             </li>
           ))}
         </ul>
@@ -202,6 +206,7 @@ function MesAgendas({ me, relire }: { me: AgendaMe; relire: () => void }) {
             <ul className="mt-2 space-y-1">
               {c.shares?.map((s) => (
                 <li key={s.id} className="flex flex-wrap items-center gap-2">
+                  <AvatarCompte id={s.user.id} nom={s.user.name} avatar={s.user.avatar} className="bg-accent grid h-7 w-7 flex-none place-items-center rounded-full font-display text-[10px] font-bold tracking-[0.04em] text-white" />
                   <span className="min-w-0 flex-1">{s.user.name}</span>
                   <Select value={s.level} onChange={(e) => void agir(`s${s.id}`, () => apiSend("PATCH", `/agenda/shares/${s.id}`, { level: e.target.value }), "Partage modifié.")} options={NIVEAUX} className="w-56" aria-label={`Niveau du partage avec ${s.user.name}`} />
                   <button type="button" aria-label={`Retirer le partage avec ${s.user.name}`} onClick={() => void agir(`r${s.id}`, () => apiSend("DELETE", `/agenda/shares/${s.id}`), "Partage retiré.")} className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-panel-3"><Trash2 className="h-4 w-4" /></button>
@@ -223,9 +228,11 @@ function MesAgendas({ me, relire }: { me: AgendaMe; relire: () => void }) {
 }
 
 function LigneDelegation({ d, agir, de }: { d: Delegation; agir: (cle: string, fn: () => Promise<unknown>, ok: string) => Promise<void>; de: "owner" | "delegate" }) {
+  const personne = de === "owner" ? d.delegate : d.owner;
   return (
     <li className="rounded-xl bg-panel-2 px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
+        <AvatarCompte id={personne.id} nom={personne.name} avatar={personne.avatar} className="bg-accent grid h-7 w-7 flex-none place-items-center rounded-full font-display text-[10px] font-bold tracking-[0.04em] text-white" />
         <span className="min-w-0 flex-1 font-medium">{de === "owner" ? d.delegate.name : `Agenda de ${d.owner.name}`}</span>
         <Button size="sm" variant="ghost" onClick={() => void agir(`x${d.id}`, () => apiSend("DELETE", `/agenda/delegations/${d.id}`), de === "owner" ? "Délégation retirée." : "Vous avez renoncé à cette délégation.")}>{de === "owner" ? "Retirer" : "Y renoncer"}</Button>
       </div>

@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AvatarCompte } from "@/components/AvatarCompte";
 import { ChevronLeft, ChevronRight, Moon, Plus, Search, Sun } from "@/components/icons";
 import { Button, ErrorBox, Loading, Modal, Notice, Segmented, cx } from "@/components/ui";
 import { apiGet, apiSend, messageErreur, useApi } from "@/lib/api-client";
@@ -254,6 +255,9 @@ function AgendaPret({ me, vueInitiale, relireMe }: { me: AgendaMe; vueInitiale?:
                   <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-[13px] hover:bg-panel-2">
                     <input type="checkbox" checked={calques.includes(c.id)} onChange={() => basculerCalque(c.id)} className="h-4 w-4 flex-none" style={{ accentColor: c.color }} />
                     <span aria-hidden className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: c.color }} />
+                    {c.kind === "personal" && !c.mine && c.owner && (
+                      <AvatarCompte id={c.owner.id} nom={c.owner.name} avatar={c.owner.avatar} className="grid h-5 w-5 flex-none place-items-center rounded-full font-display text-[8px] font-bold text-white" style={{ background: c.color }} />
+                    )}
                     <span className="min-w-0 flex-1 truncate">{c.kind === "personal" && c.mine ? "Mon agenda" : c.name}</span>
                     {!c.mine && c.kind !== "resource" && <span className="text-[11px] text-muted">{c.level_label}</span>}
                   </label>

@@ -21,6 +21,8 @@ export type Vue = "jour" | "semaine" | "travail" | "mois" | "liste" | "planning"
 export interface Personne {
   id: number;
   name: string;
+  /** Version de la photo du compte (null : pas de photo, initiales) ; voir components/AvatarCompte. */
+  avatar?: string | null;
 }
 
 export interface Calendrier {
@@ -142,6 +144,8 @@ export interface Participant {
   user_id: number | null;
   partner_id: number | null;
   name: string;
+  /** Participant interne : version de sa photo (null : initiales) ; contact ou adresse : absente. */
+  avatar?: string | null;
   email: string | null;
   required: boolean;
   state: Reponse;
