@@ -11,6 +11,13 @@ import io
 
 from odoo.addons.eguitra_api.files import detect_image
 
+try:
+    # Le noyau ne charge qu'un jeu réduit de formats d'image (odoo/tools/image.py) : WebP est ajouté ici,
+    # sans quoi une photo WebP, pourtant reconnue, serait refusée comme illisible.
+    from PIL import WebPImagePlugin  # noqa: F401
+except ImportError:  # bibliothèque construite sans WebP : la photo est alors refusée avec un message clair
+    pass
+
 MAX_PHOTO = 5 * 1024 * 1024
 SIDE = 1024
 MIN_SIDE = 64
