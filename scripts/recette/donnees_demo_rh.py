@@ -2,7 +2,7 @@
 """Données de démonstration RH pour la base de recette : fictives, repérées par « (démo) », jamais en
 production.
 
-Personnel fictif des deux sociétés (départements, contrats variés, éléments fixes, documents à
+Personnel fictif des deux sociétés (départements, contrats variés, éléments fixes, photos fictives, documents à
 échéance), absences, une avance, et la paie validée du mois précédent pour que les écrans de NIMOVA ·
 RH ne soient pas vides. Les comptes de test test.dg, test.exploitation et test.parc sont liés à des
 dossiers salariés pour essayer « Mon espace » (demande d'absence, décision du responsable).
@@ -13,6 +13,7 @@ dossiers salariés pour essayer « Mon espace » (demande d'absence, décision d
 Relancé, le script ne crée rien en double.
 """
 
+import base64
 from datetime import date, timedelta
 
 from dateutil.relativedelta import relativedelta
@@ -203,6 +204,34 @@ leave(chef_parc, "AT", previous + timedelta(days=(7 - previous.weekday()) % 7 + 
 if not env["eguitra.rh.advance"].search_count([("employee_id", "=", drivers[2].id)]):
     env["eguitra.rh.advance"].create({"employee_id": drivers[2].id, "kind": "avance", "amount": 1_200_000,
                                       "installment": 400_000, "first_month": previous, "note": "Avance (démo)"})
+
+# ─── Photos fictives ────────────────────────────────────────────────────
+
+# Silhouettes neutres dessinées ici (jamais un vrai visage), passées par la même mise au format que
+# l'envoi depuis l'application ; quelques dossiers seulement, pour voir aussi les initiales du trombinoscope.
+
+
+def silhouette(fond, corps):
+    import io
+
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (512, 512), fond)
+    dessin = ImageDraw.Draw(image)
+    dessin.ellipse((176, 96, 336, 256), fill=corps)  # tête
+    dessin.rounded_rectangle((96, 290, 416, 600), radius=150, fill=corps)  # épaules
+    out = io.BytesIO()
+    image.save(out, "PNG")
+    return out.getvalue()
+
+
+from odoo.addons.eguitra_rh.photo import normalize  # noqa: E402
+
+for emp, fond, corps in [(dg, (214, 226, 220), (0, 108, 27)), (comptable, (236, 228, 214), (139, 94, 52)),
+                         (chef_parc, (220, 224, 236), (52, 72, 140)), (drivers[0], (232, 220, 230), (110, 50, 96)),
+                         (associe, (226, 232, 214), (88, 110, 40))]:
+    if not emp.photo:
+        emp.photo = base64.b64encode(normalize(silhouette(fond, corps)))
 
 # ─── Paie du mois précédent, validée ────────────────────────────────────
 
