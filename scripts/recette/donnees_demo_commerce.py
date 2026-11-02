@@ -11,7 +11,11 @@ Pour que le cahier 11 se joue :
 - un bon de commande « Ciment du chantier (démo) » approuvé (saisi par test.achats, approuvé par test.daf),
   reçu en partie (120 sacs sur 200) avec la pièce d'achat du fournisseur en brouillon : 150 sacs à 97 500
   pour 120 reçus à 95 000, soit un écart de quantité et de prix ;
-- MB AxisPro Consulting : une offre d'accompagnement en brouillon.
+- MB AxisPro Consulting : une offre d'accompagnement en brouillon ;
+- retour du client du 2 novembre (circuit, traçabilité, TVA, devis et conditions) : un bon « Groupe électrogène
+  du chantier (démo) » de 14 M HT sur facture proforma jointe, avec ses conditions de paiement et de livraison,
+  contrôlé par test.comptable et validé par test.daf, en attente de l'approbation de la direction (test.dg) ;
+  un bon « Gardiennage exonéré (démo) » sans TVA, avec sa mention d'exonération, en brouillon.
 
   docker compose exec -T odoo-recette odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \\
       < ../scripts/recette/donnees_demo_commerce.py
@@ -19,6 +23,7 @@ Pour que le cahier 11 se joue :
 Relancé, le script ne crée rien en double.
 """
 
+import base64
 from datetime import timedelta
 
 from odoo import Command, fields
@@ -151,11 +156,26 @@ if not Order.search_count([("eguitra_object", "=", "Étude de faisabilité d'une
 
 # ─── Bon de commande reçu en partie, pièce d'achat en écart ──────────────────
 
+DECIDERS = env["res.users"].search([("login", "in", ("test.comptable", "test.daf", "test.dg"))])
+
+
+def decide(request, stop_before=None):
+    """Étapes tranchées chacune par un compte de test différent (contrôle, validation, direction) ; stop_before :
+    profil d'étape laissé en attente."""
+    while request.state == "pending":
+        step = request.current_step_id
+        if stop_before and step.profile == stop_before:
+            return
+        decider = next((u for u in DECIDERS if request._can_decide(u)), None)
+        if not decider:
+            return
+        request.with_user(decider).action_approve(f"{step.label} : vu (démo)")
+
+
 PO = env["purchase.order"]
 if not PO.search_count([("eguitra_object", "=", "Ciment du chantier (démo)")]):
     quincaillerie = partner("Démo - Quincaillerie du port", supplier_rank=1)
     buyer = env["res.users"].search([("login", "=", "test.achats")], limit=1)
-    approver = env["res.users"].search([("login", "=", "test.daf")], limit=1)
     planned = fields.Datetime.now() + timedelta(days=3)
     Orders = PO.with_user(buyer.id or env.uid).sudo().with_company(groupe)._eguitra_quiet()
     po = Orders.create({
@@ -168,14 +188,7 @@ if not PO.search_count([("eguitra_object", "=", "Ciment du chantier (démo)")]):
         ],
     })
     po.action_eguitra_submit()
-    request = po._eguitra_last_request()
-    if request.state == "pending" and approver:
-        for _step in request.step_ids:
-            if request.state != "pending":
-                break
-            decider = approver if request._can_decide(approver) else env["res.users"].search(
-                [("login", "=", "test.dg")], limit=1)
-            request.with_user(decider).action_approve("Démonstration")
+    decide(po._eguitra_last_request())
     if po.state != "purchase":
         po._eguitra_approve()
     po.action_eguitra_mark_sent()
@@ -186,6 +199,53 @@ if not PO.search_count([("eguitra_object", "=", "Ciment du chantier (démo)")]):
     match = bill._eguitra_match()
     report.append(f"bon de commande {po.name} reçu en partie (120/200), pièce d'achat en brouillon avec "
                   f"{len(match['issues'])} écart(s)")
+
+# ─── Retour du client du 2 novembre : circuit, traçabilité, TVA, devis et conditions ───
+
+if not PO.search_count([("eguitra_object", "=", "Groupe électrogène du chantier (démo)")]):
+    fournisseur = partner("Démo - Énergie et groupes de Guinée", supplier_rank=1, vat="000111222",
+                          company_registry="RCCM démo 0001", city="Conakry")
+    buyer = env["res.users"].search([("login", "=", "test.achats")], limit=1)
+    term = env["account.payment.term"].search([("company_id", "in", [False, groupe.id])], limit=1)
+    planned = fields.Datetime.now() + timedelta(days=10)
+    po = PO.with_user(buyer.id or env.uid).sudo().with_company(groupe)._eguitra_quiet().create({
+        "partner_id": fournisseur.id, "company_id": groupe.id, "eguitra_object": "Groupe électrogène du chantier (démo)",
+        "date_planned": planned, "partner_ref": "PRO-EGG-0007 (démo)", "eguitra_quote_kind": "proforma",
+        "eguitra_quote_date": today - timedelta(days=2), "payment_term_id": term.id or False,
+        "eguitra_payment_note": "40 % à la commande, solde à la livraison, par virement (démo)",
+        "eguitra_delivery_days": 10, "eguitra_conditions": "Mise en service et garantie d'un an comprises (démo).",
+        "order_line": [Command.create({"product_id": env["product.template"]._eguitra_generic_product(groupe, "purchase").id,
+                                       "name": "Groupe électrogène 60 kVA, insonorisé", "product_qty": 1,
+                                       "price_unit": 14_000_000, "product_uom_id": UNIT.id, "date_planned": planned,
+                                       "eguitra_account_id": (account(groupe, "2441") or account(groupe, "24")
+                                                              or account(groupe, "60")).id,
+                                       "tax_ids": [Command.set(tax(groupe, "purchase").ids)]})],
+    })
+    attachment = env["ir.attachment"].create({
+        "name": "proforma-PRO-EGG-0007-demo.pdf", "mimetype": "application/pdf", "res_model": "purchase.order",
+        "res_id": po.id, "datas": base64.b64encode(b"%PDF-1.4\n% Facture proforma fictive (demo)\n%%EOF\n"),
+    })
+    env["eguitra.commerce.purchase.document"].with_user(buyer.id or env.uid).sudo().create({
+        "order_id": po.id, "category": "proforma", "name": attachment.name, "attachment_id": attachment.id,
+        "note": "Pièce fictive de démonstration"})
+    po.action_eguitra_submit()
+    decide(po._eguitra_last_request(), stop_before="direction")
+    report.append(f"bon de commande {po.name} (14 M HT, proforma jointe) contrôlé et validé, en attente de la direction")
+
+if not PO.search_count([("eguitra_object", "=", "Gardiennage exonéré (démo)")]):
+    gardien = partner("Démo - Gardiennage et sécurité", supplier_rank=1)
+    buyer = env["res.users"].search([("login", "=", "test.achats")], limit=1)
+    planned = fields.Datetime.now() + timedelta(days=5)
+    po = PO.with_user(buyer.id or env.uid).sudo().with_company(groupe)._eguitra_quiet().create({
+        "partner_id": gardien.id, "company_id": groupe.id, "eguitra_object": "Gardiennage exonéré (démo)",
+        "date_planned": planned, "eguitra_tax_exemption": "Prestation exonérée de TVA (mention de démonstration)",
+        "order_line": [Command.create({"product_id": env["product.template"]._eguitra_generic_product(groupe, "purchase").id,
+                                       "name": "Gardiennage du parc, un mois", "product_qty": 1, "price_unit": 3_000_000,
+                                       "product_uom_id": UNIT.id, "date_planned": planned,
+                                       "eguitra_account_id": (account(groupe, "6228") or account(groupe, "62")).id,
+                                       "tax_ids": [Command.set([])]})],
+    })
+    report.append(f"bon de commande {po.name} sans TVA en brouillon")
 
 env.cr.commit()
 print("Achats et ventes (démo) : " + " ; ".join(report))

@@ -174,6 +174,9 @@ class TestApiCommerce(RefusParProfil, CommerceDataMixin, ApiCase):
         status, body = self.call("POST", f"/approvals/{request_id}/approve", {}, token=achats)
         self.assertEqual(status, 403, "Le profil Achats ne tranche aucune demande")
         self._ok("POST", f"/approvals/{request_id}/approve", {})
+        status, body = self.call("POST", f"/approvals/{request_id}/approve", {}, token=self.finance)
+        self.assertEqual(status, 403, "Le contrôleur ne valide pas aussi : une personne par étape")
+        self._ok("POST", f"/approvals/{request_id}/approve", {}, token=self.open_session("fin2.commerce")["access_token"])
         path = f"/commerce/purchase-orders/{po['id']}"
         po = self._ok("GET", path, token=achats)
         self.assertEqual(po["status"], "approved")

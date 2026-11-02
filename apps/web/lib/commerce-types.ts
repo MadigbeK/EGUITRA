@@ -12,6 +12,9 @@ export const CATALOGUE_ECRITURE: Profile[] = ["admin", "finance"];
 export const ACHATS_COMPLET: Profile[] = ["admin", "direction", "finance", "achats"];
 export const ACHATS_TOUS: Profile[] = [...ACHATS_COMPLET, "exploitation", "chantiers", "immobilier"];
 export const ACHATS_PIECE: Profile[] = ["admin", "finance", "achats"];
+/** Signature manuscrite scannée : chaque approbateur dépose la sienne ; l'administration, celle des autres. */
+export const SIGNATURE_APPROBATEUR: Profile[] = ["admin", "direction", "finance"];
+export const SIGNATURES_ADMIN: Profile[] = ["admin"];
 
 export interface RefC {
   id: number;
@@ -41,6 +44,9 @@ export interface Referentiels {
   entity: "groupe" | "cabinet" | null;
   validity_days: number;
   free_accounts: boolean;
+  /** Bons de commande : conditions de paiement de la société, lieu de livraison par défaut. */
+  payment_terms?: RefC[];
+  delivery_place?: string;
 }
 
 export interface Article {
@@ -180,7 +186,63 @@ export interface Approbation {
   pending_with: string | null;
   rejected_by: string | null;
   rejected_reason: string | null;
-  steps: Array<{ label: string; profile: string; state: string; decided_by: string | null; decided_at: string | null }>;
+  requested_by?: string | null;
+  requested_at?: string | null;
+  /** Début de l'empreinte SHA-256 du bon soumis. */
+  fingerprint?: string | null;
+  steps: Array<{ sequence?: number; label: string; profile: string; state: string; decided_by: string | null; decided_at: string | null; comment?: string | null; min_amount?: number | null }>;
+}
+
+/** Circuit prévu pour un bon de commande, avant sa soumission. */
+export interface CircuitPrevu {
+  document: string;
+  covered: boolean;
+  amount: number;
+  steps: number;
+  rules: Array<{ id: number; sequence: number; name: string; profile: string; profile_label: string; min_amount: number; max_amount: number | null; account_prefix: string | null; applies: boolean }>;
+}
+
+export type CategoriePiece = "quote" | "proforma" | "contract" | "delivery" | "other";
+export const CATEGORIES_PIECE: Array<{ value: CategoriePiece; label: string }> = [
+  { value: "quote", label: "Devis du fournisseur" },
+  { value: "proforma", label: "Facture proforma" },
+  { value: "contract", label: "Contrat" },
+  { value: "delivery", label: "Bon de livraison" },
+  { value: "other", label: "Autre" },
+];
+
+export interface PieceJointeBon {
+  id: number;
+  category: CategoriePiece;
+  category_label: string;
+  name: string;
+  mimetype: string | null;
+  size: number;
+  note: string | null;
+  origin: string | null;
+  uploaded_by: RefC | null;
+  uploaded_at: string;
+  removable: boolean;
+  order: { id: number; name: string; partner: string; partner_ref: string | null };
+}
+
+export interface EvenementBon {
+  date: string;
+  date_label: string | null;
+  kind: string;
+  label: string;
+  user: string | null;
+  summary: string;
+  detail: string | null;
+}
+
+export interface SignatureApprobateur {
+  user: RefC;
+  has_signature: boolean;
+  mimetype: string | null;
+  updated_at: string | null;
+  updated_by: RefC | null;
+  function: string | null;
 }
 
 export interface Rapprochement {
@@ -224,9 +286,13 @@ export interface BonCommande {
   partner: RefC;
   object: string | null;
   partner_ref: string | null;
+  quote_kind: "quote" | "proforma";
+  quote_kind_label: string;
+  quote_date: string | null;
   date: string | null;
   date_approve: string | null;
   date_planned: string | null;
+  documents_count: number;
   commitment: { id: number; name: string; object: string } | null;
   currency: string;
   amount_untaxed: number;
@@ -245,9 +311,16 @@ export interface BonCommande {
   company: RefC;
   can: { edit: boolean; submit: boolean; send: boolean; receive: boolean; bill: boolean; cancel: boolean };
   conditions?: string | null;
+  payment_term?: RefC | null;
+  payment_note?: string | null;
+  delivery_days?: number | null;
+  delivery_place?: string | null;
+  tax_exemption?: string | null;
   lines?: LigneDoc[];
   receipts?: Reception[];
   bills?: PieceAchat[];
+  documents?: PieceJointeBon[];
+  circuit?: CircuitPrevu | null;
   covered_by_commitment?: boolean | null;
   receipt?: Reception;
   bill?: PieceAchat;

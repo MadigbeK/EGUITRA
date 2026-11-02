@@ -13,6 +13,7 @@ from odoo.addons.eguitra_finance.controllers.common import account_ref, as_float
 from odoo.addons.eguitra_finance.controllers.exporting import table_response
 from odoo.addons.eguitra_finance.models.analytic import ACTIVITY_PLAN
 
+from ..models.purchase_order import company_address
 from .common import CATALOGUE_READ, CATALOGUE_WRITE, company, finance_user, purchase_restricted, ref, text
 
 MAX_IMPORT = 5 * 1024 * 1024
@@ -316,5 +317,9 @@ class EguitraCommerceCatalogue(http.Controller):
                             "tax_mode": c.tax_mode, "entry": c.is_entry()} for c in categories],
             "entity": comp.eguitra_entity, "validity_days": comp.quotation_validity_days,
             "free_accounts": not restricted and finance_user(),
+            # Bons de commande : conditions de paiement de la société et lieu de livraison par défaut.
+            "payment_terms": [{"id": t.id, "name": t.name} for t in env["account.payment.term"].sudo().search(
+                [("company_id", "in", [False, comp.id])], order="sequence, id")],
+            "delivery_place": company_address(comp),
         }
 

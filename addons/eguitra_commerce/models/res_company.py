@@ -11,6 +11,8 @@ Numérotation propre à chaque société : offres (OF/EG/2026/0001, OF/MBAX/2026
 from odoo import fields, models
 from odoo.exceptions import UserError
 
+from .approval import ensure_purchase_order_rules
+
 # Repère de la société dans les numéros ; à défaut, les quatre premières lettres de son nom.
 TAGS = {"groupe": "EG", "cabinet": "MBAX"}
 # Code de séquence -> (libellé, préfixe du document).
@@ -79,6 +81,8 @@ class ResCompany(models.Model):
                 values["po_double_validation"] = "one_step"
             if values:
                 company.write(values)
+        # Circuit des bons de commande (contrôle, validation, approbation au-delà du seuil), s'il manque.
+        ensure_purchase_order_rules(self.env, self)
         return True
 
     def _eguitra_advance_account(self, required=True):

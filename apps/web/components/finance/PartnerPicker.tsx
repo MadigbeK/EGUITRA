@@ -17,12 +17,15 @@ export function PartnerPicker({
   kind,
   placeholder = "Rechercher un tiers…",
   creation: creationDemandee = true,
+  onCreerDetaille,
 }: {
   value: { id: number; name: string } | null;
   onChange: (p: { id: number; name: string } | null) => void;
   kind: "customer" | "supplier";
   placeholder?: string;
   creation?: boolean;
+  /** Création par une fenêtre détaillée (NIF, RCCM, coordonnées, doublons) au lieu de la création rapide. */
+  onCreerDetaille?: (nom: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<Partner[]>([]);
@@ -67,6 +70,11 @@ export function PartnerPicker({
   async function create() {
     const name = query.trim();
     if (!name || busy) return;
+    if (onCreerDetaille) {
+      setOpen(false);
+      onCreerDetaille(name);
+      return;
+    }
     setBusy(true);
     setEchec(null);
     try {

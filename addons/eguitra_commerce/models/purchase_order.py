@@ -14,14 +14,17 @@ commande et de la réception (account_move.py).
 """
 
 import json
+from datetime import date
+
+import pytz
 
 from odoo import Command, api, fields, models
 from odoo.exceptions import UserError
 
 from odoo.addons.eguitra_approval.models.account_move import fingerprint
-from odoo.addons.eguitra_base.lettres import amount_in_words, capitalize
+from odoo.addons.eguitra_base.lettres import amount_in_words, capitalize, money
 
-from .documents import company_block, partner_block, report_css_and_accent, rows_of, totals_of
+from .documents import company_block, partner_block, report_css_and_accent, rows_of
 from .sale_order import QUIET
 
 STATUS = [
@@ -36,13 +39,61 @@ STATUS = [
     ("cancelled", "Annulé"),
 ]
 EPSILON = 1e-6
+QUOTE_KINDS = [("quote", "Devis"), ("proforma", "Facture proforma")]
+CONAKRY = pytz.timezone("Africa/Conakry")
+# Champs clés suivis par l'historique du bon (les lignes le sont à part : nombre et montant hors taxes).
+TRACKED = {
+    "partner_id": "Fournisseur", "eguitra_object": "Objet", "partner_ref": "Référence du devis ou de la proforma",
+    "eguitra_quote_kind": "Nature de la pièce du fournisseur", "eguitra_quote_date": "Date du devis ou de la proforma",
+    "payment_term_id": "Conditions de paiement", "eguitra_payment_note": "Précision sur le règlement",
+    "date_planned": "Livraison prévue", "eguitra_delivery_days": "Délai de livraison (jours)",
+    "eguitra_delivery_place": "Lieu de livraison", "eguitra_conditions": "Autres conditions",
+    "eguitra_tax_exemption": "Mention d'exonération de TVA",
+}
+DECISIONS = {"approved": "Approuvé", "rejected": "Refusé", "pending": "En attente", "skipped": "Sans objet"}
+# Profils approbateurs, tels qu'imprimés quand le compte n'a pas de fonction sur sa fiche.
+PROFILE_TITLES = {"finance": "Finance et comptabilité", "direction": "Direction générale", "admin": "Administration"}
+
+
+def conakry(moment):
+    """Date et heure de Conakry (UTC+0, sans heure d'été), « 02/11/2026 à 14:05 »."""
+    if not moment:
+        return None
+    return pytz.utc.localize(moment).astimezone(CONAKRY).strftime("%d/%m/%Y à %H:%M")
+
+
+def company_address(company):
+    """Adresse de la société, lieu de livraison par défaut."""
+    return ", ".join(p for p in (company.street, company.street2, company.city) if p) or company.name
+
+
+def _shown(value):
+    """Valeur d'un champ suivi, lisible dans l'historique."""
+    if hasattr(value, "_name"):
+        return value.display_name or "–"
+    if value in (False, None, ""):
+        return "–"
+    if isinstance(value, date):  # date ou date et heure
+        return f"{value:%d/%m/%Y}"
+    return str(value)
 
 
 class PurchaseOrder(models.Model):
     _inherit = "purchase.order"
 
     eguitra_object = fields.Char("Objet de la commande")
-    eguitra_conditions = fields.Text("Conditions", help="Délai, lieu de livraison ou d'exécution, modalités.")
+    eguitra_conditions = fields.Text("Autres conditions", help="Modalités, garanties, pénalités… imprimées au bas du bon.")
+    # Pièce du fournisseur à l'origine du bon : sa référence est celle du noyau (partner_ref).
+    eguitra_quote_kind = fields.Selection(QUOTE_KINDS, "Nature de la pièce du fournisseur", default="quote")
+    eguitra_quote_date = fields.Date("Date du devis ou de la proforma")
+    eguitra_payment_note = fields.Char("Précision sur le règlement",
+                                       help="Par exemple : 30 % à la commande, solde à la livraison, par virement.")
+    eguitra_delivery_days = fields.Integer("Délai de livraison (jours)")
+    eguitra_delivery_place = fields.Char("Lieu de livraison", help="Par défaut, l'adresse de la société.")
+    eguitra_tax_exemption = fields.Char("Mention d'exonération de TVA",
+                                        help="Imprimée sous les totaux, par exemple la référence d'une exonération.")
+    eguitra_document_ids = fields.One2many("eguitra.commerce.purchase.document", "order_id", "Pièces jointes")
+    eguitra_event_ids = fields.One2many("eguitra.commerce.purchase.event", "order_id", "Historique")
     eguitra_commitment_id = fields.Many2one("eguitra.commitment", "Engagement de dépense", index="btree_not_null",
                                             copy=False)
     eguitra_status = fields.Selection(STATUS, "État du bon de commande", compute="_compute_eguitra_status",
@@ -80,10 +131,84 @@ class PurchaseOrder(models.Model):
     def _eguitra_product_lines(self):
         return self.order_line.filtered(lambda l: not l.display_type)
 
+    # ─── Création, historique, devis repris de l'engagement ───────────────
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get("eguitra_delivery_place"):
+                company = self.env["res.company"].browse(vals["company_id"]) if vals.get("company_id") else self.env.company
+                vals["eguitra_delivery_place"] = company_address(company)
+        orders = super().create(vals_list)
+        orders._eguitra_take_selected_quote()
+        return orders
+
+    def _eguitra_lines_state(self):
+        """(clé, texte) des lignes chiffrées : la clé change dès qu'une ligne change, le texte se lit."""
+        self.ensure_one()
+        key = sorted([line.name or "", round(line.product_qty, 4), round(line.price_unit, 2), round(line.discount or 0.0, 2),
+                      sorted(line.tax_ids.ids)] for line in self._eguitra_product_lines())
+        count = len(key)
+        text = (f"{count} ligne{'s' if count > 1 else ''}, "
+                f"{money(self.amount_untaxed, self.currency_id.name, self.currency_id.decimal_places)} HT, "
+                f"{money(self.amount_total, self.currency_id.name, self.currency_id.decimal_places)} TTC")
+        return json.dumps(key, default=str), text
+
+    def write(self, vals):
+        tracked = [name for name in TRACKED if name in vals]
+        lines = "order_line" in vals
+        if self.env.context.get("eguitra_no_history") or not (tracked or lines):
+            return super().write(vals)
+        before = {order.id: ({name: _shown(order[name]) for name in tracked}, order._eguitra_lines_state())
+                  for order in self}
+        result = super().write(vals)
+        for order in self:
+            old, (old_key, old_text) = before[order.id]
+            changes = [f"{TRACKED[name]} : {old[name]} → {_shown(order[name])}" for name in tracked
+                       if _shown(order[name]) != old[name]]
+            if lines:
+                key, text = order._eguitra_lines_state()
+                if key != old_key:
+                    changes.append(f"Lignes : {old_text} → {text}")
+            if changes:
+                order._eguitra_log("modified", "Bon de commande modifié", "\n".join(changes))
+        return result
+
+    def _eguitra_log(self, kind, summary, detail=None):
+        """Action écrite à l'historique du bon (sans modification ni suppression possible)."""
+        Event = self.env["eguitra.commerce.purchase.event"].sudo()
+        for order in self:
+            Event.create({"order_id": order.id, "kind": kind, "summary": (summary or "")[:250] or kind,
+                          "detail": detail or False, "user_id": self.env.user.id})
+
+    def _eguitra_take_selected_quote(self):
+        """Bon issu d'un engagement dont un devis a été retenu (même fournisseur) : sa référence, sa date et sa
+        pièce sont reprises d'office, la pièce copiée dans les pièces jointes du bon."""
+        Document = self.env["eguitra.commerce.purchase.document"].sudo()
+        for order in self:
+            commitment = order.eguitra_commitment_id.sudo()
+            quote = commitment.eguitra_quote_ids.filtered("selected")[:1]
+            if not quote or quote.partner_id.commercial_partner_id != order.partner_id.commercial_partner_id:
+                continue
+            values = {}
+            if not order.partner_ref and quote.reference:
+                values["partner_ref"] = quote.reference
+            if not order.eguitra_quote_date and quote.date:
+                values["eguitra_quote_date"] = quote.date
+            if values:
+                values["eguitra_quote_kind"] = "quote"
+                order.with_context(eguitra_no_history=True)._eguitra_quiet().write(values)
+            if quote.attachment_id and not order.eguitra_document_ids.filtered(lambda d: d.category in ("quote", "proforma")):
+                attachment = quote.attachment_id.sudo().copy({"res_model": order._name, "res_id": order.id})
+                Document.create({"order_id": order.id, "category": "quote", "name": attachment.name or "devis",
+                                 "attachment_id": attachment.id,
+                                 "origin": f"Devis retenu de l'engagement {commitment.name}"})
+
     # ─── Circuit d'approbation (moteur eguitra_approval) ──────────────────
 
     def _eguitra_fingerprint(self):
-        """Fournisseur, devise, engagement et lignes (article, libellé, quantité, prix, remise, taxes, compte,
+        """Fournisseur, devise, engagement, pièce du fournisseur (nature, référence, date), conditions (paiement,
+        livraison, autres, exonération) et lignes (article, libellé, quantité, prix, remise, taxes, compte,
         analytique) : ce que l'approbateur a vu."""
         self.ensure_one()
         lines = sorted(
@@ -92,8 +217,12 @@ class PurchaseOrder(models.Model):
              json.dumps(line.analytic_distribution or {}, sort_keys=True)]
             for line in self._eguitra_product_lines()
         )
+        terms = [self.eguitra_quote_kind or "", self.partner_ref or "", str(self.eguitra_quote_date or ""),
+                 self.payment_term_id.id, self.eguitra_payment_note or "",
+                 str(self.date_planned.date()) if self.date_planned else "", self.eguitra_delivery_days or 0,
+                 self.eguitra_delivery_place or "", self.eguitra_conditions or "", self.eguitra_tax_exemption or ""]
         return fingerprint(["purchase_order", self.partner_id.id, self.currency_id.id, self.eguitra_commitment_id.id,
-                            round(self.amount_untaxed, 2), lines])
+                            round(self.amount_untaxed, 2), lines, terms])
 
     def _eguitra_account_codes(self):
         """Comptes de charge des lignes ; None quand l'un manque (les règles réservées à un préfixe de compte
@@ -125,7 +254,20 @@ class PurchaseOrder(models.Model):
         Rule = self.env["eguitra.approval.rule"]
         if self._eguitra_commitment_covers():
             return Rule
-        return Rule._applicable("commitment", self.company_id, self.amount_untaxed, self._eguitra_account_codes())
+        return Rule._applicable(Rule._eguitra_po_document(self.company_id), self.company_id, self.amount_untaxed,
+                                self._eguitra_account_codes())
+
+    def _eguitra_circuit_preview(self):
+        """Circuit prévu pour le bon tel qu'il est (étapes, profil attendu, seuils), avant sa soumission."""
+        self.ensure_one()
+        covered = self._eguitra_commitment_covers()
+        preview = self.env["eguitra.approval.rule"]._eguitra_po_circuit(
+            self.company_id, self.amount_untaxed, self._eguitra_account_codes())
+        if covered:
+            preview["covered"] = True
+            for rule in preview["rules"]:
+                rule["applies"] = False
+        return preview
 
     def _eguitra_last_request(self):
         self.ensure_one()
@@ -154,6 +296,10 @@ class PurchaseOrder(models.Model):
             rules = order._eguitra_required_rules()
             if not rules:
                 order._eguitra_approve()
+                commitment = order.eguitra_commitment_id.sudo()
+                order._eguitra_log("approved_auto", "Approuvé d'office" + (
+                    f" : dans la limite de l'engagement approuvé {commitment.name}" if commitment else
+                    " : aucune règle du circuit ne s'applique à ce montant"))
                 continue
             request = Request._open(order, "commitment", rules, order.amount_untaxed, order.partner_id)
             request.sudo().write({"document": "purchase_order",
@@ -189,10 +335,18 @@ class PurchaseOrder(models.Model):
             "pending_with": labels.get(step.profile) if step and request.state == "pending" else None,
             "rejected_by": refusal.decided_by.name if refusal else None,
             "rejected_reason": (refusal.comment or None) if refusal else None,
-            "steps": [{"label": s.label, "profile": labels.get(s.profile), "state": s.state,
-                       "decided_by": s.decided_by.name or None, "decided_at": s.decided_at}
+            "requested_by": request.requested_by.name, "requested_at": request.requested_at,
+            "fingerprint": (request.fingerprint or "")[:16] or None,
+            "steps": [{"sequence": s.sequence, "label": s.label, "profile": labels.get(s.profile), "state": s.state,
+                       "decided_by": s.decided_by.name or None, "decided_at": s.decided_at,
+                       "comment": s.comment or None,
+                       "min_amount": s.rule_id.min_amount if s.rule_id else None}
                       for s in request.step_ids.sorted("sequence")],
         }
+
+    def _eguitra_signer_title(self, user, profile):
+        """Fonction imprimée d'un approbateur : celle de sa fiche, sinon son profil approbateur."""
+        return user.sudo().partner_id.function or PROFILE_TITLES.get(profile) or ""
 
     # ─── Cycle de vie ─────────────────────────────────────────────────────
 
@@ -211,6 +365,7 @@ class PurchaseOrder(models.Model):
             if order.locked:
                 order.button_unlock()
         self._eguitra_quiet().button_cancel()
+        self._eguitra_log("cancelled", "Bon de commande annulé", (reason or "").strip() or None)
         return True
 
     def action_eguitra_mark_sent(self, emailed_to=None):
@@ -221,7 +376,60 @@ class PurchaseOrder(models.Model):
             if emailed_to:
                 values["eguitra_emailed_to"] = emailed_to
             order._eguitra_quiet().write(values)
+            order._eguitra_log("sent", f"Envoyé au fournisseur par courriel à {emailed_to}" if emailed_to else
+                               "Marqué envoyé au fournisseur (remis en main propre ou imprimé)")
         return True
+
+    # ─── Historique ───────────────────────────────────────────────────────
+
+    def _eguitra_history(self):
+        """Historique du bon, du plus ancien au plus récent : création ; actions écrites à l'historique
+        (modifications, approbation d'office, envoi, annulation, pièces jointes) ; soumissions et décisions du
+        circuit (moteur d'approbation) ; réceptions et leurs annulations ; pièces d'achat rattachées."""
+        self.ensure_one()
+        order = self.sudo()
+        labels = dict(self.env["eguitra.commerce.purchase.event"]._fields["kind"].selection)
+        currency = order.currency_id
+        events = []
+
+        def add(moment, kind, user, summary, detail=None):
+            if moment:
+                events.append({"date": moment, "date_label": conakry(moment), "kind": kind, "label": labels.get(kind, kind),
+                               "user": user.name if user else None, "summary": summary, "detail": detail or None})
+
+        add(order.create_date, "created", order.create_uid, f"Bon de commande {order.name} créé")
+        for event in order.eguitra_event_ids:
+            add(event.date, event.kind, event.user_id, event.summary, event.detail)
+        requests = self.env["eguitra.approval.request"].sudo().search(
+            [("res_model", "=", order._name), ("res_id", "=", order.id)], order="id")
+        for request in requests:
+            steps = request.step_ids.sorted("sequence")
+            add(request.requested_at, "submitted", request.requested_by,
+                f"Soumis au circuit d'approbation (demande n° {request.id}, "
+                f"{money(request.amount, currency.name, currency.decimal_places)} HT)",
+                "Étapes prévues : " + " ; ".join(s.label for s in steps) if steps else None)
+            for step in steps.filtered(lambda s: s.state in ("approved", "rejected")):
+                add(step.decided_at, step.state, step.decided_by,
+                    f"{DECISIONS[step.state]} : {step.label}", step.comment)
+        if order.eguitra_sent_at and not order.eguitra_event_ids.filtered(lambda e: e.kind == "sent"):
+            add(order.eguitra_sent_at, "sent", order.eguitra_sent_by, "Envoyé au fournisseur" + (
+                f" par courriel à {order.eguitra_emailed_to}" if order.eguitra_emailed_to else ""))
+        for receipt in order.eguitra_receipt_ids.sorted("id"):
+            quantities = " ; ".join(f"{line.quantity:g} {line.product_uom_id.name or ''} {line.purchase_line_id.name}".strip()
+                                    for line in receipt.line_ids)
+            add(receipt.create_date, "received", receipt.received_by,
+                f"Réception {receipt.name} du {receipt.date:%d/%m/%Y}", quantities or receipt.note)
+            if receipt.state == "cancelled":
+                add(receipt.cancelled_at, "receipt_cancelled", receipt.cancelled_by, f"Réception {receipt.name} annulée",
+                    receipt.cancel_reason)
+        for move in (order.eguitra_bill_ids | order.invoice_ids).sorted("id"):
+            name = move.name if move.name and move.name != "/" else "en brouillon"
+            add(move.create_date, "billed", move.create_uid,
+                f"Pièce d'achat {name}" + (f" (facture du fournisseur {move.ref})" if move.ref else ""),
+                f"{money(move.amount_untaxed, currency.name, currency.decimal_places)} HT, "
+                f"{money(move.amount_total, currency.name, currency.decimal_places)} TTC")
+        events.sort(key=lambda e: e["date"])
+        return events
 
     # ─── Réception et pièce d'achat ───────────────────────────────────────
 
@@ -304,7 +512,9 @@ class PurchaseOrder(models.Model):
         if self.eguitra_commitment_id:
             references.append(("Engagement", self.eguitra_commitment_id.name))
         if self.partner_ref:
-            references.append(("Référence fournisseur", self.partner_ref))
+            kind = "Facture proforma" if self.eguitra_quote_kind == "proforma" else "Devis du fournisseur"
+            references.append((kind, self.partner_ref + (f" du {self.eguitra_quote_date:%d/%m/%Y}"
+                                                         if self.eguitra_quote_date else "")))
         if self.date_planned:
             references.append(("Livraison prévue", f"{self.date_planned:%d/%m/%Y}"))
         banner = None
@@ -312,11 +522,7 @@ class PurchaseOrder(models.Model):
             banner = "BROUILLON : bon de commande non approuvé, à ne pas transmettre au fournisseur."
         elif self.state == "cancel":
             banner = "BON DE COMMANDE ANNULÉ : il ne doit pas être exécuté."
-        request = self._eguitra_last_request()
-        approvers = []
-        if request and request.state == "approved":
-            approvers = [f"{s.decided_by.name} ({s.label})" for s in request.step_ids.sorted("sequence")
-                         if s.state == "approved" and s.decided_by]
+        totals, taxed = self._eguitra_report_totals()
         return {
             "accent": accent, "css": css, "banner": banner, "title": "BON DE COMMANDE", "number": self.name,
             "status": {"to_approve": "En approbation", "draft": "Brouillon", "rejected": "Refusé"}.get(self.eguitra_status),
@@ -326,15 +532,112 @@ class PurchaseOrder(models.Model):
             "references": references, "object": (self.eguitra_object or "").strip() or None,
             "rows": rows, "show_unit": show_unit, "show_discount": show_discount,
             "price_label": f"PU HT ({self.currency_id.name})", "amount_label": f"Montant HT ({self.currency_id.name})",
-            "totals": totals_of(self, main_label="TOTAL TTC"),
-            "words_intro": "Arrêté le présent bon de commande à la somme de :",
+            "totals": totals,
+            "tax_note": (self.eguitra_tax_exemption or "").strip() or None,
+            "words_intro": "Arrêté le présent bon de commande, " + (
+                "toutes taxes comprises" if taxed else "sans TVA") + ", à la somme de :",
             "words": capitalize(amount_in_words(self.amount_total, self.currency_id)),
-            "terms": {"conditions": (self.eguitra_conditions or "").strip() or None,
-                      "term": self.payment_term_id.name or None, "validity": None},
+            "terms": {"conditions": (self.eguitra_conditions or "").strip() or None, "conditions_label": "Autres conditions",
+                      "term": None, "validity": None, "rows": self._eguitra_terms_rows()},
             "terms_title": "CONDITIONS DE LA COMMANDE",
-            "approvers": approvers,
+            "approvers": [],
+            "circuit": self._eguitra_report_circuit(),
             "signatory": "Pour la société, la Direction",
         }
+
+    def _eguitra_terms_rows(self):
+        """Conditions structurées imprimées : paiement, délai et lieu de livraison."""
+        self.ensure_one()
+        rows = []
+        payment = " – ".join(p for p in (self.payment_term_id.name, (self.eguitra_payment_note or "").strip()) if p)
+        if payment:
+            rows.append(("Conditions de paiement", payment))
+        delay = []
+        if self.date_planned:
+            delay.append(f"livraison prévue le {self.date_planned:%d/%m/%Y}")
+        if self.eguitra_delivery_days:
+            delay.append(f"{self.eguitra_delivery_days} jour{'s' if self.eguitra_delivery_days > 1 else ''} "
+                         "à compter de la réception du bon")
+        if delay:
+            rows.append(("Délai de livraison", capitalize(", ".join(delay))))
+        if (self.eguitra_delivery_place or "").strip():
+            rows.append(("Lieu de livraison", self.eguitra_delivery_place.strip()))
+        return rows
+
+    def _eguitra_report_totals(self):
+        """Totaux du bon : montant hors taxes, TVA par taux (groupes de taxe du noyau), part hors TVA d'un bon
+        mixte, total TTC ; sans aucune TVA, « TOTAL (sans TVA) ». Rend (lignes, avec TVA)."""
+        self.ensure_one()
+        currency = self.currency_id
+
+        def fmt(value):
+            return money(value, currency.name, currency.decimal_places)
+
+        lines = self._eguitra_product_lines()
+        if currency.is_zero(self.amount_tax):
+            return [{"label": "Montant hors taxes", "amount": fmt(self.amount_untaxed)},
+                    {"label": "TOTAL (sans TVA)", "amount": fmt(self.amount_total), "main": True}], False
+        untaxed_lines = lines.filtered(lambda l: currency.is_zero(l.price_tax))
+        rows = []
+        for index, subtotal in enumerate((self.tax_totals or {}).get("subtotals") or []):
+            rows.append({"label": "Montant HT" if index == 0 else subtotal.get("name"),
+                         "amount": fmt(subtotal.get("base_amount_currency", self.amount_untaxed))})
+            if index == 0 and untaxed_lines and len(untaxed_lines) < len(lines):
+                rows.append({"label": "dont hors TVA (exonéré ou non soumis)",
+                             "amount": fmt(sum(untaxed_lines.mapped("price_subtotal")))})
+            for group in subtotal.get("tax_groups") or []:
+                rows.append({"label": self._eguitra_tax_group_label(group),
+                             "amount": fmt(group.get("tax_amount_currency", 0.0))})
+        if not rows:
+            rows = [{"label": "Montant HT", "amount": fmt(self.amount_untaxed)},
+                    {"label": "TVA", "amount": fmt(self.amount_tax)}]
+        rows.append({"label": "TOTAL TTC", "amount": fmt(self.amount_total), "main": True})
+        return rows, True
+
+    def _eguitra_tax_group_label(self, group):
+        """Libellé d'un groupe de taxe, avec son taux quand le nom du groupe ne le dit pas (« TVA (18 %) »)."""
+        name = group.get("group_name") or "TVA"
+        if "%" in name:
+            return name
+        taxes = self._eguitra_product_lines().tax_ids.filtered(lambda t: t.tax_group_id.id == group.get("id"))
+        rates = sorted({t.amount for t in taxes if t.amount_type == "percent"})
+        return f"{name} ({', '.join(f'{rate:g} %' for rate in rates)})" if rates else name
+
+    def _eguitra_report_circuit(self):
+        """Bloc « Circuit d'approbation » du bon imprimé : établi par, chaque étape (nom, fonction ou profil,
+        décision, date et heure de Conakry, signature manuscrite déposée), preuve (numéro de la demande,
+        empreinte SHA-256 du bon soumis, contrôlée de nouveau à l'impression)."""
+        self.ensure_one()
+        order = self.sudo()
+        circuit = {"established": f"Établi par {order.create_uid.name} le {conakry(order.create_date)}"
+                   if order.create_date else None, "rows": [], "proof": None, "note": None, "warning": None}
+        request = order._eguitra_last_request()
+        auto = order.eguitra_event_ids.filtered(lambda e: e.kind == "approved_auto")[-1:]
+        if auto and (not request or auto.date >= request.requested_at):
+            circuit["note"] = f"{auto.summary}, le {conakry(auto.date)}."
+            return circuit
+        if not request:
+            return circuit
+        circuit["established"] += f" ; soumis par {request.requested_by.name} le {conakry(request.requested_at)}"
+        for step in request.step_ids.sorted("sequence"):
+            decided = step.state in ("approved", "rejected")
+            signature = step.decided_by._eguitra_signature_uri() if step.state == "approved" and step.decided_by else None
+            circuit["rows"].append({
+                "step": step.label, "name": step.decided_by.name if decided else "–",
+                "function": self._eguitra_signer_title(step.decided_by, step.profile) if decided else
+                PROFILE_TITLES.get(step.profile, ""),
+                "decision": DECISIONS.get(step.state, step.state) + (f" : {step.comment}" if decided and step.comment else ""),
+                "date": conakry(step.decided_at) if decided else "–", "signature": signature,
+            })
+        if request.fingerprint:
+            circuit["proof"] = (f"Demande d'approbation n° {request.id} · empreinte SHA-256 du bon soumis : "
+                                f"{request.fingerprint[:16]}…")
+        circuit["note"] = ("Signature électronique simple : chaque décision est donnée par un compte authentifié de la "
+                           "plateforme, horodatée et liée à l'empreinte du bon ; toute modification du bon après sa "
+                           "soumission en annule l'approbation.")
+        if request.state in ("pending", "approved") and not request._matches(order):
+            circuit["warning"] = "Le bon a été modifié depuis sa soumission : cette approbation ne le couvre plus."
+        return circuit
 
 
 class PurchaseOrderLine(models.Model):

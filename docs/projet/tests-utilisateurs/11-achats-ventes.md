@@ -22,7 +22,9 @@ profil.
 | Société | ☐ EGUITRA GROUP SARLU    ☐ MB AxisPro Consulting |
 
 Document préparé par E-VOLUTION XP le 27 octobre 2026, d'après les écrans de la plateforme à cette
-date.
+date ; complété le 2 novembre 2026 (partie M) après le retour d'EGUITRA GROUP sur les bons de commande :
+fournisseur créé depuis le bon, circuit en trois étapes, traçabilité et signature, TVA, devis et
+conditions.
 
 <!-- saut de page -->
 
@@ -57,9 +59,9 @@ compris les erreurs.
 
 | Compte {18} | Profil {22} | Périmètre {26} | Rôle dans ce cahier {34} |
 |---|---|---|---|
-| test.daf | Finance | les deux sociétés | offres, facturation, réglages, approbations |
-| test.comptable | Finance | les deux sociétés | approbations, pièces d'achat |
-| test.dg | Direction | les deux sociétés | offres, approbations au-delà de 50 M, lecture |
+| test.daf | Finance | les deux sociétés | offres, facturation, réglages, validation des bons de commande |
+| test.comptable | Finance | les deux sociétés | contrôle des bons de commande, approbations, pièces d'achat |
+| test.dg | Direction | les deux sociétés | offres, approbation des bons de plus de 10 M, lecture |
 | test.achats | Achats | les deux sociétés | bons de commande, réceptions, pièces d'achat |
 | test.achatvente | Finance et achats | les deux sociétés | tout le cahier d'un seul compte, sauf les scénarios à deux personnes |
 | test.chantiers | BTP | EGUITRA GROUP SARLU | engagement et bon de commande du chantier, situations |
@@ -77,7 +79,10 @@ acceptée, avec deux acomptes facturés (50 % et 30 %) ; offre « Location de de
 faisabilité d'une unité de séchage (démo) » de MB AxisPro Consulting, en brouillon ; bon de commande
 « Ciment du chantier (démo) » chez « Démo - Quincaillerie du port », approuvé, 120 sacs reçus sur
 200, avec la pièce d'achat « FAC-QDP-0001 (démo) » en brouillon (150 sacs à 97 500 GNF) ; chantier
-« Entrepôt de stockage (démo) ».
+« Entrepôt de stockage (démo) » ; bon de commande « Groupe électrogène du chantier (démo) » chez
+« Démo - Énergie et groupes de Guinée », 14 000 000 HT, facture proforma « PRO-EGG-0007 (démo) »
+jointe, contrôlé et validé, en attente de l'approbation de la direction ; bon de commande
+« Gardiennage exonéré (démo) » sans TVA, en brouillon.
 
 ## A. Catalogue
 
@@ -656,7 +661,7 @@ le compte reprend seul le reste de l'engagement.
 
 ### ACV-27. Bon de commande direct, soumis au circuit
 
-Objectif : vérifier qu'un bon de commande direct suit le circuit des engagements.
+Objectif : vérifier qu'un bon de commande direct suit le circuit des bons de commande.
 
 Compte : test.achats.
 
@@ -668,8 +673,10 @@ ligne libre « Peinture acrylique, seau de 20 l », 40 seaux à 150 000, catégo
    sa « Catégorie de dépense ».
 3. « Soumettre à l'approbation ».
 
-Résultat attendu : le bon est « En approbation », « chez : Finance et comptabilité ». Aucun champ de
-compte n'est proposé : la catégorie fixe le compte. Notez le numéro.
+Résultat attendu : avant la soumission, le formulaire montre le circuit prévu pour 6 000 000 HT :
+« Contrôle » et « Validation » requises, « Approbation » de la direction sans objet. Après, le bon
+est « En approbation », « chez : Finance et comptabilité ». Aucun champ de compte n'est proposé : la
+catégorie fixe le compte. Notez le numéro.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -697,21 +704,23 @@ ni le demandeur de son engagement ne tranchent une étape »), et « Approuver �
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### ACV-29. Approuver un bon de commande au-delà de 50 M
+### ACV-29. Approuver un bon de commande de plus de 10 M
 
-Objectif : vérifier les deux étapes du circuit et leurs approbateurs.
+Objectif : vérifier les trois étapes du circuit et leurs approbateurs.
 
-Compte : test.achats, test.daf, puis test.dg.
+Compte : test.achats, test.comptable, test.daf, puis test.dg.
 
 Données : bon de commande direct « Groupe électrogène 100 kVA (essai) », une ligne de 60 000 000.
 
 1. test.achats : créez et soumettez le bon.
-2. test.daf : « À valider », ouvrez la demande, « Approuver ».
-3. test.dg : « À valider », ouvrez la demande, « Approuver », confirmez.
+2. test.comptable : « À valider », ouvrez la demande, « Approuver » (contrôle).
+3. test.daf : « À valider », ouvrez la demande, « Approuver » (validation).
+4. test.dg : « À valider », ouvrez la demande, « Approuver », confirmez.
 
-Résultat attendu : la demande porte deux étapes : la finance, puis la direction (« de plus de 50 M »).
-Après test.daf, le bon reste « En approbation », chez la direction. Après test.dg, le bon est
-« Approuvé » ; son PDF porte « APPROUVÉ PAR » avec les deux noms.
+Résultat attendu : la demande porte trois étapes : contrôle et validation par la finance, puis
+approbation de la direction (« plus de 10 M GNF HT »). Après test.comptable puis test.daf, le bon
+reste « En approbation », chez la direction. Après test.dg, le bon est « Approuvé » ; son PDF porte
+le bloc « CIRCUIT D'APPROBATION » avec les trois noms, leurs décisions, dates et heures.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -752,7 +761,8 @@ Données : le bon d'ACV-26 (approuvé).
 3. Sans serveur de courrier, « Marquer envoyé ».
 
 Résultat attendu : le document porte « BON DE COMMANDE », « N° BC/EG/2026/… », le bloc « FOURNISSEUR »,
-« Engagement : ENG/… », les lignes, « Arrêté le présent bon de commande à la somme de : ». Le courriel
+« Engagement : ENG/… », les lignes, « Arrêté le présent bon de commande, toutes taxes comprises, à la
+somme de : ». Le courriel
 part avec le bon joint, ou le message d'absence de serveur s'affiche ; après « Marquer envoyé », l'état
 est « Envoyé ».
 
@@ -1250,6 +1260,343 @@ bon de commande n'est montré.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## M. Bons de commande : retour du client du 2 novembre
+
+### ACV-55. Créer un fournisseur depuis le bon de commande
+
+Objectif : vérifier qu'un fournisseur absent se crée depuis le formulaire du bon, enregistré aussitôt
+dans la base et choisi dans le bon.
+
+Compte : test.achats.
+
+Données : fournisseur « Menuiserie de Matoto (essai) », NIF 445566778, RCCM « RCCM essai 0042 »,
+téléphone 620 00 00 42, ville Conakry ; ligne libre « Portes isoplanes », 4 à 450 000, catégorie
+de dépense au choix.
+
+1. Achats et dépenses, onglet « Bons de commande », « Nouveau bon de commande ».
+2. Dans « Fournisseur », tapez « Menuiserie de Matoto (essai) », puis « Créer « Menuiserie de
+   Matoto (essai) » » (ou le bouton « Nouveau » à côté du champ).
+3. Dans la fenêtre « Nouveau fournisseur », complétez le NIF, le RCCM, le téléphone et la ville,
+   puis « Enregistrer le fournisseur ».
+4. Ajoutez la ligne, « Enregistrer en brouillon ».
+5. Ouvrez un nouveau bon de commande et cherchez « Matoto » dans « Fournisseur ».
+
+Résultat attendu : la fenêtre se ferme, le fournisseur est choisi dans le bon ; le bon s'enregistre
+à son nom. À l'étape 5, la fiche est proposée dans la liste : elle est dans la base des
+fournisseurs, avec son NIF et sa ville.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-56. Doublon probable : reprendre la fiche existante
+
+Objectif : vérifier qu'un fournisseur déjà connu n'est pas créé une seconde fois par mégarde.
+
+Compte : test.achats.
+
+Données : le fournisseur d'ACV-55 ; nom saisi « MENUISERIE DE MATOTO (ESSAI) SARL » ; puis un autre
+nom, « Atelier bois (essai) », avec le NIF 445566778.
+
+1. « Nouveau bon de commande », « Fournisseur » : « Nouveau », saisissez le premier nom,
+   « Enregistrer le fournisseur ».
+2. Lisez l'avertissement, puis « Reprendre cette fiche ».
+3. Recommencez avec « Atelier bois (essai) » et le NIF 445566778.
+
+Résultat attendu : à l'étape 1, la fenêtre annonce un fournisseur probablement déjà enregistré
+(même nom ou même NIF) et montre la fiche d'ACV-55 ; « Reprendre cette fiche » la choisit dans le
+bon, sans rien créer. À l'étape 3, le même NIF déclenche le même avertissement ; « Créer quand même
+une nouvelle fiche » reste possible si le cas est réel.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-57. Circuit prévu selon le montant, avant la soumission
+
+Objectif : vérifier que le formulaire montre les étapes de contrôle, de validation et d'approbation
+qui s'appliqueront, selon le seuil.
+
+Compte : test.achats.
+
+Données : ligne libre « Climatiseurs (essai) », d'abord 2 à 2 500 000, puis 5 à 2 500 000.
+
+1. « Nouveau bon de commande », fournisseur « Démo - Quincaillerie du port », ajoutez la ligne.
+2. Lisez la carte « Circuit d'approbation prévu ».
+3. Passez la quantité à 5 et relisez la carte.
+
+Résultat attendu : pour 5 000 000 HT, « 1. Contrôle » et « 2. Validation » sont « Requise », tranchées
+par « Finance et comptabilité », dès le premier franc ; « 3. Approbation : direction générale » est
+« Sans objet » (« Au-delà de 10 000 000 GNF HT »). Pour 12 500 000 HT, les trois étapes sont
+« Requise ». La carte rappelle que celui qui saisit le bon n'en tranche aucune étape.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-58. Trois étapes, trois personnes
+
+Objectif : vérifier la séparation des responsabilités : celui qui saisit ne tranche rien, une même
+personne ne tranche qu'une étape.
+
+Compte : test.achats, test.comptable, test.daf, puis test.dg.
+
+Données : le bon d'ACV-57 (12 500 000 HT).
+
+1. test.achats : « Soumettre à l'approbation » ; ouvrez « À valider ».
+2. test.comptable : « À valider », ouvrez la demande, « Approuver » avec le commentaire
+   « Devis et budget vérifiés (essai) ».
+3. test.comptable : rouvrez « À valider ».
+4. test.daf : « À valider », « Approuver ».
+5. test.dg : « À valider », « Approuver ».
+
+Résultat attendu : test.achats ne voit pas la demande dans sa corbeille. Après l'étape 2, la demande
+n'est plus dans la corbeille de test.comptable (la validation revient à une autre personne) ; elle
+est dans celle de test.daf. Après test.daf, le bon est chez la direction ; après test.dg, il est
+« Approuvé ». La fiche du bon montre la carte « Circuit d'approbation » : chaque étape, le profil
+attendu, la décision, la personne, la date et l'heure, le commentaire.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-59. Responsables, dates et preuve sur le bon imprimé
+
+Objectif : vérifier que le bon approuvé imprimé identifie ses responsables, leurs dates de décision
+et la preuve de l'approbation.
+
+Compte : test.dg, puis test.achats.
+
+Données : bon « Groupe électrogène du chantier (démo) », en attente de la direction.
+
+1. test.dg : « À valider », ouvrez la demande du bon, vérifiez la proforma jointe, « Approuver ».
+2. test.achats : ouvrez le bon, « Bon de commande en PDF ».
+
+Résultat attendu : le document porte le bloc « CIRCUIT D'APPROBATION » : « Établi par … le … à … ;
+soumis par … le … à … », puis une ligne par étape (contrôle, validation, approbation) avec le nom, la
+fonction ou le profil, « Approuvé », la date et l'heure de Conakry. Sous le tableau : « Demande
+d'approbation n° … · empreinte SHA-256 du bon soumis : … » et la mention de la signature électronique
+simple. Le bandeau « BROUILLON » a disparu.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-60. Historique du bon de commande
+
+Objectif : vérifier que chaque action sur le bon est retracée : qui, quand, quoi.
+
+Compte : test.achats.
+
+Données : le bon d'ACV-30 (refusé puis modifié et soumis de nouveau), ou celui d'ACV-58.
+
+1. Ouvrez le bon ; carte « Historique », « Afficher l'historique ».
+
+Résultat attendu : la liste montre, dans l'ordre, la création, les modifications (avec l'ancienne et
+la nouvelle valeur : quantité et montant des lignes, référence du devis…), chaque soumission avec son
+numéro de demande, chaque décision avec son auteur et son commentaire (le motif du refus), puis, s'il
+y a lieu, l'envoi au fournisseur, les réceptions, la pièce d'achat, les pièces jointes, l'annulation.
+Rien ne s'y modifie ni ne s'y efface.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-61. Signature manuscrite de l'approbateur sur le bon
+
+Objectif : vérifier qu'un approbateur dépose l'image de sa signature et qu'elle s'imprime en face de
+son approbation.
+
+Compte : test.daf, puis test.achats.
+
+Données : une image PNG ou JPEG de signature sur fond blanc, de moins de 500 Ko (une signature
+fictive) ; un fichier PDF quelconque.
+
+1. test.daf : « À valider », onglet « Circuits », carte « Ma signature manuscrite », « Déposer ma
+   signature » avec le PDF.
+2. Recommencez avec l'image.
+3. Un nouveau bon de 5 000 000, saisi et soumis par test.achats, contrôlé par test.comptable :
+   test.daf l'approuve (validation).
+4. test.achats : imprimez ce bon une fois approuvé.
+
+Résultat attendu : le PDF est refusé (« La signature est une image PNG ou JPEG »). L'image est
+acceptée et montrée en aperçu, avec la date du dépôt. Sur le bon imprimé, la signature figure dans
+la colonne « Signature » de la ligne de test.daf seulement ; les autres lignes restent sans image si
+leurs approbateurs n'en ont pas déposé.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-62. Bon de commande avec TVA
+
+Objectif : vérifier les montants avec TVA à l'écran et sur le bon imprimé.
+
+Compte : test.achats.
+
+Données : ligne libre « Ciment (essai) », 10 à 100 000, TVA par défaut (18 %).
+
+1. Créez le bon en brouillon, ouvrez-le, « Bon de commande en PDF ».
+
+Résultat attendu : la fiche montre 1 000 000 HT et 1 180 000 TTC. Le PDF porte « Montant HT »
+1 000 000, la TVA à 18 % 180 000, « TOTAL TTC » 1 180 000, et « Arrêté le présent bon de commande,
+toutes taxes comprises, à la somme de : », suivi du montant en lettres (un million cent quatre-vingt
+mille francs guinéens).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-63. Bon de commande sans TVA
+
+Objectif : vérifier qu'un bon sans aucune TVA ne porte pas de « TOTAL TTC » et affiche sa mention
+d'exonération.
+
+Compte : test.achats.
+
+Données : bon « Gardiennage exonéré (démo) », 3 000 000, sans TVA.
+
+1. Ouvrez le bon, « Modifier » : la ligne est sur « Aucune » TVA ; lisez le champ « Mention
+   d'exonération de TVA ».
+2. « Enregistrer en brouillon », puis « Bon de commande en PDF ».
+
+Résultat attendu : le PDF porte « Montant hors taxes » 3 000 000 et « TOTAL (sans TVA) » 3 000 000,
+jamais « TOTAL TTC » ; « Arrêté le présent bon de commande, sans TVA, à la somme de : », suivi du
+montant en lettres (trois millions de francs guinéens) ; « Mention : Prestation exonérée de TVA (mention de démonstration) » sous les
+totaux.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-64. Bon de commande mixte, avec et sans TVA
+
+Objectif : vérifier le calcul d'un bon dont une partie seulement est soumise à la TVA.
+
+Compte : test.achats.
+
+Données : deux lignes libres : « Matériel électrique (essai) » 1 à 1 000 000, TVA 18 % ;
+« Frais de transport non taxés (essai) » 1 à 500 000, TVA « Aucune ».
+
+1. Créez le bon en brouillon, « Bon de commande en PDF ».
+
+Résultat attendu : 1 500 000 HT, 180 000 de TVA, 1 680 000 TTC. Le PDF porte « Montant HT »
+1 500 000, « dont hors TVA (exonéré ou non soumis) » 500 000, la TVA à 18 % 180 000 et « TOTAL TTC »
+1 680 000, montants arrondis au franc.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-65. Devis ou proforma du fournisseur : référence, date et pièce
+
+Objectif : vérifier qu'un bon de commande porte la référence et la date du devis ou de la facture
+proforma, et la pièce jointe.
+
+Compte : test.achats, puis test.comptable.
+
+Données : facture proforma « PRO-ESSAI-12 » datée d'hier, un fichier PDF ; ligne libre « Pneus
+315/80 R22,5 (essai) », 4 à 2 800 000.
+
+1. test.achats : « Nouveau bon de commande » ; dans la carte « Devis ou facture proforma du
+   fournisseur », nature « Facture proforma », référence, date, « Joindre la proforma » avec le PDF.
+2. Ajoutez la ligne, « Soumettre à l'approbation ».
+3. test.comptable : « À valider », ouvrez la demande ; téléchargez la pièce.
+4. test.achats : imprimez le bon.
+
+Résultat attendu : la fiche du bon montre « Facture proforma du fournisseur : PRO-ESSAI-12 du … » et
+la pièce dans la carte « Pièces jointes », catégorie « Facture proforma », avec le nom de celui qui
+l'a jointe et la date. Le contrôleur voit la référence et télécharge la pièce depuis la corbeille. Le
+PDF porte « Facture proforma : PRO-ESSAI-12 du … ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-66. Retrouver les pièces dans les archives
+
+Objectif : vérifier qu'une pièce se retrouve par la référence du devis et ne s'efface plus une fois
+le bon soumis.
+
+Compte : test.achats.
+
+Données : le bon d'ACV-65.
+
+1. Liste des bons de commande : tapez « PRO-ESSAI-12 » dans la recherche.
+2. « Pièces des bons » : tapez « PRO-ESSAI-12 », puis filtrez la catégorie « Facture proforma ».
+3. Téléchargez la pièce ; cliquez sur le numéro du bon.
+4. Sur la fiche du bon, cherchez le moyen de retirer la pièce.
+
+Résultat attendu : la liste ne montre que le bon d'ACV-65. « Pièces des bons » trouve la proforma,
+avec son bon, son fournisseur et la référence ; le numéro ouvre le bon. La pièce porte « Archivée » :
+elle ne se retire plus (un brouillon jamais soumis permet de retirer une pièce mal jointe). Une
+nouvelle pièce, un contrat par exemple, s'ajoute encore.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-67. Conditions de paiement, délai et lieu de livraison
+
+Objectif : vérifier la saisie des conditions de la commande et leur impression.
+
+Compte : test.achats.
+
+Données : conditions de paiement au choix dans la liste ; précision « 30 % à la commande, solde à
+la livraison (essai) » ; livraison prévue dans quinze jours ; délai de livraison 15 jours ; lieu
+« Chantier de l'entrepôt de stockage (essai) » ; autres conditions « Garantie d'un an (essai) ».
+
+1. « Nouveau bon de commande », fournisseur et ligne au choix ; observez le lieu de livraison proposé.
+2. Remplissez la carte « Conditions de la commande », « Enregistrer en brouillon ».
+3. Ouvrez le bon, « Bon de commande en PDF ».
+
+Résultat attendu : vide, le lieu de livraison proposé est l'adresse de la société. La fiche du bon
+montre les conditions de paiement avec la précision, le délai, le lieu et les autres conditions. Le
+PDF les reprend sous « CONDITIONS DE LA COMMANDE » : « Conditions de paiement : … – 30 % à la
+commande… », « Délai de livraison : Livraison prévue le …, 15 jours à compter de la réception du
+bon », « Lieu de livraison : … », « Autres conditions : Garantie d'un an (essai) ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-68. Devis retenu de l'engagement repris d'office
+
+Objectif : vérifier qu'un bon issu d'un engagement reprend la référence, la date et la pièce du
+devis retenu.
+
+Compte : test.chantiers, test.comptable.
+
+Données : engagement « Agrégats du chantier (essai) », fournisseur « Démo - Quincaillerie du port »,
+4 000 000 ; devis « DEV-AGR-03 » daté d'avant-hier, 4 000 000, avec un PDF joint.
+
+1. test.chantiers : créez l'engagement ; dans sa carte des devis, ajoutez le devis, joignez le PDF,
+   retenez-le avec un motif ; soumettez l'engagement.
+2. test.comptable : approuvez-le.
+3. test.chantiers : depuis l'engagement, « Bon de commande », enregistrez-le.
+
+Résultat attendu : le bon porte « Devis du fournisseur : DEV-AGR-03 du … » ; sa carte « Pièces
+jointes » contient le devis, catégorie « Devis du fournisseur », provenance « Devis retenu de
+l'engagement ENG/… ». Le PDF imprime la référence et la date du devis.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -1266,7 +1613,8 @@ bon de commande n'est montré.
 | J. Réglages | 2 | | | |
 | K. Refus attendus | 4 | | | |
 | L. Séparation des deux sociétés | 2 | | | |
-| Total | 54 | | | |
+| M. Bons de commande : retour du client du 2 novembre | 14 | | | |
+| Total | 68 | | | |
 
 Réserves et anomalies relevées :
 

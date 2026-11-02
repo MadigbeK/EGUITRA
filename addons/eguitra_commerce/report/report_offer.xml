@@ -95,18 +95,55 @@
                                 <td class="o_eg_num" t-out="total['amount']"/>
                             </tr>
                         </table>
+                        <div t-if="d.get('tax_note')" name="eguitra_tax_note" style="margin-top: 2mm; font-size: 8.5pt;">
+                            <span class="o_eg_key">Mention :</span> <t t-out="d['tax_note']"/>
+                        </div>
                     </td>
                 </tr>
             </table>
+
+            <!-- Circuit d'approbation (bon de commande) : établi par, étapes, décisions datées, signatures, preuve. -->
+            <div t-if="d.get('circuit')" name="eguitra_circuit" style="margin-top: 4mm; page-break-inside: avoid;">
+                <t t-set="circuit" t-value="d['circuit']"/>
+                <div class="o_eg_key">CIRCUIT D'APPROBATION</div>
+                <div t-if="circuit.get('established')" style="font-size: 8.5pt;" t-out="circuit['established']"/>
+                <table t-if="circuit.get('rows')" class="o_eg_lines" style="margin-top: 1.5mm;">
+                    <thead>
+                        <tr>
+                            <th>Étape</th>
+                            <th>Nom</th>
+                            <th>Fonction ou profil</th>
+                            <th>Décision</th>
+                            <th>Date et heure (Conakry)</th>
+                            <th style="width: 18%;">Signature</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="circuit['rows']" t-as="row">
+                            <td class="o_eg_desc" t-out="row['step']"/>
+                            <td t-out="row['name']"/>
+                            <td t-out="row['function']"/>
+                            <td class="o_eg_desc" t-out="row['decision']"/>
+                            <td t-out="row['date']"/>
+                            <td><img t-if="row.get('signature')" t-att-src="row['signature']" alt="Signature" style="max-height: 12mm; max-width: 32mm;"/></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div t-if="circuit.get('warning')" class="o_eg_accent" style="font-size: 8.5pt;" t-out="circuit['warning']"/>
+                <div t-if="circuit.get('proof')" style="font-size: 8pt; margin-top: 1mm;" t-out="circuit['proof']"/>
+                <div t-if="circuit.get('note')" style="font-size: 8pt;" t-out="circuit['note']"/>
+            </div>
 
             <table class="o_eg_footer" name="eguitra_footer">
                 <tr>
                     <td name="eguitra_terms">
                         <t t-set="terms" t-value="d['terms']"/>
-                        <t t-if="terms and (terms.get('conditions') or terms.get('term') or terms.get('validity'))">
+                        <t t-if="terms and (terms.get('conditions') or terms.get('term') or terms.get('validity') or terms.get('rows'))">
                             <div class="o_eg_key" t-out="d['terms_title']"/>
                             <div t-if="terms.get('validity')">Validité de l'offre : <t t-out="terms['validity']"/></div>
                             <div t-if="terms.get('term')">Conditions de règlement : <t t-out="terms['term']"/></div>
+                            <div t-foreach="terms.get('rows') or []" t-as="term_row"><t t-out="term_row[0]"/> : <t t-out="term_row[1]"/></div>
+                            <div t-if="terms.get('conditions') and terms.get('conditions_label')"><t t-out="terms['conditions_label']"/> :</div>
                             <div t-if="terms.get('conditions')" class="o_eg_desc" style="white-space: pre-line;" t-out="terms['conditions']"/>
                         </t>
                         <t t-if="d.get('approvers')">
