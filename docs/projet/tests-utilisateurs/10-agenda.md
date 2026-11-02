@@ -1313,6 +1313,36 @@ code ; la fenêtre reste ouverte avec la saisie. À l'étape 3, « Événement c
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## N. Photos des personnes
+
+### AGE-56. Voir la photo des personnes dans l'agenda
+
+Objectif : vérifier que l'agenda montre la photo d'un collègue à la place de ses initiales (agendas
+délégués, organisateur, participants, délégations), et les initiales de qui n'a pas de photo.
+
+Compte : test.daf.
+
+Données : « Comité de direction (démo) » de lundi prochain ; photos de démonstration des comptes
+test.dg et test.exploitation (dossiers « Mamadou Sylla (démo) » et « Sékou Touré (démo) ») ;
+test.daf, test.achats et test.comptable n'ont pas de photo.
+
+1. Regardez, à gauche, l'agenda de test.dg sous « Agendas délégués ».
+2. Ouvrez « Comité de direction (démo) » de lundi prochain.
+3. Fermez le détail, puis Réglages de l'agenda, « Délégations ».
+4. « Nouvel événement », sous « Participants » saisissez « Exploitation » et choisissez le collègue
+   proposé, puis « Annuler ».
+
+Résultat attendu : à l'étape 1, un petit rond à la photo de test.dg précède le nom de son agenda. À
+l'étape 2, sa photo précède « Organisateur » ; dans « Participants », test.exploitation a sa photo,
+test.daf et test.achats leurs initiales, chaque rond de la même taille. À l'étape 3, la ligne « Agenda
+de Test - Direction générale » porte sa photo. À l'étape 4, la photo de test.exploitation apparaît
+dans la liste des invités.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -1330,7 +1360,8 @@ code ; la fenêtre reste ouverte avec la saisie. À l'étape 3, « Événement c
 | K. Rendez-vous en ligne | 2 | | | |
 | L. Refus attendus | 5 | | | |
 | M. Contrôles de saisie et de sécurité | 3 | | | |
-| Total | 55 | | | |
+| N. Photos des personnes | 1 | | | |
+| Total | 56 | | | |
 
 Réserves et anomalies relevées :
 

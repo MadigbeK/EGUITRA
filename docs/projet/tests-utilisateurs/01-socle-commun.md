@@ -64,8 +64,9 @@ sinon la connexion répond « Votre profil ne donne pas accès à cette applicat
 |---|---|---|---|
 | test.comptable | Finance | les deux | connexion, demandes, discussion |
 | test.daf | Finance | les deux | société de travail, discussion |
-| test.dg | Direction | les deux | demandes des sociétés, applications d'une seule société |
+| test.dg | Direction | les deux | demandes des sociétés, applications d'une seule société, photo |
 | test.admin | Administration | les deux | traitement des demandes, confidentialité |
+| test.rh | RH | les deux | photo d'un salarié |
 | test.chantiers | BTP | EGUITRA GROUP SARLU | discussion d'une fiche |
 | test.consultant | Cabinet | MB AxisPro Consulting | discussion d'un dossier, refus |
 | test.parc | Exploitation | EGUITRA GROUP SARLU | refus |
@@ -889,6 +890,61 @@ figure dans la liste.
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## I. Tous les comptes internes : photo des comptes
+
+### SOC-35. Voir la photo d'un collègue dans la discussion
+
+Objectif : vérifier que la discussion montre la photo d'un collègue à la place de ses initiales, et
+les initiales de qui n'a pas de photo.
+
+Compte : test.daf (navigateur 1) et test.dg (navigateur 2).
+
+Données : la photo de démonstration du dossier « Mamadou Sylla (démo) », lié au compte test.dg ;
+message « Bonjour, essai des photos (SOC-35). ».
+
+1. test.dg : regardez le rond du menu du compte.
+2. test.daf : regardez le rond du menu du compte.
+3. test.daf : icône à bulles « Discussion », « Nouvelle », « À deux », saisissez « Direction » sous
+   « À qui écrire ? ».
+4. Choisissez « Test - Direction générale », écrivez le message et appuyez sur Entrée.
+5. test.dg : ouvrez l'icône, puis la conversation ; répondez « Bien reçu. ».
+6. test.daf : revenez à la liste des conversations, puis ouvrez « Membres » de la conversation.
+
+Résultat attendu : à l'étape 1, la photo de démonstration remplace les initiales ; à l'étape 2,
+test.daf, sans photo, garde ses initiales. La photo de test.dg apparaît dans la liste de recherche
+(étape 3), sur la ligne de la conversation, en petit devant son nom dans le message reçu et dans la
+liste des membres ; test.daf y garde ses initiales. Les ronds gardent la même taille qu'avec les
+initiales.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### SOC-36. Photo changée puis retirée : les initiales reviennent
+
+Objectif : vérifier qu'une photo changée ou retirée par le service RH se voit aussitôt dans la
+discussion.
+
+Compte : test.rh, puis test.daf.
+
+Données : une image de votre choix (sans personne) ; la conversation de SOC-35.
+
+1. test.rh : Personnel > Salariés, ouvrez « Mamadou Sylla (démo) », « Remplacer », choisissez l'image
+   et enregistrez.
+2. test.daf : rechargez la page et ouvrez la discussion.
+3. test.rh : sur la même fiche, « Retirer », puis confirmez.
+4. test.daf : rechargez la page et ouvrez la discussion.
+5. test.rh : remettez une photo sur la fiche (« Ajouter une photo »), pour les autres scénarios.
+
+Résultat attendu : à l'étape 2, la nouvelle image remplace l'ancienne sur la conversation et les
+messages de test.dg. À l'étape 4, ses initiales reviennent partout, sans image cassée ni case vide.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -901,7 +957,8 @@ figure dans la liste.
 | F. Tous les comptes internes : discussion | 7 | | | |
 | G. Refus attendus | 4 | | | |
 | H. Contrôles de saisie et de sécurité | 2 | | | |
-| Total | 34 | | | |
+| I. Tous les comptes internes : photo des comptes | 2 | | | |
+| Total | 36 | | | |
 
 Réserves et anomalies relevées :
 
