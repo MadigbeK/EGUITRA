@@ -1,6 +1,9 @@
 """Tiers : clients, fournisseurs, soldes, ancienneté des créances, limites de crédit, conditions de
 paiement, assujettissement à la TVA."""
 
+import re
+import unicodedata
+
 from odoo import Command, http
 from odoo.http import request
 
@@ -64,6 +67,39 @@ def _payment_term(spec):
     return Term.create({"name": name, "company_id": False, "line_ids": [
         Command.create({"value": "percent", "value_amount": 100, "nb_days": days, "delay_type": delay}),
     ]})
+
+
+# Formes juridiques et mots de liaison ignorés pour reconnaître un même tiers sous deux graphies
+# (« Ets Diallo & Fils SARL » et « DIALLO ET FILS »).
+LEGAL_WORDS = {"sarl", "sarlu", "sa", "sas", "sasu", "suarl", "gie", "ets", "etablissement", "etablissements",
+               "ste", "societe", "et", "cie", "the", "and"}
+
+
+def normalized_name(name):
+    """Nom réduit à ses mots significatifs, sans accents, casse, ponctuation ni forme juridique."""
+    text = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode().lower()
+    words = re.findall(r"[a-z0-9]+", text)
+    return " ".join(w for w in words if w not in LEGAL_WORDS) or " ".join(words)
+
+
+def normalized_vat(vat):
+    return re.sub(r"[^A-Za-z0-9]", "", str(vat or "")).upper()
+
+
+def probable_duplicates(name, vat=None, limit=5):
+    """Tiers déjà connus, visibles dans la société de travail, au même nom une fois réduit ou au même NIF."""
+    Partner = request.env["res.partner"].sudo()
+    base = [("parent_id", "=", False), ("company_id", "in", [False, request.env.company.id])]
+    key, nif = normalized_name(name), normalized_vat(vat)
+    found = Partner.browse()
+    words = sorted(key.split(), key=len, reverse=True)
+    if words:
+        candidates = Partner.search(base + [("name", "ilike", words[0])], limit=200)
+        found |= candidates.filtered(lambda p: normalized_name(p.name) == key)
+    if nif:
+        candidates = Partner.search(base + [("vat", "!=", False), ("vat", "ilike", nif[-4:])], limit=200)
+        found |= candidates.filtered(lambda p: normalized_vat(p.vat) == nif)
+    return found[:limit]
 
 
 def _balances_visible():
@@ -211,6 +247,14 @@ class EguitraFinancePartners(http.Controller):
         require(data, "name")
         profiles = set(request.env.user._eguitra_profiles())
         finance = bool(profiles & set(FIN_WRITE))
+        # Création depuis un formulaire (bon de commande) : un doublon probable est proposé avant de créer
+        # (409, avec les fiches trouvées) ; force=true crée malgré tout. Sans check_duplicates, comme avant.
+        if data.get("check_duplicates") and not data.get("force"):
+            duplicates = probable_duplicates(data["name"], data.get("vat"))
+            if duplicates:
+                raise ApiError(409, "duplicate", "Un tiers au même nom ou au même NIF existe déjà : reprenez-le, ou "
+                                                 "confirmez la création d'une nouvelle fiche.",
+                               duplicates=[_row(p, False) for p in duplicates])
         values = self._values(data, finance)
         if not finance and not profiles & set(PICKERS):
             # Profil Achats seul : la fiche créée est celle d'un fournisseur.
