@@ -1,4 +1,5 @@
 import base64
+import io
 import time
 
 from odoo.tests import HttpCase
@@ -6,6 +7,15 @@ from odoo.tests import HttpCase
 from odoo.addons.auth_totp.models.totp import hotp
 
 PASSWORD = "Motdepasse-2026!"
+
+
+def photo_b64(color=(30, 120, 60), fmt="JPEG", size=(256, 256)):
+    """Photo fictive unie (jamais un visage), en base64 pour un champ image du noyau."""
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", size, color).save(out, fmt)
+    return base64.b64encode(out.getvalue())
 
 
 class ApiCase(HttpCase):
@@ -23,6 +33,13 @@ class ApiCase(HttpCase):
         )
         user._eguitra_set_profiles(list(profiles))
         return user
+
+    def set_photo(self, user, **kwargs):
+        """Pose une vraie photo sur le compte (comme eguitra_rh le fait depuis le dossier salarié), envoyée en
+        base avant les appels suivants ; photo=False la retire."""
+        value = kwargs.pop("photo", None)
+        user.sudo().write({"image_1920": photo_b64(**kwargs) if value is None else value})
+        self.env.flush_all()
 
     def call(self, method, path, payload=None, token=None, headers=None):
         all_headers = {"X-Eguitra-App": "test"}
