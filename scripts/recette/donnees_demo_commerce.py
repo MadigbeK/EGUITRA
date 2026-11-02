@@ -169,7 +169,7 @@ def decide(request, stop_before=None):
         decider = next((u for u in DECIDERS if request._can_decide(u)), None)
         if not decider:
             return
-        request.with_user(decider).action_approve(f"{step.label} : vu (démo)")
+        request.with_user(decider).action_approve("Vu (démo)")
 
 
 PO = env["purchase.order"]
