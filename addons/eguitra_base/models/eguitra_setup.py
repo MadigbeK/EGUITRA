@@ -60,6 +60,9 @@ AUDIT_EXCLUDED_MODELS = [
     "eguitra.sc.inbound",
     "eguitra.sc.public.attempt",
     "eguitra.sc.media.job",
+    # Achats (eguitra_commerce) : l'historique d'un bon de commande est lui-même une trace, ni modifiable ni
+    # supprimable ; la piste d'audit le recopierait sans rien ajouter. Bons, lignes et pièces jointes sont suivis.
+    "eguitra.commerce.purchase.event",
 ]
 PLATFORM_PREFIXES = ("eguitra.", "axispro.", "portail.")
 
