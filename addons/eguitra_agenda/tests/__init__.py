@@ -12,3 +12,4 @@ from . import test_taches
 from . import test_rendezvous
 from . import test_desactivation
 from . import test_securite
+from . import test_photos

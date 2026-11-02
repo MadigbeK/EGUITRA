@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { AvatarCompte } from "@/components/AvatarCompte";
 import { Clock, Download, Link2, MapPin, Paperclip, Pencil, Trash2, Users } from "@/components/icons";
 import { Badge, Button, ErrorBox, FileButton, Input, Loading, Modal, Notice, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, messageErreur, useApi } from "@/lib/api-client";
@@ -131,7 +132,12 @@ export function DetailEvenement({ id, occurrence, onFermer, onModifier, onChange
                 </p>
               )}
               <div className="text-[12.5px] text-muted">
-                {d.organizer && <p>Organisateur : {d.organizer.name}{d.organizer_inactive ? " (compte désactivé)" : ""}</p>}
+                {d.organizer && (
+                  <p className="flex items-center gap-1.5">
+                    <AvatarCompte id={d.organizer.id} nom={d.organizer.name} avatar={d.organizer.avatar} className="bg-accent grid h-5 w-5 flex-none place-items-center rounded-full font-display text-[8px] font-bold text-white" />
+                    <span>Organisateur : {d.organizer.name}{d.organizer_inactive ? " (compte désactivé)" : ""}</span>
+                  </p>
+                )}
                 {d.created_by && <p>Créé par {d.created_by}{d.created_on_behalf ? ` pour le compte de ${d.created_on_behalf}` : ""}</p>}
                 {d.modified_by && d.modified_at && <p>Modifié par {d.modified_by}{d.modified_on_behalf ? ` pour le compte de ${d.modified_on_behalf}` : ""}, le {fmtDateTime(d.modified_at)}</p>}
               </div>
@@ -142,6 +148,7 @@ export function DetailEvenement({ id, occurrence, onFermer, onModifier, onChange
                   <ul className="space-y-1">
                     {d.attendees.map((a) => (
                       <li key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-panel-2 px-2.5 py-1.5">
+                        <AvatarCompte id={a.user_id} nom={a.name} avatar={a.avatar} className="bg-accent grid h-7 w-7 flex-none place-items-center rounded-full font-display text-[10px] font-bold tracking-[0.04em] text-white" />
                         <span className="min-w-0 flex-1">
                           <span className="font-medium">{a.name}</span>
                           {!a.required && <span className="text-muted"> (facultatif)</span>}

@@ -40,6 +40,8 @@ export const OBJETS: Record<string, { nature: string; lien: (id: number) => stri
 export interface Personne {
   id: number;
   name: string;
+  /** Version de la photo du compte (null : pas de photo, initiales) ; voir components/AvatarCompte. */
+  avatar?: string | null;
 }
 
 export interface Collegue extends Personne {
@@ -68,6 +70,8 @@ export interface Conversation {
   kind: Sorte;
   title: string;
   object: ObjetLie | null;
+  /** Conversation à deux : l'autre personne (son nom fait le titre, sa photo l'image de la ligne). */
+  correspondent?: Personne | null;
   members_count: number;
   members: Personne[];
   owner: boolean;

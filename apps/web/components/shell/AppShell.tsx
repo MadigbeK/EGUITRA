@@ -18,6 +18,7 @@ import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/Veille
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
 import { Discussions } from "@/components/discussions/Discussions";
 import { AgendaEnTete } from "@/components/agenda/AgendaEnTete";
+import { AvatarCompte } from "@/components/AvatarCompte";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -503,9 +504,13 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
 
   const others = me.apps.filter((a) => a !== app && a !== "mobile");
   const avatar = (
-    <span aria-hidden className="bg-accent grid h-9 w-9 flex-none place-items-center rounded-full font-display text-[13px] font-bold tracking-[0.04em] text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]">
-      {initials(me.name)}
-    </span>
+    <AvatarCompte
+      id={me.id}
+      nom={me.name}
+      avatar={me.avatar}
+      texte={initials(me.name)}
+      className="bg-accent grid h-9 w-9 flex-none place-items-center rounded-full font-display text-[13px] font-bold tracking-[0.04em] text-white shadow-[0_6px_14px_-8px_var(--accent-lueur)]"
+    />
   );
   return (
     <div ref={box} className="relative">

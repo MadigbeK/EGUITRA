@@ -9,6 +9,10 @@ Temps réel sans websocket (le noyau n'est pas exposé) : l'écran relit, par la
 de la conversation ouverte toutes les 5 secondes (/updates, après un identifiant donné) et le nombre de
 non-lus toutes les 30 secondes (/unread). Ces relectures n'entrent au journal des accès qu'en cas de
 refus ou d'erreur (api_route, journal=False).
+
+Chaque compte cité (membres, auteurs, correspondant, annuaire) porte la version de sa photo (« avatar »,
+None sans vraie photo : l'écran montre ses initiales), lue en une requête pour toute la réponse
+(eguitra_api/avatars.py) ; l'image passe par /users/<id>/avatar.
 """
 
 from datetime import datetime
@@ -16,6 +20,7 @@ from datetime import datetime
 from odoo import fields, http
 from odoo.http import content_disposition, request
 
+from odoo.addons.eguitra_api.avatars import avatar_versions, user_ref
 from odoo.addons.eguitra_api.controllers.admin import _scope_domain
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require, sudo_env
 from odoo.addons.eguitra_api.files import ACCEPTED, detect_type
@@ -31,8 +36,13 @@ def _channels():
     return request.env["eguitra.chat.channel"]
 
 
-def _user_ref(user):
-    return {"id": user.id, "name": user.name} if user else None
+def _avatars(users):
+    """Versions des photos des comptes d'une réponse, vues par le compte connecté (une requête)."""
+    return avatar_versions(users, request.env.user)
+
+
+def _user_ref(user, avatars):
+    return user_ref(user, avatars)
 
 
 def _excerpt(message):
@@ -45,14 +55,20 @@ def _excerpt(message):
     return text[:EXCERPT] + ("…" if len(text) > EXCERPT else "")
 
 
-def _message_row(message, me):
+def _message_rows(messages, me):
+    """Messages vus par un membre, photos de leurs auteurs lues ensemble."""
+    avatars = _avatars(messages.sudo().author_id)
+    return [_message_row(m, me, avatars) for m in messages]
+
+
+def _message_row(message, me, avatars):
     """Message vu par un membre. Retiré : ni texte ni pièces, la mention seule."""
     m = message.sudo()
     reply = m.reply_to_id
     return {
         "id": m.id,
         "kind": m.kind,
-        "author": _user_ref(m.author_id),
+        "author": _user_ref(m.author_id, avatars),
         "mine": m.author_id == me,
         "date": m.date,
         "body": None if m.withdrawn else (m.body or ""),
@@ -66,11 +82,27 @@ def _message_row(message, me):
     }
 
 
+def _other_id(channel, me):
+    ids = [int(i) for i in (channel.sudo().direct_key or "").split("-") if i]
+    return next((i for i in ids if i != me.id), None)
+
+
 def _other_of_direct(channel, me):
     """Correspondant d'une conversation à deux, même retiré depuis (compte archivé)."""
-    ids = [int(i) for i in (channel.direct_key or "").split("-") if i]
-    other_id = next((i for i in ids if i != me.id), None)
-    return request.env["res.users"].sudo().with_context(active_test=False).browse(other_id).exists()
+    return request.env["res.users"].sudo().with_context(active_test=False).browse(_other_id(channel, me)).exists()
+
+
+def _people(channels, me, members_limit=None):
+    """Comptes cités par des conversations (membres, correspondant d'une conversation à deux), pour lire
+    leurs photos en une fois."""
+    Users = request.env["res.users"].sudo().with_context(active_test=False)
+    users = Users
+    others = []
+    for channel in channels.sudo():
+        users |= channel.member_ids.user_id[:members_limit]
+        if channel.kind == "direct":
+            others.append(_other_id(channel, me))
+    return users | Users.browse([i for i in others if i])
 
 
 def _object_info(channel):
@@ -93,19 +125,22 @@ def _title(channel, me, obj):
     return sudo.name or "Groupe"
 
 
-def _row(channel, me, unread, last_ids):
-    """Ligne de la liste des conversations."""
+def _row(channel, me, unread, last_ids, avatars):
+    """Ligne de la liste des conversations. correspondent : l'autre personne d'une conversation à deux
+    (son nom fait le titre ; sa photo, l'image de la ligne)."""
     sudo = channel.sudo()
     obj = _object_info(channel) if sudo.kind == "object" else None
     last = request.env["eguitra.chat.message"].sudo().browse(last_ids.get(channel.id)).exists()
     members = sudo.member_ids.user_id
+    other = _other_of_direct(sudo, me) if sudo.kind == "direct" else None
     return {
         "id": channel.id,
         "kind": sudo.kind,
         "title": _title(channel, me, obj),
         "object": obj,
+        "correspondent": _user_ref(other, avatars) if other else None,
         "members_count": len(members),
-        "members": [_user_ref(u) for u in members[:6]],
+        "members": [_user_ref(u, avatars) for u in members[:6]],
         "owner": sudo.owner_id == me,
         "unread": unread.get(channel.id, 0),
         "last_message": {
@@ -121,12 +156,13 @@ def _detail(channel):
     sudo = channel.sudo()
     channel.invalidate_recordset()
     unread = _channels()._unread_by_channel()
-    data = _row(channel, me, unread, _channels()._last_message_ids(channel.ids))
+    avatars = _avatars(_people(channel, me))
+    data = _row(channel, me, unread, _channels()._last_message_ids(channel.ids), avatars)
     owner = sudo.kind == "group" and sudo.owner_id == me
     blocked = channel._post_blocked()
     data.update({
-        "members": [{"id": m.user_id.id, "name": m.user_id.name, "owner": m.user_id == sudo.owner_id,
-                     "me": m.user_id == me, "archived": not m.user_id.active} for m in sudo.member_ids],
+        "members": [dict(_user_ref(m.user_id, avatars), owner=m.user_id == sudo.owner_id, me=m.user_id == me,
+                         archived=not m.user_id.active) for m in sudo.member_ids],
         "can": {"post": not blocked, "add": owner, "remove": owner, "rename": owner,
                 "leave": sudo.kind in ("group", "object")},
         "post_blocked": blocked,
@@ -189,7 +225,8 @@ class EguitraChatController(http.Controller):
         channels = channels.filtered(lambda c: c.kind != "object" or c._object_record() is not None)
         unread = Channel._unread_by_channel()
         last_ids = Channel._last_message_ids(channels.ids)
-        rows = [_row(c, me, unread, last_ids) for c in channels]
+        avatars = _avatars(_people(channels, me, members_limit=6))
+        rows = [_row(c, me, unread, last_ids, avatars) for c in channels]
         rows.sort(key=lambda r: (r["last_message"]["id"] if r["last_message"] else 0, r["id"]), reverse=True)
         return rows
 
@@ -198,7 +235,8 @@ class EguitraChatController(http.Controller):
         """Recherche d'un collègue : comptes internes actifs qui partagent au moins une société avec soi."""
         users = _channels().search_colleagues(kw.get("q") or "", limit=int_arg(kw, "limit", 20, 1, 50))
         mine = request.env.user.sudo().company_ids
-        return [{"id": u.id, "name": u.name, "companies": (u.company_ids & mine).mapped("name")} for u in users]
+        avatars = _avatars(users)
+        return [dict(_user_ref(u, avatars), companies=(u.company_ids & mine).mapped("name")) for u in users]
 
     # ─── Ouverture ───────────────────────────────────────────────────────
 
@@ -263,7 +301,7 @@ class EguitraChatController(http.Controller):
         found = request.env["eguitra.chat.message"].search(domain, order="id desc", limit=limit + 1)
         me = request.env.user
         return {
-            "messages": [_message_row(m, me) for m in reversed(found[:limit])],
+            "messages": _message_rows(found[:limit][::-1], me),
             "has_more": len(found) > limit,
             "last_read_id": _channels()._my_last_read(channel),
             "cursor": fields.Datetime.now(),
@@ -282,8 +320,9 @@ class EguitraChatController(http.Controller):
         changed = Message.search([("channel_id", "=", channel.id), ("id", "<=", after),
                                   ("withdrawn_date", ">=", since)], order="id") if since else Message
         me = request.env.user
-        return {"messages": [_message_row(m, me) for m in new], "changed": [_message_row(m, me) for m in changed],
-                "cursor": now}
+        avatars = _avatars((new | changed).sudo().author_id)
+        return {"messages": [_message_row(m, me, avatars) for m in new],
+                "changed": [_message_row(m, me, avatars) for m in changed], "cursor": now}
 
     @api_route("/chat/conversations/<int:channel_id>/messages", methods=("POST",), profiles=INTERNES)
     def post(self, channel_id, **_kw):
@@ -295,7 +334,7 @@ class EguitraChatController(http.Controller):
         if not body.strip() and not files:
             raise ApiError(400, "missing_fields", "Écrivez un message ou joignez un fichier.", fields=["body"])
         message = channel.post(body, reply_to_id=form.get("reply_to") or None, files=files)
-        return _message_row(message, request.env.user)
+        return _message_rows(message, request.env.user)[0]
 
     @api_route("/chat/conversations/<int:channel_id>/read", methods=("POST",), profiles=INTERNES, journal=False)
     def read(self, channel_id, **_kw):
@@ -307,7 +346,7 @@ class EguitraChatController(http.Controller):
     @api_route("/chat/messages/<int:message_id>/withdraw", methods=("POST",), profiles=INTERNES)
     def withdraw(self, message_id, **_kw):
         message = self._message(message_id)
-        return _message_row(message.withdraw(), request.env.user)
+        return _message_rows(message.withdraw(), request.env.user)[0]
 
     @api_route("/chat/messages/<int:message_id>/files/<int:attachment_id>", profiles=INTERNES)
     def download(self, message_id, attachment_id, **_kw):

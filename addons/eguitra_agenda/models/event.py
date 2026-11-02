@@ -24,6 +24,7 @@ from datetime import timedelta
 from odoo import Command, api, fields, models
 from odoo.exceptions import AccessError, MissingError, UserError
 
+from odoo.addons.eguitra_api.avatars import avatar_versions
 from odoo.addons.eguitra_api.files import ACCEPTED, checked_name, detect_type
 
 from .. import moteur
@@ -478,6 +479,11 @@ class AgendaEvent(models.Model):
         layer = ev.calendar_id
         key = f"{master.id}:{iso(occ)}" if occ else str(ev.id)
         row = self._occ_row(Occ(ev, start, stop, key, occ), viewer, layer, view)
+        # Photos de l'organisateur et des participants internes, lues ensemble (une requête).
+        people = ev.organizer_id | ev.attendee_ids.user_id if view == "full" else ev.organizer_id
+        avatars = avatar_versions(people, viewer)
+        if row.get("organizer"):
+            row["organizer"]["avatar"] = avatars.get(ev.organizer_id.id)
         if view != "full":
             row.update(description=None, attendees=[], attachments=[], alarms=None, recurrence=None, link=None,
                        journal=[])
@@ -485,7 +491,7 @@ class AgendaEvent(models.Model):
         tz = ev._tz()
         row.update(
             tz=tz, description=ev.description or None,
-            attendees=[a._row(viewer) for a in ev.attendee_ids],
+            attendees=[a._row(viewer, avatars) for a in ev.attendee_ids],
             resource_ids=[{"id": r.id, "name": r.name, "type": r.resource_type, "capacity": r.capacity}
                           for r in ev.resource_ids],
             attachments=[{"id": a.id, "name": a.name, "mimetype": a.mimetype, "size": a.file_size}
@@ -1672,12 +1678,15 @@ class AgendaAttendee(models.Model):
                 for k in ("user_id", "partner_id", "name", "email", "required", "state", "comment", "responded_at",
                           "responded_by_id", "auto_declined")}
 
-    def _row(self, viewer):
+    def _row(self, viewer, avatars=None):
+        """Participant vu par le compte. avatars : versions des photos des comptes (avatars.avatar_versions) ;
+        un contact ou une adresse n'en a pas."""
         self.ensure_one()
         a = self.sudo()
         return {
             "id": a.id, "kind": "user" if a.user_id else ("partner" if a.partner_id else "email"),
             "user_id": a.user_id.id or None, "partner_id": a.partner_id.id or None, "name": a.name or a.email,
+            "avatar": (avatars or {}).get(a.user_id.id) if a.user_id else None,
             "email": a.email or None, "required": a.required, "state": a.state, "comment": a.comment or None,
             "responded_at": a.responded_at or None, "responded_by": a.responded_by_id.name or None,
             "auto_declined": a.auto_declined, "me": a.user_id == viewer,

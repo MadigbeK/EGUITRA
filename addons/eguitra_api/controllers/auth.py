@@ -8,8 +8,10 @@ from odoo import fields, http
 from odoo.exceptions import AccessDenied
 from odoo.http import request
 
+from ..avatars import avatar_versions
 from ..models.api_token import REUSE_GRACE_SECONDS
 from ..organisation import APPS as APP_REGISTRY
+from ..organisation import SESSION_ROUTES
 from .framework import (
     MFA_AGAIN_MESSAGE,
     ApiError,
@@ -241,6 +243,11 @@ class EguitraAuthController(http.Controller):
         # Application où la session a été ouverte : une session de Rotations n'ouvre que Rotations
         # (organisation.SESSION_ROUTES) ; le serveur web envoie alors vers la connexion de l'application.
         data["session_app"] = request.env.context.get("eguitra_session_app") or None
+        # Version de la photo du compte (bandeau du compte connecté), ou None : initiales. Une session bornée
+        # (Rotations, NIMOVA Terrain) ne lit pas la photo (route hors de sa portée).
+        user = request.env.user
+        restricted = data["session_app"] in SESSION_ROUTES
+        data["avatar"] = None if restricted else avatar_versions(user, user).get(user.id)
         return data
 
     @api_route("/auth/password", methods=("POST",))

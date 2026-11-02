@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AvatarCompte } from "@/components/AvatarCompte";
 import { Plus, Search, Trash2, X } from "@/components/icons";
 import { Button, Field, Input, Modal, Notice, Segmented, Select, Textarea, cx } from "@/components/ui";
 import { apiGet, apiSend, messageErreur } from "@/lib/api-client";
@@ -36,7 +37,8 @@ export type Brouillon =
   | { mode: "creer"; debut: Date; fin: Date; allday?: boolean; calendar_id?: number; res_model?: string; res_id?: number; titre?: string }
   | { mode: "modifier"; detail: DetailEvenement };
 
-type Invite = { cle: string; user_id?: number; partner_id?: number; email?: string; name: string; required: boolean };
+/** avatar : version de la photo d'un collègue (affichage seul, jamais renvoyé au noyau). */
+type Invite = { cle: string; user_id?: number; partner_id?: number; email?: string; name: string; required: boolean; avatar?: string | null };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RANGS = [
@@ -46,7 +48,7 @@ const RANGS = [
 function invitesDe(detail: DetailEvenement): Invite[] {
   return detail.attendees.map((a) => ({
     cle: a.user_id ? `u${a.user_id}` : `e${a.email}`, user_id: a.user_id ?? undefined, partner_id: a.partner_id ?? undefined,
-    email: a.user_id ? undefined : (a.email ?? undefined), name: a.name, required: a.required,
+    email: a.user_id ? undefined : (a.email ?? undefined), name: a.name, required: a.required, avatar: a.avatar ?? null,
   }));
 }
 
@@ -103,12 +105,12 @@ export function FenetreEvenement({ me, brouillon, onFermer, onFait }: { me: Agen
     }
     const t = window.setTimeout(async () => {
       const [users, contacts] = await Promise.all([
-        apiGet<Array<{ id: number; name: string; email: string | null }>>(`/agenda/users?q=${encodeURIComponent(texte)}&limit=6`).catch(() => []),
+        apiGet<Array<{ id: number; name: string; email: string | null; avatar?: string | null }>>(`/agenda/users?q=${encodeURIComponent(texte)}&limit=6`).catch(() => []),
         apiGet<Array<{ id: number; name: string; email: string }>>(`/agenda/contacts?q=${encodeURIComponent(texte)}`).catch(() => []),
       ]);
       const deja = new Set(invites.map((i) => i.cle));
       const liste: Array<{ cle: string; name: string; detail: string; invite: Invite }> = [
-        ...users.filter((u) => u.id !== me.user.id).map((u) => ({ cle: `u${u.id}`, name: u.name, detail: "Compte NIMOVA", invite: { cle: `u${u.id}`, user_id: u.id, name: u.name, required: true } })),
+        ...users.filter((u) => u.id !== me.user.id).map((u) => ({ cle: `u${u.id}`, name: u.name, detail: "Compte NIMOVA", invite: { cle: `u${u.id}`, user_id: u.id, name: u.name, required: true, avatar: u.avatar ?? null } })),
         ...contacts.map((c) => ({ cle: `e${c.email.toLowerCase()}`, name: c.name, detail: c.email, invite: { cle: `e${c.email.toLowerCase()}`, partner_id: c.id, name: c.name, required: true } })),
       ];
       if (EMAIL.test(texte)) liste.push({ cle: `e${texte.toLowerCase()}`, name: texte, detail: "Adresse électronique", invite: { cle: `e${texte.toLowerCase()}`, email: texte, name: texte, required: true } });
@@ -378,6 +380,7 @@ export function FenetreEvenement({ me, brouillon, onFermer, onFait }: { me: Agen
                 const e = d ? (d.visible ? etat(d.busy) : { texte: "Disponibilités non communiquées", ton: "text-muted" }) : null;
                 return (
                   <li key={i.cle} className="flex items-center gap-2 rounded-lg bg-panel-2 px-2.5 py-1.5 text-[13px]">
+                    <AvatarCompte id={i.user_id} nom={i.name} avatar={i.avatar} className="bg-accent grid h-7 w-7 flex-none place-items-center rounded-full font-display text-[10px] font-bold tracking-[0.04em] text-white" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{i.name}</span>
                       {e && <span className={cx("block text-[11.5px]", e.ton)}>{e.texte}</span>}

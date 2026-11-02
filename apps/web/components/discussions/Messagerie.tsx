@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import useSWR, { mutate as rafraichir } from "swr";
+import { AvatarCompte } from "@/components/AvatarCompte";
 import { ArrowUpRight, ChevronLeft, Paperclip, Plus, Search, Send, Undo2, Users, X } from "@/components/icons";
 import { FORMATS, FORMATS_TEXTE, dateLongue, heure, taille } from "@/components/portail/commun";
 import { Badge, Button, Empty, ErrorBox, Loading, Notice, Segmented, cx } from "@/components/ui";
@@ -13,7 +14,6 @@ import {
   OBJETS,
   RELECTURE_FIL_MS,
   RELECTURE_NON_LUS_MS,
-  initiales,
   lireDiscret,
   moment,
   sansAccents,
@@ -24,6 +24,7 @@ import {
   type Message,
   type NonLus,
   type PageMessages,
+  type Personne,
   type Relecture,
 } from "@/lib/discussions";
 import { pluriel } from "@/lib/format";
@@ -57,7 +58,8 @@ function majListes() {
   signalerMiseAJour();
 }
 
-function Avatar({ nom, sorte, petit }: { nom: string; sorte?: Conversation["kind"]; petit?: boolean }) {
+/** Pastille d'une conversation ou d'une personne : sa photo, à défaut ses initiales ; groupe et fiche : une icône. */
+function Avatar({ nom, sorte, petit, personne }: { nom: string; sorte?: Conversation["kind"]; petit?: boolean; personne?: Personne | null }) {
   const dimension = petit ? "h-8 w-8 text-[11.5px]" : "h-10 w-10 text-[12.5px]";
   if (sorte === "group" || sorte === "object") {
     const I = sorte === "group" ? Users : IconeDiscussion;
@@ -68,9 +70,12 @@ function Avatar({ nom, sorte, petit }: { nom: string; sorte?: Conversation["kind
     );
   }
   return (
-    <span aria-hidden className={cx("bg-accent grid flex-none place-items-center rounded-full font-display font-bold tracking-[0.04em] text-white", dimension)}>
-      {initiales(nom)}
-    </span>
+    <AvatarCompte
+      id={personne?.id}
+      nom={nom}
+      avatar={personne?.avatar}
+      className={cx("bg-accent grid flex-none place-items-center rounded-full font-display font-bold tracking-[0.04em] text-white", dimension)}
+    />
   );
 }
 
@@ -230,7 +235,7 @@ function LigneConversation({ c, actif, onOuvrir }: { c: Conversation; actif: boo
         className={cx("relative flex w-full items-start gap-3 px-4 py-3 text-left transition-colors", actif ? "bg-accent-doux/70" : "hover:bg-panel-2")}
       >
         {actif && <span aria-hidden className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-accent-vif" />}
-        <Avatar nom={c.title} sorte={c.kind} />
+        <Avatar nom={c.title} sorte={c.kind} personne={c.correspondent} />
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline gap-2">
             <span className={cx("min-w-0 flex-1 truncate text-[14px] text-ink", c.unread > 0 ? "font-bold" : "font-semibold")}>{c.title}</span>
@@ -318,7 +323,7 @@ function RechercheCollegue({ choisis, onChoisir, exclus = [], multiple, label = 
                   aria-pressed={multiple ? pris : undefined}
                   className={cx("flex w-full items-center gap-3 px-3 py-2 text-left transition-colors", pris ? "bg-accent-doux" : "hover:bg-panel-2")}
                 >
-                  <Avatar nom={c.name} petit />
+                  <Avatar nom={c.name} petit personne={c} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13.5px] font-semibold text-ink">{c.name}</span>
                     <span className="block truncate text-[11.5px] text-muted">{c.companies.join(", ")}</span>
@@ -815,6 +820,14 @@ function Bulle({ m, groupe, onRepondre, onRetire }: { m: Message; groupe: boolea
           )}
         >
           <div className="flex flex-wrap items-baseline gap-x-2 text-[11.5px]">
+            {!m.mine && m.author && (
+              <AvatarCompte
+                id={m.author.id}
+                nom={m.author.name}
+                avatar={m.author.avatar}
+                className="bg-accent grid h-4 w-4 flex-none place-items-center self-center rounded-full font-display text-[7px] font-bold tracking-[0.04em] text-white"
+              />
+            )}
             {(groupe || !m.mine) && <span className="font-semibold text-ink">{m.mine ? "Vous" : (m.author?.name ?? "")}</span>}
             <time dateTime={m.date} className="text-muted" title={dateLongue(m.date)}>
               {heure(m.date)}
@@ -1094,7 +1107,7 @@ function Membres({ id, onRetour, onQuitte }: { id: number; onRetour: () => void;
         <ul aria-label="Membres" className="divide-y divide-line rounded-xl border border-line">
           {d.members.map((m) => (
             <li key={m.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
-              <Avatar nom={m.name} petit />
+              <Avatar nom={m.name} petit personne={m} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-semibold text-ink">
                   {m.name}
