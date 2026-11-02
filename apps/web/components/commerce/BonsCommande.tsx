@@ -6,16 +6,17 @@
  * fait, bon de livraison joint), pièce d'achat rattachée et son rapprochement avec la commande et la réception.
  */
 
-import { useState } from "react";
-import { Download, Pencil, Plus, Send } from "@/components/icons";
+import { useEffect, useState } from "react";
+import { Download, Paperclip, Pencil, Plus, Send, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { PagesListe, aujourdhui } from "@/components/finance/communPieces";
+import { CREATION_TIERS, PagesListe, aujourdhui } from "@/components/finance/communPieces";
 import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
-import { ACHATS_PIECE, ACHATS_TOUS, TON_BON, type Article, type BonCommande, type Page, type PieceAchat, type Referentiels } from "@/lib/commerce-types";
+import { ACHATS_PIECE, ACHATS_TOUS, CATEGORIES_PIECE, TON_BON, type Approbation, type Article, type BonCommande, type CircuitPrevu, type EvenementBon, type Page, type PieceAchat, type PieceJointeBon, type Referentiels } from "@/lib/commerce-types";
 import { useEnvoi } from "@/lib/envoi";
-import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, fmtInt, fmtPct, lireNombre, nombreIllisible } from "@/lib/format";
-import { LignesSaisie, corpsLignes, lignesDe, nouvelleLigne, type LigneSaisie } from "./LignesSaisie";
+import { AIDE_NOMBRE, fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtPct, lireNombre, nombreIllisible } from "@/lib/format";
+import { LignesSaisie, corpsLignes, lignesDe, nouvelleLigne, totalHt, type LigneSaisie } from "./LignesSaisie";
+import { NouveauFournisseur } from "./NouveauFournisseur";
 
 type Vue = "draft" | "approval" | "open" | "to_bill" | "done" | "all";
 const PAGE = 100;
@@ -35,6 +36,7 @@ export function BonsCommandePage() {
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [creating, setCreating] = useState(false);
+  const [pieces, setPieces] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
   if (vue !== "all") params.set("view", vue);
@@ -46,8 +48,13 @@ export function BonsCommandePage() {
     <div>
       <PageHeader
         title="Bons de commande fournisseur"
-        subtitle="Depuis un engagement approuvé (approuvé d'office dans sa limite) ou directement (circuit d'approbation des engagements) ; la réception constate le service fait, la pièce d'achat se rapproche de la commande et de la réception."
-        actions={saisie ? <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bon de commande</Button> : undefined}
+        subtitle="Depuis un engagement approuvé (approuvé d'office dans sa limite) ou directement (contrôle, validation, puis approbation de la direction au-delà du seuil) ; la réception constate le service fait, la pièce d'achat se rapproche de la commande et de la réception."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setPieces(true)}><Paperclip className="h-4 w-4" /> Pièces des bons</Button>
+            {saisie && <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bon de commande</Button>}
+          </div>
+        }
       />
       {data && vue === "open" && (
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -59,7 +66,7 @@ export function BonsCommandePage() {
       <Card padded={false}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-3">
           <Tabs tabs={VUES} value={vue} onChange={(v) => { setVue(v); setOffset(0); }} />
-          <Input aria-label="Rechercher un bon de commande" className="max-w-xs" placeholder="Numéro, objet ou fournisseur…" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
+          <Input aria-label="Rechercher un bon de commande" className="max-w-xs" placeholder="Numéro, objet, fournisseur, réf. du devis…" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
         </div>
         <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement des bons de commande…">
           {(page) => (
@@ -77,6 +84,7 @@ export function BonsCommandePage() {
           )}
         </Etat>
       </Card>
+      {pieces && <DocumentsAchats onClose={() => setPieces(false)} onOuvrir={(id) => { setPieces(false); setSelected(id); }} />}
       {creating && <FormBon onClose={() => setCreating(false)} onDone={(id) => { setCreating(false); void mutate(); setSelected(id); }} />}
       {selected !== null && <FicheBon key={selected} id={selected} onClose={() => setSelected(null)} onChanged={() => mutate()} />}
     </div>
@@ -90,31 +98,64 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
   const [commitmentId, setCommitmentId] = useState(engagement ? String(engagement.id) : "");
   const choisi = engagement ?? engagements?.find((e) => String(e.id) === commitmentId);
   const [partner, setPartner] = useState<{ id: number; name: string } | null>(bon?.partner ?? engagement?.partner ?? null);
+  const [nouveau, setNouveau] = useState<string | null>(null);
+  const creationTiers = useAutorise(CREATION_TIERS);
   const [f, setF] = useState({
     object: bon?.object ?? engagement?.object ?? "", conditions: bon?.conditions ?? "", partner_ref: bon?.partner_ref ?? "",
-    date_planned: bon?.date_planned ?? "",
+    date_planned: bon?.date_planned ?? "", quote_kind: bon?.quote_kind ?? "quote", quote_date: bon?.quote_date ?? "",
+    payment_term_id: bon?.payment_term ? String(bon.payment_term.id) : "", payment_note: bon?.payment_note ?? "",
+    delivery_days: bon?.delivery_days ? String(bon.delivery_days) : "", delivery_place: bon?.delivery_place ?? "",
+    tax_exemption: bon?.tax_exemption ?? "",
   });
+  const [piece, setPiece] = useState<File | null>(null);
   const [lignes, setLignes] = useState<LigneSaisie[]>(bon ? lignesDe(bon.lines, "purchase") : []);
   const envoi = useEnvoi();
   const corps = corpsLignes(lignes, "purchase");
   // Depuis un engagement, sans ligne : une ligne du reste à commander, sur son compte et son analytique.
   const sansLigne = !bon && !!choisi && lignes.length === 0;
-  const ready = Boolean((partner || choisi) && corps && (sansLigne || corps.some((l) => !l.display_type)));
+  const ht = sansLigne ? choisi?.remaining ?? 0 : totalHt(lignes);
+  const sansTva = lignes.some((l) => l.display_type === "product" && l.tax === "none");
+  const delaiInvalide = f.delivery_days.trim() !== "" && !/^\d{1,4}$/.test(f.delivery_days.trim());
+  const ready = Boolean((partner || choisi) && corps && (sansLigne || corps.some((l) => !l.display_type)) && !delaiInvalide);
+  // Circuit prévu pour ce montant, relu une fois la saisie posée (pas à chaque frappe).
+  const [montant, setMontant] = useState(Math.round(ht));
+  useEffect(() => {
+    const t = setTimeout(() => setMontant(Math.round(ht)), 400);
+    return () => clearTimeout(t);
+  }, [ht]);
+  const circuitParams = new URLSearchParams({ amount: String(montant) });
+  if (choisi) circuitParams.set("commitment_id", String(choisi.id));
+  if (partner) circuitParams.set("partner_id", String(partner.id));
+  const { data: circuit } = useApi<CircuitPrevu>(`/commerce/purchase-orders/circuit?${circuitParams.toString()}`);
 
   async function enregistrer(soumettre: boolean) {
     let id = bon?.id ?? null;
-    const body: Record<string, unknown> = { object: f.object, conditions: f.conditions, partner_ref: f.partner_ref };
+    const body: Record<string, unknown> = {
+      object: f.object, conditions: f.conditions, partner_ref: f.partner_ref, quote_kind: f.quote_kind,
+      quote_date: f.quote_date || null, payment_term_id: f.payment_term_id ? Number(f.payment_term_id) : null,
+      payment_note: f.payment_note, delivery_days: f.delivery_days.trim() ? Number(f.delivery_days) : null,
+      delivery_place: f.delivery_place, tax_exemption: f.tax_exemption,
+    };
+    if (!bon && !f.payment_term_id) delete body.payment_term_id; // à la création : celles de la fiche du fournisseur
+    if (!bon && !f.delivery_place.trim()) delete body.delivery_place; // à la création : l'adresse de la société
     if (partner) body.partner_id = partner.id;
     if (f.date_planned) body.date_planned = f.date_planned;
     if (!sansLigne) body.lines = corps;
     const ok = await envoi.run(soumettre ? "soumettre" : "enregistrer", async () => {
       if (bon) {
         await apiSend("PATCH", `/commerce/purchase-orders/${bon.id}`, body);
-        if (soumettre) await apiSend("POST", `/commerce/purchase-orders/${bon.id}/submit`, {});
       } else {
         if (choisi) body.commitment_id = choisi.id;
-        id = (await apiSend<BonCommande>("POST", "/commerce/purchase-orders", { ...body, submit: soumettre })).id;
+        id = (await apiSend<BonCommande>("POST", "/commerce/purchase-orders", body)).id;
       }
+      // La pièce du fournisseur est jointe avant la soumission : l'approbateur la voit.
+      if (piece && id !== null) {
+        const form = new FormData();
+        form.append("file", piece);
+        form.append("category", f.quote_kind === "proforma" ? "proforma" : "quote");
+        await apiUpload(`/commerce/purchase-orders/${id}/documents`, form);
+      }
+      if (soumettre && id !== null) await apiSend("POST", `/commerce/purchase-orders/${id}/submit`, {});
     }, undefined, "Enregistrement impossible.");
     if (ok && id !== null) onDone(id);
   }
@@ -130,7 +171,7 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
         {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {!bon && !engagement && (
-            <Field label="Engagement de dépense approuvé" hint="Facultatif : dans sa limite, le bon est approuvé d'office." className="md:col-span-3">
+            <Field label="Engagement de dépense approuvé" hint="Facultatif : dans sa limite, le bon est approuvé d'office ; le devis retenu (référence, date, pièce) est repris." className="md:col-span-3">
               <Select value={commitmentId} placeholder="Bon de commande direct (circuit d'approbation)" onChange={(e) => {
                 setCommitmentId(e.target.value);
                 const e2 = engagements?.find((x) => String(x.id) === e.target.value);
@@ -138,21 +179,90 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
               }} options={(engagements ?? []).map((e) => ({ value: e.id, label: `${e.name} · ${e.object} · ${e.partner.name} · reste ${fmtInt(e.remaining)} GNF` }))} />
             </Field>
           )}
-          <Field label="Fournisseur"><PartnerPicker value={partner} onChange={setPartner} kind="supplier" /></Field>
+          <Field label="Fournisseur" hint="Absent de la liste : « Nouveau fournisseur », il est enregistré aussitôt.">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1"><PartnerPicker value={partner} onChange={setPartner} kind="supplier" onCreerDetaille={(nom) => setNouveau(nom)} /></div>
+              {creationTiers && <Button size="sm" className="mt-0.5" onClick={() => setNouveau("")} title="Nouveau fournisseur"><Plus className="h-4 w-4" /> Nouveau</Button>}
+            </div>
+          </Field>
           <Field label="Objet de la commande" className="md:col-span-2"><Input value={f.object} onChange={(e) => setF({ ...f, object: e.target.value })} /></Field>
-          <Field label="Livraison prévue"><Input type="date" value={f.date_planned} onChange={(e) => setF({ ...f, date_planned: e.target.value })} /></Field>
-          <Field label="Référence du devis du fournisseur"><Input value={f.partner_ref} onChange={(e) => setF({ ...f, partner_ref: e.target.value })} /></Field>
         </div>
+        <Card title="Devis ou facture proforma du fournisseur">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <Field label="Nature"><Select value={f.quote_kind} onChange={(e) => setF({ ...f, quote_kind: e.target.value as "quote" | "proforma" })} options={[{ value: "quote", label: "Devis" }, { value: "proforma", label: "Facture proforma" }]} /></Field>
+            <Field label="Référence"><Input value={f.partner_ref} onChange={(e) => setF({ ...f, partner_ref: e.target.value })} placeholder="DEV-2026-041" /></Field>
+            <Field label="Date"><Input type="date" value={f.quote_date} max={aujourdhui()} onChange={(e) => setF({ ...f, quote_date: e.target.value })} /></Field>
+            <Field label="Pièce" hint="PDF, JPEG ou PNG ; d'autres pièces se joignent sur la fiche du bon.">
+              <FileButton small label={piece ? piece.name : f.quote_kind === "proforma" ? "Joindre la proforma" : "Joindre le devis"} accept=".pdf,.jpg,.jpeg,.png" onFile={setPiece} />
+            </Field>
+          </div>
+        </Card>
         <Card title="Lignes">
           {sansLigne && <Notice tone="neutral">Sans ligne saisie, le bon reprend le reste de l&apos;engagement {choisi?.name} ({fmtGNF(choisi?.remaining)} HT), sur son compte et son analytique.</Notice>}
           <LignesSaisie kind="purchase" lignes={lignes} onChange={setLignes} refs={refs} catalogue={catalogue} />
           {!lignes.length && !choisi && <div className="mt-2"><Button size="sm" onClick={() => setLignes([nouvelleLigne()])}>Ajouter une première ligne</Button></div>}
+          {sansTva && (
+            <Field label="Mention d'exonération de TVA" hint="Imprimée sous les totaux (par exemple l'exonération dont bénéficie l'achat)." className="mt-3">
+              <Input value={f.tax_exemption} onChange={(e) => setF({ ...f, tax_exemption: e.target.value })} />
+            </Field>
+          )}
         </Card>
-        <Field label="Conditions" hint="Délai, lieu de livraison ou d'exécution, modalités, imprimés au bas du bon."><Textarea value={f.conditions} onChange={(e) => setF({ ...f, conditions: e.target.value })} /></Field>
+        <Card title="Conditions de la commande">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Field label="Conditions de paiement" hint="Vide : celles de la fiche du fournisseur.">
+              <Select value={f.payment_term_id} placeholder="Selon la fiche du fournisseur" onChange={(e) => setF({ ...f, payment_term_id: e.target.value })} options={(refs?.payment_terms ?? []).map((t) => ({ value: t.id, label: t.name }))} />
+            </Field>
+            <Field label="Précision sur le règlement" className="md:col-span-2"><Input value={f.payment_note} onChange={(e) => setF({ ...f, payment_note: e.target.value })} placeholder="30 % à la commande, solde à la livraison, par virement" /></Field>
+            <Field label="Livraison prévue le"><Input type="date" value={f.date_planned} onChange={(e) => setF({ ...f, date_planned: e.target.value })} /></Field>
+            <Field label="Délai de livraison (jours)" error={delaiInvalide ? "Nombre entier de jours." : undefined}><Input inputMode="numeric" value={f.delivery_days} onChange={(e) => setF({ ...f, delivery_days: e.target.value })} /></Field>
+            <Field label="Lieu de livraison" hint={refs?.delivery_place ? `Vide : ${refs.delivery_place}` : undefined}><Input value={f.delivery_place} onChange={(e) => setF({ ...f, delivery_place: e.target.value })} /></Field>
+          </div>
+          <Field label="Autres conditions" hint="Garanties, pénalités, modalités : imprimées au bas du bon." className="mt-3"><Textarea value={f.conditions} onChange={(e) => setF({ ...f, conditions: e.target.value })} /></Field>
+        </Card>
+        {circuit && <CircuitApercu circuit={circuit} />}
       </div>
+      {nouveau !== null && <NouveauFournisseur nom={nouveau} onClose={() => setNouveau(null)} onChoisi={(p) => { setPartner(p); setNouveau(null); }} />}
     </Modal>
   );
 }
+
+/** Circuit prévu pour le montant du bon : chaque niveau, le profil attendu, son seuil, s'il s'applique. */
+export function CircuitApercu({ circuit }: { circuit: CircuitPrevu }) {
+  if (circuit.covered) return <Notice tone="neutral">Dans la limite de son engagement approuvé : soumis, le bon sera approuvé d&apos;office, sans nouveau circuit.</Notice>;
+  return (
+    <Card title={`Circuit d'approbation prévu pour ${fmtGNF(circuit.amount)} HT`} padded={false}>
+      <DataTable dense rows={circuit.rules} rowKey={(r) => r.id} empty="Aucune règle : le bon sera approuvé dès sa soumission." columns={[
+        { key: "sequence", label: "Étape", render: (r) => `${r.sequence}. ${r.name}` },
+        { key: "profile_label", label: "Tranchée par" },
+        { key: "min_amount", label: "Seuil", render: (r) => (r.min_amount ? `Au-delà de ${fmtGNF(r.min_amount)} HT` : "Dès le premier franc") + (r.max_amount ? `, jusqu'à ${fmtGNF(r.max_amount)}` : "") + (r.account_prefix ? ` (comptes ${r.account_prefix}…)` : "") },
+        { key: "applies", label: "Pour ce bon", render: (r) => (r.applies ? <Badge tone="warn">Requise</Badge> : <Badge>Sans objet</Badge>) },
+      ]} />
+      <p className="px-4 py-2 text-[12px] text-muted">Séparation des responsabilités : celui qui saisit ou soumet le bon n&apos;en tranche aucune étape, et une même personne ne tranche qu&apos;une étape.</p>
+    </Card>
+  );
+}
+
+/** Avancement du circuit d'un bon soumis : étapes, décisions, auteurs, dates et commentaires. */
+function CircuitAvancement({ approval }: { approval: Approbation }) {
+  return (
+    <Card title="Circuit d'approbation" padded={false}>
+      <DataTable dense rows={approval.steps} rowKey={(s) => `${s.sequence ?? s.label}`} columns={[
+        { key: "label", label: "Étape" },
+        { key: "profile", label: "Profil attendu" },
+        { key: "state", label: "Décision", render: (s) => <Badge tone={s.state === "approved" ? "ok" : s.state === "rejected" ? "danger" : s.state === "pending" ? "warn" : "neutral"}>{DECISION[s.state] ?? s.state}</Badge> },
+        { key: "decided_by", label: "Par", render: (s) => s.decided_by ?? "–" },
+        { key: "decided_at", label: "Le", render: (s) => (s.decided_at ? fmtDateTime(s.decided_at) : "–") },
+        { key: "comment", label: "Commentaire", render: (s) => s.comment ?? "" },
+      ]} />
+      <p className="px-4 py-2 text-[12px] text-muted">
+        {approval.requested_by ? `Soumis par ${approval.requested_by}${approval.requested_at ? ` le ${fmtDateTime(approval.requested_at)}` : ""} · ` : ""}
+        Demande n° {approval.request_id}{approval.fingerprint ? ` · empreinte du bon soumis ${approval.fingerprint}…` : ""}. Chaque décision est donnée par un compte authentifié, horodatée et liée à cette empreinte : un bon modifié doit être soumis de nouveau.
+      </p>
+    </Card>
+  );
+}
+
+const DECISION: Record<string, string> = { approved: "Approuvé", rejected: "Refusé", pending: "En attente", skipped: "Sans objet" };
 
 function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: () => void }) {
   const { data, error, mutate } = useApi<BonCommande>(`/commerce/purchase-orders/${id}`);
@@ -196,8 +306,13 @@ function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void;
               <div><div className="text-xs text-muted">Reçu HT</div>{fmtGNF(o.received_untaxed)}</div>
               <div><div className="text-xs text-muted">Facturé HT</div>{fmtGNF(o.billed_untaxed)}</div>
               <div><div className="text-xs text-muted">Envoyé</div>{o.sent_at ? `${fmtDate(o.sent_at)}${o.emailed_to ? ` à ${o.emailed_to}` : ""}` : "–"}</div>
+              <div><div className="text-xs text-muted">{o.quote_kind_label} du fournisseur</div>{o.partner_ref ? `${o.partner_ref}${o.quote_date ? ` du ${fmtDate(o.quote_date)}` : ""}` : "–"}</div>
+              <div><div className="text-xs text-muted">Conditions de paiement</div>{[o.payment_term?.name, o.payment_note].filter(Boolean).join(" – ") || "–"}</div>
+              <div><div className="text-xs text-muted">Délai de livraison</div>{o.delivery_days ? `${fmtInt(o.delivery_days)} jours` : "–"}</div>
+              <div><div className="text-xs text-muted">Lieu de livraison</div>{o.delivery_place ?? "–"}</div>
             </div>
-            {o.status === "draft" && o.covered_by_commitment && <Notice tone="neutral">Dans la limite de son engagement approuvé : soumis, il sera approuvé d&apos;office.</Notice>}
+            {o.conditions && <div className="text-[12.5px] text-ink-2"><span className="text-muted">Autres conditions : </span><span className="whitespace-pre-line">{o.conditions}</span></div>}
+            {o.tax_exemption && <div className="text-[12.5px] text-ink-2"><span className="text-muted">Mention d&apos;exonération : </span>{o.tax_exemption}</div>}
             {o.status === "to_approve" && o.approval?.pending_with && <Notice tone="warn">En approbation, à l&apos;étape de : {o.approval.pending_with}. Celui qui l&apos;a saisi ou soumis n&apos;en tranche aucune étape.</Notice>}
             {o.status === "rejected" && <Notice tone="warn">Refusé{o.approval?.rejected_by ? ` par ${o.approval.rejected_by}` : ""}{o.approval?.rejected_reason ? ` : ${o.approval.rejected_reason}` : ""}. Modifiez-le au besoin, puis soumettez-le de nouveau.</Notice>}
             <DataTable dense rows={o.lines ?? []} rowKey={(l) => l.id} columns={[
@@ -208,9 +323,10 @@ function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void;
               { key: "qty_invoiced", label: "Facturé", align: "right", render: (l) => (l.display_type === "product" ? fmtDec(l.qty_invoiced) : "") },
               { key: "price_subtotal", label: "HT", align: "right", render: (l) => (l.display_type === "product" ? fmtInt(l.price_subtotal) : "") },
             ]} />
-            {(o.approval?.steps?.length ?? 0) > 0 && (
-              <div className="text-[12.5px] text-muted">Circuit : {o.approval!.steps.map((s) => `${s.label} (${s.state === "approved" ? `approuvé par ${s.decided_by}` : s.state === "rejected" ? `refusé par ${s.decided_by}` : s.state === "pending" ? "en attente" : "sans objet"})`).join(" ; ")}</div>
-            )}
+            {o.status === "draft" || o.status === "rejected" ? (o.circuit && <CircuitApercu circuit={o.circuit} />) : null}
+            {o.approval && (o.approval.steps?.length ?? 0) > 0 && <CircuitAvancement approval={o.approval} />}
+            <PiecesJointes o={o} ecriture={saisie} onChanged={relire} />
+            <Historique id={o.id} />
             {(o.receipts?.length ?? 0) > 0 && (
               <Card title="Réceptions (service fait)" padded={false}>
                 <DataTable dense rows={o.receipts ?? []} rowKey={(r) => r.id} columns={[
@@ -261,6 +377,95 @@ function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void;
           </div>
         )}
       </Etat>
+    </Modal>
+  );
+}
+
+/** Pièces jointes du bon : devis, proforma, contrat, bon de livraison, autre ; archivées une fois le bon soumis. */
+function PiecesJointes({ o, ecriture, onChanged }: { o: BonCommande; ecriture: boolean; onChanged: () => void }) {
+  const envoi = useEnvoi();
+  const [categorie, setCategorie] = useState<string>(o.partner_ref && o.quote_kind === "proforma" ? "proforma" : "quote");
+  const pieces = o.documents ?? [];
+  function joindre(file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("category", categorie);
+    void envoi.run("joindre", () => apiUpload(`/commerce/purchase-orders/${o.id}/documents`, form), "Pièce jointe au bon.").then((ok) => ok && onChanged());
+  }
+  async function retirer(p: PieceJointeBon) {
+    if (!(await demanderConfirmation(`Retirer « ${p.name} » du bon ${o.name} ?`, { action: "Retirer", danger: true }))) return;
+    if (await envoi.run(`retirer${p.id}`, () => apiSend("DELETE", `/commerce/purchase-documents/${p.id}`), "Pièce retirée.")) onChanged();
+  }
+  return (
+    <Card title={<span className="inline-flex items-center gap-2"><Paperclip className="h-4 w-4" /> Pièces jointes</span>} padded={false} actions={ecriture && o.status !== "cancelled" ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <Select aria-label="Catégorie de la pièce" className="w-44" value={categorie} onChange={(e) => setCategorie(e.target.value)} options={CATEGORIES_PIECE} />
+        <FileButton small label="Joindre une pièce" accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={joindre} />
+      </div>
+    ) : undefined}>
+      {envoi.message && <div className="px-4 pb-2"><Notice tone={envoi.message.tone}>{envoi.message.text}</Notice></div>}
+      <DataTable dense rows={pieces} rowKey={(p) => p.id} empty="Aucune pièce jointe : joignez le devis ou la proforma du fournisseur." columns={[
+        { key: "category_label", label: "Catégorie" },
+        { key: "name", label: "Pièce", render: (p) => <Button size="sm" variant="ghost" loading={envoi.busy === `pj${p.id}`} onClick={() => void envoi.telecharger(`pj${p.id}`, `/commerce/purchase-documents/${p.id}`, p.name)}><Download className="h-4 w-4" /> {p.name}</Button> },
+        { key: "uploaded_by", label: "Jointe par", render: (p) => `${p.uploaded_by?.name ?? "–"}, ${fmtDateTime(p.uploaded_at)}` },
+        { key: "origin", label: "Provenance", render: (p) => p.origin ?? p.note ?? "" },
+        { key: "removable", label: "", render: (p) => (ecriture && p.removable ? <Button size="sm" variant="ghost" aria-label={`Retirer ${p.name}`} loading={envoi.busy === `retirer${p.id}`} onClick={() => void retirer(p)}><Trash2 className="h-4 w-4" /></Button> : <span className="text-[11.5px] text-muted">{p.removable ? "" : "Archivée"}</span>) },
+      ]} />
+      <p className="px-4 py-2 text-[12px] text-muted">Une pièce mal jointe se retire tant que le bon n&apos;est pas soumis ; ensuite, les pièces sont archivées avec le bon et ne se suppriment plus.</p>
+    </Card>
+  );
+}
+
+/** Historique du bon, chargé à la demande : chaque action, son auteur, sa date et son détail. */
+function Historique({ id }: { id: number }) {
+  const [ouvert, setOuvert] = useState(false);
+  const { data, error, mutate } = useApi<{ items: EvenementBon[] }>(ouvert ? `/commerce/purchase-orders/${id}/history` : null);
+  return (
+    <Card title="Historique" padded={false} actions={<Button size="sm" variant="ghost" onClick={() => setOuvert(!ouvert)}>{ouvert ? "Masquer" : "Afficher l'historique"}</Button>}>
+      {ouvert && (
+        <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement de l'historique…">
+          {(h) => (
+            <DataTable dense rows={h.items} rowKey={(e) => `${e.date}-${e.kind}-${e.summary}`} empty="Aucune action enregistrée." columns={[
+              { key: "date", label: "Date", render: (e) => fmtDateTime(e.date) },
+              { key: "label", label: "Action", render: (e) => <Badge tone={e.kind === "rejected" || e.kind === "cancelled" ? "danger" : e.kind === "approved" || e.kind === "approved_auto" ? "ok" : "neutral"}>{e.label}</Badge> },
+              { key: "user", label: "Par", render: (e) => e.user ?? "–" },
+              { key: "summary", label: "Détail", render: (e) => <div><div>{e.summary}</div>{e.detail && <div className="whitespace-pre-line text-[11.5px] text-muted">{e.detail}</div>}</div> },
+            ]} />
+          )}
+        </Etat>
+      )}
+    </Card>
+  );
+}
+
+/** Pièces jointes de tous les bons de la société : retrouver un devis, une proforma, un bon de livraison. */
+function DocumentsAchats({ onClose, onOuvrir }: { onClose: () => void; onOuvrir: (id: number) => void }) {
+  const [search, setSearch] = useState("");
+  const [categorie, setCategorie] = useState("");
+  const envoi = useEnvoi();
+  const params = new URLSearchParams({ limit: "100" });
+  if (search) params.set("search", search);
+  if (categorie) params.set("category", categorie);
+  const { data, error, mutate } = useApi<Page<PieceJointeBon>>(`/commerce/purchase-documents?${params.toString()}`);
+  return (
+    <Modal open wide title="Pièces des bons de commande" onClose={onClose}>
+      <div className="space-y-3">
+        {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
+        <div className="flex flex-wrap gap-2">
+          <Input aria-label="Rechercher une pièce" className="max-w-sm" placeholder="Bon, fournisseur, référence du devis, nom du fichier…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Select aria-label="Catégorie" className="w-52" value={categorie} placeholder="Toutes les catégories" onChange={(e) => setCategorie(e.target.value)} options={CATEGORIES_PIECE} />
+        </div>
+        <Etat data={data} error={error} onRetry={() => mutate()} label="Recherche des pièces…">
+          {(page) => (
+            <DataTable dense rows={page.items} rowKey={(p) => p.id} empty="Aucune pièce pour cette recherche." columns={[
+              { key: "order", label: "Bon de commande", render: (p) => <button type="button" className="text-left text-accent underline-offset-2 hover:underline" onClick={() => onOuvrir(p.order.id)}><span className="font-mono text-xs">{p.order.name}</span><div className="text-[11.5px] text-muted">{p.order.partner}{p.order.partner_ref ? ` · ${p.order.partner_ref}` : ""}</div></button> },
+              { key: "category_label", label: "Catégorie" },
+              { key: "name", label: "Pièce", render: (p) => <Button size="sm" variant="ghost" loading={envoi.busy === `d${p.id}`} onClick={() => void envoi.telecharger(`d${p.id}`, `/commerce/purchase-documents/${p.id}`, p.name)}><Download className="h-4 w-4" /> {p.name}</Button> },
+              { key: "uploaded_at", label: "Jointe le", render: (p) => `${fmtDate(p.uploaded_at)} · ${p.uploaded_by?.name ?? ""}` },
+            ]} />
+          )}
+        </Etat>
+      </div>
     </Modal>
   );
 }

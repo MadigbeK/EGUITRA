@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ApercuBon } from "@/components/commerce/ApercuBon";
+import { MaSignature } from "@/components/commerce/SignatureApprobateur";
 import { Check, X } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, Textarea, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
@@ -96,7 +97,10 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
       )}
       <Tabs tabs={onglets} value={tab} onChange={(t) => { setTab(t); setOffset(0); }} />
       {tab === "rules" && circuits ? (
-        <Rules />
+        <div className="space-y-4">
+          <Rules />
+          <MaSignature />
+        </div>
       ) : !rows ? (
         <Etat error={tab === "inbox" ? erreurCorbeille : erreurListe} onRetry={() => void (tab === "inbox" ? refreshInbox() : mutate())} />
       ) : rows.length === 0 ? (
@@ -320,7 +324,7 @@ function Rules() {
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Investissements : accord de la direction" />
             </Field>
             <Field label="Nature">
-              <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "commitment", label: "Engagements de dépense" }, { value: "in_invoice", label: "Pièces d'achat" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "cash_out", label: "Décaissements de trésorerie" }, { value: "entry", label: "Opérations diverses" }]} />
+              <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "commitment", label: "Engagements de dépense" }, { value: "purchase_order", label: "Bons de commande fournisseur" }, { value: "in_invoice", label: "Pièces d'achat" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "cash_out", label: "Décaissements de trésorerie" }, { value: "entry", label: "Opérations diverses" }]} />
             </Field>
             <Field label="Approbateur">
               <Select value={form.approver_profile} onChange={(e) => setForm({ ...form, approver_profile: e.target.value })} options={[{ value: "finance", label: "Finance" }, { value: "direction", label: "Direction générale" }, { value: "admin", label: "Administration" }]} />
