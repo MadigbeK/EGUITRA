@@ -29,7 +29,8 @@ export function FormulaireSalarie({ meta, employee, onClose, onDone }: { meta: M
     manager_id: texte(employee?.manager?.id),
     category: employee?.category ?? "",
     contract_type: employee?.contract_type ?? "cdi",
-    hire_date: employee?.hire_date ?? new Date().toISOString().slice(0, 10),
+    // Dossier repris sans date d'entrée : rien n'est proposé à sa place, la RH la saisit.
+    hire_date: employee ? employee.hire_date ?? "" : new Date().toISOString().slice(0, 10),
     contract_end: employee?.contract_end ?? "",
     trial_end: employee?.trial_end ?? "",
     base_salary: texte(employee?.base_salary || ""),

@@ -11,6 +11,7 @@ import type { Me } from "@/lib/types";
 import { ChampMontant, EtatAbsence, EtatSalarie, Ligne, PastilleSociete, accord, erreurNombre, jours, libelle, messageErreur, moisLong, nombre, periode } from "./commun";
 import { FormulaireSalarie } from "./FormulaireSalarie";
 import { SaisieAbsence } from "./Conges";
+import { CommandesPhoto, PhotoSalarie, cheminPhoto } from "./Photo";
 import { SecuriteSalarie } from "./Securite";
 
 type Onglet = "identite" | "contrat" | "conges" | "documents" | "securite" | "paie";
@@ -35,6 +36,14 @@ export function FicheSalarie({ id }: { id: string }) {
       <Link href="/rh/salaries" className="no-print mb-3 inline-flex items-center gap-1 text-[13px] font-semibold text-muted hover:text-ink">
         <ChevronLeft className="h-4 w-4" /> Salariés
       </Link>
+      <div className="flex flex-col items-center gap-x-6 gap-y-3 sm:flex-row sm:items-start">
+        <div className="flex flex-none flex-col items-center gap-2.5 pt-1">
+          <PhotoSalarie chemin={cheminPhoto(e.id, e.photo, 512)} nom={e.name} taille="xl" />
+          {/* RH et administration : la photo de tout salarié, la leur comprise (ce n'est pas une donnée de
+              paie) ; la direction la voit sans la changer. */}
+          {meta.can_write && <CommandesPhoto cible={e.id} nom={e.name} aPhoto={Boolean(e.photo)} onChange={rafraichir} />}
+        </div>
+        <div className="w-full min-w-0 flex-1">
       <PageHeader
         title={e.name}
         subtitle={
@@ -61,9 +70,16 @@ export function FicheSalarie({ id }: { id: string }) {
           )
         }
       />
+        </div>
+      </div>
       {propre && meta.can_write && (
         <div className="mb-4">
           <Notice tone="neutral">Votre propre dossier : un autre membre du service RH le modifie.</Notice>
+        </div>
+      )}
+      {e.to_complete && (
+        <div className="mb-4">
+          <Notice tone="warn">Fiche à compléter avant la paie : {e.payroll_missing.join(", ").toLowerCase()}. Aucune paie de {e.company.name} n&apos;est validée tant qu&apos;elle manque.</Notice>
         </div>
       )}
       {e.issues.length > 0 && (
@@ -73,7 +89,7 @@ export function FicheSalarie({ id }: { id: string }) {
       )}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Brut mensuel" value={fmtGNF(e.monthly_gross)} hint={`Salaire de base ${fmtGNF(e.base_salary)}`} />
-        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} ${accord(e.seniority_years, "an")}`} hint={`Embauché le ${fmtDate(e.hire_date)}`} />
+        <Kpi label="Ancienneté" value={`${fmtDec(e.seniority_years)} ${accord(e.seniority_years, "an")}`} hint={e.hire_date ? `Embauché le ${fmtDate(e.hire_date)}` : "Date d'embauche à saisir"} />
         <Kpi label="Solde de congés" value={jours(e.balance.balance)} hint={e.balance.pending ? `${jours(e.balance.pending)} en attente de validation` : "Aucune demande en attente"} tone={e.balance.balance < 0 ? "danger" : "neutral"} />
         <Kpi label="Contrat" value={CONTRACT_LABELS[e.contract_type]} hint={e.contract_end ? `Jusqu'au ${fmtDate(e.contract_end)}` : e.trial_end ? `Essai jusqu'au ${fmtDate(e.trial_end)}` : "Sans terme"} tone={e.state === "essai" ? "warn" : "neutral"} />
       </div>
@@ -162,7 +178,7 @@ function Contrat({ e, meta, ecrit, onChanged }: { e: Employee; meta: Meta; ecrit
           <Ligne label="Responsable">{e.manager ? <Link className="hover:underline" href={`/rh/salaries/${e.manager.id}`}>{e.manager.name}</Link> : "–"}</Ligne>
           <Ligne label="Catégorie">{libelle(meta.categories, e.category)}</Ligne>
           <Ligne label="Contrat">{CONTRACT_LABELS[e.contract_type]}</Ligne>
-          <Ligne label="Embauche">{fmtDate(e.hire_date)}</Ligne>
+          <Ligne label="Embauche">{e.hire_date ? fmtDate(e.hire_date) : <span className="text-warn">À saisir</span>}</Ligne>
           <Ligne label="Fin d'essai">{e.trial_end ? fmtDate(e.trial_end) : "–"}</Ligne>
           <Ligne label="Fin de contrat">{e.contract_end ? fmtDate(e.contract_end) : "–"}</Ligne>
           {e.exit_date && <Ligne label="Sortie">{`${fmtDate(e.exit_date)}, ${libelle(meta.exit_reasons, e.exit_reason)}`}</Ligne>}
@@ -624,7 +640,7 @@ function Sortie({ e, meta, onClose, onDone }: { e: Employee; meta: Meta; onClose
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Date de sortie (dernier jour travaillé)">
-            <Input type="date" value={date} min={e.hire_date} onChange={(ev) => setDate(ev.target.value)} />
+            <Input type="date" value={date} min={e.hire_date ?? undefined} onChange={(ev) => setDate(ev.target.value)} />
           </Field>
           <Field label="Motif">
             <Select value={motif} onChange={(ev) => setMotif(ev.target.value)} options={meta.exit_reasons.map((r) => ({ value: r.code, label: r.label }))} />

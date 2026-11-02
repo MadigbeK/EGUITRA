@@ -8,6 +8,7 @@ import { apiSend, useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF } from "@/lib/format";
 import { CONTRACT_LABELS, type Leave, type LeaveType, type MySpace } from "@/lib/rh-types";
 import { DecisionAbsence, EtatAbsence, Ligne, accord, jours, messageErreur, moisLong, periode, useJoursOuvrables } from "./commun";
+import { CommandesPhoto, PhotoSalarie, cheminPhoto } from "./Photo";
 import { MesHabilitations } from "./Securite";
 
 /**
@@ -52,15 +53,23 @@ export function MonEspace() {
   const aujourdhui = new Date().toISOString().slice(0, 10);
   return (
     <div>
-      <PageHeader
-        title={`Bonjour, ${e.name.split(" ")[0]}`}
-        subtitle={`${e.job_title ?? "Salarié"}${e.department ? `, ${e.department.name}` : ""}, ${e.company}. Vos congés, vos demandes et vos bulletins de paie.`}
-        actions={
-          <Button variant="primary" onClick={() => setDemande(true)}>
-            <Plus className="h-4 w-4" /> Demander une absence
-          </Button>
-        }
-      />
+      <div className="flex flex-col items-center gap-x-6 gap-y-3 sm:flex-row sm:items-start">
+        <div className="flex flex-none flex-col items-center gap-2.5 pt-1">
+          <PhotoSalarie chemin={cheminPhoto("moi", e.photo, 512)} nom={e.name} taille="lg" />
+          <CommandesPhoto cible="moi" nom={e.name} aPhoto={Boolean(e.photo)} libelleAjout="Ajouter ma photo" libelleRemplacer="Changer ma photo" onChange={() => void mutate()} />
+        </div>
+        <div className="w-full min-w-0 flex-1">
+          <PageHeader
+            title={`Bonjour, ${e.name.split(" ")[0]}`}
+            subtitle={`${e.job_title ?? "Salarié"}${e.department ? `, ${e.department.name}` : ""}, ${e.company}. Vos congés, vos demandes et vos bulletins de paie.`}
+            actions={
+              <Button variant="primary" onClick={() => setDemande(true)}>
+                <Plus className="h-4 w-4" /> Demander une absence
+              </Button>
+            }
+          />
+        </div>
+      </div>
       {erreur && (
         <div className="mb-4">
           <Notice tone="danger">{erreur}</Notice>

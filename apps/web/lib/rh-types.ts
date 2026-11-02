@@ -123,7 +123,8 @@ export interface EmployeeRow {
   manager: Ref | null;
   category: Category | null;
   contract_type: ContractType;
-  hire_date: string;
+  /** null : dossier repris par import sans date d'entrée connue (fiche à compléter). */
+  hire_date: string | null;
   contract_end: string | null;
   trial_end: string | null;
   exit_date: string | null;
@@ -139,6 +140,11 @@ export interface EmployeeRow {
   absent_today: boolean;
   /** Points à compléter : numéro CNSS, compte bancaire, axe d'activité, etc. */
   issues: string[];
+  /** Version de la photo (null : pas de photo) : GET /rh/employees/<id>/photo?size=128&v=… */
+  photo: string | null;
+  /** Donnée obligatoire de la paie manquante (date d'embauche, salaire de base) : la paie attend. */
+  to_complete: boolean;
+  payroll_missing: string[];
 }
 
 export interface FixedLine { id: number; rubric: Ref & { code: string; input: RubricInput }; amount: number; quantity: number }
@@ -537,6 +543,8 @@ export interface MySpace {
     contract_type: ContractType;
     phone: string | null;
     email: string | null;
+    /** Version de sa photo (null : pas de photo) : GET /rh/me/photo?size=…&v=… */
+    photo: string | null;
   };
   balance: LeaveBalance | null;
   leaves: Leave[];
@@ -665,4 +673,34 @@ export interface SafetySummary {
   up_to_date_rate: number | null;
   /** Habilitations et aptitudes qui expirent dans les 30 jours ou sont expirées. */
   expiring: Array<{ employee: Ref & { matricule: string }; employee_id: number; driver_id: number | null; kind: "qualification" | "fitness"; code: string; name: string; expiry: string; days_left: number }>;
+}
+
+/** Ligne de l'aperçu d'un import des salariés (POST /rh/employees/import). */
+export interface ImportLine {
+  line: number;
+  name: string;
+  matricule: string | null;
+  company: CompanyRef | null;
+  action: "create" | "update" | "unchanged";
+  employee_id: number | null;
+  /** Motifs du refus (vide : ligne acceptée). */
+  errors: string[];
+  warnings: string[];
+  /** Champs modifiés d'un dossier existant. */
+  changes: string[];
+  to_complete: boolean;
+  missing: string[];
+  /** null : aucune archive de photos envoyée. */
+  photo: "found" | "missing" | "error" | null;
+  photo_file: string | null;
+  department_new: string | null;
+}
+
+export interface ImportResult {
+  imported: boolean;
+  lines: ImportLine[];
+  summary: { create: number; update: number; unchanged: number; refused: number; to_complete: number; photos_found: number; photos_missing: number };
+  departments_created: string[];
+  photos_unmatched: string[];
+  photos_ignored: Array<{ name: string; reason: string }>;
 }

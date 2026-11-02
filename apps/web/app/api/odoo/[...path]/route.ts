@@ -26,6 +26,10 @@ import {
 const ALLOWED_PATH = /^[a-zA-Z0-9_\-/.]+$/;
 /** Société déclarée par la page (X-Eguitra-Company) : un identifiant entier, rien d'autre. */
 const SOCIETE = /^\d{1,9}$/;
+/** Empreintes d'une revalidation (If-None-Match) : celles que pose le noyau, rien d'autre. */
+const EMPREINTES = /^\s*(W\/)?"[A-Za-z0-9_-]{1,64}"(\s*,\s*(W\/)?"[A-Za-z0-9_-]{1,64}")*\s*$/;
+/** Types des photos que le noyau sert avec un cache privé. */
+const PHOTOS = /^image\/(jpeg|png|webp)$/i;
 
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   if (!sameOrigin(req)) return forbiddenOrigin();
@@ -80,6 +84,9 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
 
   const hasBody = !["GET", "HEAD"].includes(req.method);
   const rawBody = hasBody ? await req.arrayBuffer() : null;
+  // Revalidation d'une photo déjà affichée (ETag du noyau) : seule une empreinte bien formée est relayée.
+  const dejaVue = req.method === "GET" ? req.headers.get("if-none-match") : null;
+  const extraHeaders = dejaVue && EMPREINTES.test(dejaVue) ? { "If-None-Match": dejaVue } : undefined;
   const call = (token: string) =>
     odooFetch(apiPath + req.nextUrl.search, {
       method: req.method,
@@ -89,6 +96,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
       clientIp,
       rawBody: rawBody && rawBody.byteLength ? rawBody : null,
       contentType: req.headers.get("content-type"),
+      extraHeaders,
     });
 
   let res: Response;
@@ -121,6 +129,17 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   }
   if (res.status === 401) return unauthenticated();
 
+  // Photo (salarié) : le noyau la sert avec une empreinte et un cache privé revalidé à chaque affichage
+  // (« private, no-cache ») ; la passerelle les relaie, et relaie le « 304 » quand l'écran l'a déjà. Le
+  // navigateur redemande donc toujours au noyau, qui revérifie les droits : rien n'est servi d'un cache à
+  // un autre compte. Tout autre fichier reste en « no-store ».
+  const etag = res.headers.get("etag");
+  const cachePrive = etag && /^private, no-cache$/i.test(res.headers.get("cache-control") ?? "") ? etag : null;
+  if (res.status === 304 && cachePrive) {
+    await res.body?.cancel().catch(() => undefined);
+    return finir(new NextResponse(null, { status: 304, headers: { ETag: cachePrive, "Cache-Control": "private, no-cache" } }));
+  }
+
   const type = res.headers.get("content-type") ?? "application/octet-stream";
   // Réponse d'erreur qui n'est pas du JSON : route inconnue du noyau (identifiant non numérique dans
   // l'adresse), page d'erreur du serveur. L'écran reçoit un message en français, jamais du HTML.
@@ -138,6 +157,10 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
     headers.set("content-type", /html|xml|svg|javascript/i.test(type) ? "application/octet-stream" : type);
     headers.set("content-disposition", attachmentDisposition(res.headers.get("content-disposition")));
     headers.set("content-security-policy", "sandbox; default-src 'none'");
+    if (cachePrive && res.ok && PHOTOS.test(type)) {
+      headers.set("Cache-Control", "private, no-cache");
+      headers.set("ETag", cachePrive);
+    }
   }
   return finir(new NextResponse(res.body, { status: res.status, headers }));
 }
