@@ -18,6 +18,7 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         cls.acheteur = cls.make_user("acheteur.commerce", "achats")
         cls.comptable = cls.make_user("comptable.commerce", "finance")
         cls.chef_comptable = cls.make_user("chef.commerce", "finance")
+        cls.daf = cls.make_user("daf.commerce", "finance")
         cls.dg = cls.make_user("dg.commerce", "direction")
         cls.chef_chantier = cls.make_user("chantier.commerce", "chantiers")
         cls.groupe.write({"eguitra_match_mode": "approval", "eguitra_match_price_tolerance": 2.0,
@@ -39,12 +40,20 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         self.assertEqual(commitment.state, "approved")
         return commitment
 
+    def _approve_all(self, request, users=None):
+        """Chaque étape en attente tranchée par le premier compte qui le peut (une personne par étape)."""
+        users = users or (self.comptable, self.chef_comptable, self.daf, self.dg)
+        while request.state == "pending":
+            decider = next((u for u in users if request._can_decide(u)), None)
+            self.assertTrue(decider, f"Personne pour l'étape « {request.current_step_id.label} »")
+            request.with_user(decider).action_approve()
+
     def _approved_po(self, lines=None):
         po = self.make_po(lines=lines, user=self.acheteur)
         po.action_eguitra_submit()
         request = self.request_of(po)
         if request:
-            request.with_user(self.comptable).action_approve()
+            self._approve_all(request)
         self.assertEqual(po.eguitra_status, "approved")
         return po
 
@@ -74,6 +83,9 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         with self.assertRaises(AccessError, msg="Le demandeur de l'engagement ne tranche pas le bon qui en découle"):
             request.with_user(self.comptable).action_approve()
         request.with_user(self.chef_comptable).action_approve()
+        with self.assertRaises(AccessError, msg="Ni la validation"):
+            request.with_user(self.comptable).action_approve()
+        request.with_user(self.daf).action_approve()
         self.assertEqual(po.eguitra_status, "approved")
 
     def test_circuit_d_approbation_et_quatre_yeux(self):
@@ -82,16 +94,17 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         self.assertEqual((po.state, po.eguitra_status), ("to approve", "to_approve"))
         request = self.request_of(po)
         self.assertEqual(request.document, "purchase_order")
-        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"],
-                         "Règles des engagements : finance, puis direction au-delà de 50 M")
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "finance", "direction"],
+                         "Circuit des bons de commande : contrôle, validation, direction au-delà de 10 M")
         with self.assertRaises(AccessError, msg="Celui qui crée et soumet le bon ne l'approuve pas"):
             request.with_user(self.acheteur).action_approve()
         with self.assertRaises(AccessError, msg="L'étape de la finance ne revient pas à la direction"):
             request.with_user(self.dg).action_approve()
         request.with_user(self.comptable).action_approve()
-        self.assertEqual(po.state, "to approve", "Il reste l'étape de la direction")
-        with self.assertRaises(AccessError):
+        self.assertEqual(po.state, "to approve", "Il reste la validation et l'étape de la direction")
+        with self.assertRaises(AccessError, msg="Le contrôleur ne valide pas aussi"):
             request.with_user(self.comptable).action_approve()
+        request.with_user(self.chef_comptable).action_approve()
         request.with_user(self.dg).action_approve()
         self.assertEqual((po.state, po.eguitra_status), ("purchase", "approved"))
         self.assertEqual(request.state, "approved")
@@ -104,6 +117,9 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         with self.assertRaises(AccessError, msg="L'auteur du bon de commande n'en tranche aucune étape"):
             request.with_user(self.chef_comptable).action_approve()
         request.with_user(self.comptable).action_approve()
+        with self.assertRaises(AccessError, msg="Ni la validation"):
+            request.with_user(self.chef_comptable).action_approve()
+        request.with_user(self.daf).action_approve()
         self.assertEqual(po.state, "purchase")
 
     def test_refus_puis_resoumission_et_empreinte(self):
@@ -219,15 +235,15 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         text = self.html_of("eguitra_commerce.action_report_purchase_order", po)
         for expected in ("BON DE COMMANDE", f"N° {po.name}", "FOURNISSEUR", self.supplier.name,
                          f"Engagement : {commitment.name}", "Commentaire ou indication : Fournitures de démonstration",
-                         "Arrêté le présent bon de commande à la somme de :", "BROUILLON",
+                         "Arrêté le présent bon de commande, toutes taxes comprises, à la somme de :", "BROUILLON",
                          "CONDITIONS DE LA COMMANDE", "Livraison au parc de démonstration."):
             self.assertIn(expected, text)
         direct = self.make_po(user=self.acheteur, lines=[self.po_line("Bureaux", 3, 2_000_000)])
         direct.action_eguitra_submit()
-        self.request_of(direct).with_user(self.comptable).action_approve()
+        self._approve_all(self.request_of(direct))
         text = self.html_of("eguitra_commerce.action_report_purchase_order", direct)
         self.assertNotIn("BROUILLON", text)
-        self.assertIn("APPROUVÉ PAR", text)
+        self.assertIn("CIRCUIT D'APPROBATION", text)
         self.assertIn(self.comptable.name, text)
 
     # ─── Devis fournisseurs ───────────────────────────────────────────────
