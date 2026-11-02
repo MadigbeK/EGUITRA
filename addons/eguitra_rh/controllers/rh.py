@@ -358,6 +358,9 @@ class EguitraRh(http.Controller):
                     "medical_fitness_date", "medical_fitness_until"):
             if key in data:
                 values[key] = date_value(data, key)
+        if "hire_date" in values and not values["hire_date"]:
+            # Facultative en base pour les seules fiches reprises par import : jamais effacée à la saisie.
+            raise ApiError(400, "missing_fields", "Date d'embauche obligatoire.", fields=["hire_date"])
         for key in ("base_salary", "leave_initial"):
             if key in data:
                 values[key] = number(data, key)
