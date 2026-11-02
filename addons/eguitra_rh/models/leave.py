@@ -68,7 +68,8 @@ class EguitraRhLeave(models.Model):
                 if leave.type_id.max_days and leave.days > leave.type_id.max_days:
                     raise UserError(f"{leave.type_id.name} : {jours(leave.type_id.max_days)} ouvrables au plus par demande.")
                 employee = leave.employee_id
-                if leave.date_from < employee.hire_date or (employee.exit_date and leave.date_to > employee.exit_date):
+                if (employee.hire_date and leave.date_from < employee.hire_date) or \
+                        (employee.exit_date and leave.date_to > employee.exit_date):
                     raise UserError("L'absence sort de la période du contrat du salarié.")
                 overlap = self.sudo().search_count([
                     ("id", "!=", leave.id), ("employee_id", "=", employee.id), ("state", "in", ("submitted", "approved")),

@@ -110,7 +110,7 @@ class EguitraRh(http.Controller):
         everyone = Employee.with_context(active_test=False).search([("company_id", "in", companies.ids)])
         current = everyone.filtered(lambda e: e.active and e._state(day) in ("essai", "actif"))
         year_start = day.replace(month=1, day=1)
-        hires = everyone.filtered(lambda e: e.hire_date >= year_start and e.hire_date <= day)
+        hires = everyone.filtered(lambda e: e.hire_date and year_start <= e.hire_date <= day)
         exits = everyone.filtered(lambda e: e.exit_date and year_start <= e.exit_date <= day)
         last_year = day - relativedelta(years=1)
         exits_12 = everyone.filtered(lambda e: e.exit_date and last_year <= e.exit_date <= day)
@@ -244,7 +244,7 @@ class EguitraRh(http.Controller):
                     else emp.birth_date.replace(year=day.year, day=28)
                 if day <= birthday <= day + timedelta(days=7):
                     add("birthday", "info", birthday, emp, f"Anniversaire de {emp.name}.", href)
-            if emp.hire_date.year < day.year:
+            if emp.hire_date and emp.hire_date.year < day.year:
                 anniversary = emp.hire_date.replace(year=day.year) if not (emp.hire_date.month == 2 and emp.hire_date.day == 29) \
                     else emp.hire_date.replace(year=day.year, day=28)
                 if day <= anniversary <= day + timedelta(days=7):

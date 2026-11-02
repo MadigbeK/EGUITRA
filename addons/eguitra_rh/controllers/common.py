@@ -178,12 +178,15 @@ def employee_row(emp, day=None):
         "id": emp.id, "matricule": emp.matricule, "name": emp.name, "company": company_ref(emp.company_id),
         "job_title": emp.job_title or None,
         "department": ref(emp.department_id), "manager": ref(emp.manager_id), "category": emp.category or None,
-        "contract_type": emp.contract_type, "hire_date": emp.hire_date, "contract_end": emp.contract_end or None,
+        "contract_type": emp.contract_type, "hire_date": emp.hire_date or None, "contract_end": emp.contract_end or None,
         "trial_end": emp.trial_end or None, "exit_date": emp.exit_date or None, "state": emp._state(day),
         "base_salary": emp.base_salary, "monthly_gross": round(emp._monthly_gross()),
         "seniority_years": emp._seniority(day), "leave_balance": emp._leave_balance(day)["balance"],
         "phone": emp.phone or None, "email": emp.email or None, "absent_today": emp._absent_on(day),
         "issues": emp._issues(),
+        # Version de la photo (None : pas de photo) : l'écran la lit par GET /rh/employees/<id>/photo?v=…
+        "photo": emp.photo_version or None,
+        "to_complete": emp.to_complete, "payroll_missing": emp._payroll_missing(),
     }
 
 

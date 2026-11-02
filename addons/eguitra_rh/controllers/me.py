@@ -49,6 +49,7 @@ class EguitraRhMe(http.Controller):
                 "department": ref(emp.department_id), "manager": ref(emp.manager_id), "company": emp.company_id.name,
                 "hire_date": emp.hire_date, "seniority_years": emp._seniority(day), "contract_type": emp.contract_type,
                 "phone": emp.phone or None, "email": emp.email or None,
+                "photo": emp.photo_version or None,
             },
             "balance": emp._leave_balance(day),
             "leaves": [leave_row(leave) for leave in Leave.search([("employee_id", "=", emp.id)], limit=50)],

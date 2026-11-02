@@ -55,6 +55,20 @@ def detect_type(content):
     return None
 
 
+IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
+
+
+def detect_image(content):
+    """Photo (salarié, compte) : JPEG, PNG ou WebP reconnu à sa signature, ou None. Le WebP n'est accepté
+    qu'ici, jamais pour les pièces conservées (detect_type)."""
+    mimetype = detect_type(content)
+    if mimetype in IMAGE_TYPES:
+        return mimetype
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
 def checked_name(filename, mimetype, default="piece"):
     """Nom sans chemin, avec l'extension du format reconnu (« facture.exe » en PDF devient « facture.pdf »)."""
     name = os.path.basename((filename or "").replace("\\", "/")).strip() or default

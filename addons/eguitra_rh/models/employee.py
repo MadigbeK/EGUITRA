@@ -5,6 +5,7 @@ Chaque salarié a une fiche tiers (créée avec lui) : son net à payer est port
 ce qui permet à la finance de lettrer le virement de chacun.
 """
 
+import uuid
 from datetime import date
 
 from dateutil.relativedelta import relativedelta
@@ -74,7 +75,9 @@ class EguitraRhEmployee(models.Model):
         "account.analytic.account", "Activité",
         help="Axe d'activité où la masse salariale du salarié est imputée (transport, BTP, immobilier, conseil…).")
     contract_type = fields.Selection(CONTRACTS, "Contrat", required=True, default="cdi")
-    hire_date = fields.Date("Date d'embauche", required=True)
+    # Facultative en base : un salarié repris par import sans date d'entrée connue reste « à compléter »
+    # (to_complete) et n'entre dans aucune paie tant qu'elle manque (aucune date n'est inventée).
+    hire_date = fields.Date("Date d'embauche")
     contract_end = fields.Date("Fin du contrat")
     trial_end = fields.Date("Fin de la période d'essai")
     exit_date = fields.Date("Date de sortie")
@@ -98,19 +101,48 @@ class EguitraRhEmployee(models.Model):
     leave_ids = fields.One2many("eguitra.rh.leave", "employee_id", "Absences")
     note = fields.Text("Observations")
 
+    # Photo : carrée, réduite à 1024 pixels au plus (photo.normalize), et ses tailles réduites. photo_version
+    # change à chaque envoi ou retrait : elle sert d'empreinte (ETag) et d'indice de cache aux écrans. La
+    # photo elle-même est exclue de la piste d'audit (protect_photo_audit) ; photo_version y reste.
+    photo = fields.Image("Photo", max_width=1024, max_height=1024)
+    photo_512 = fields.Image("Photo (512)", related="photo", max_width=512, max_height=512, store=True)
+    photo_128 = fields.Image("Photo (128)", related="photo", max_width=128, max_height=128, store=True)
+    photo_version = fields.Char("Version de la photo", readonly=True, copy=False)
+    to_complete = fields.Boolean(
+        "Fiche à compléter", compute="_compute_to_complete", store=True, index=True,
+        help="Une donnée obligatoire pour la paie manque (date d'embauche, salaire de base) : aucune paie de la "
+             "société n'est validée tant qu'elle n'est pas saisie.")
+
     _matricule_unique = models.Constraint("unique(company_id, matricule)", "Ce matricule existe déjà.")
 
     @api.constrains("hire_date", "contract_end", "trial_end", "exit_date", "contract_type")
     def _check_dates(self):
         for emp in self:
+            if emp.contract_type == "cdd" and not emp.contract_end:
+                raise UserError("Un CDD a une date de fin.")
+            if not emp.hire_date:
+                continue
             if emp.contract_end and emp.contract_end < emp.hire_date:
                 raise UserError("La fin du contrat précède l'embauche.")
             if emp.trial_end and emp.trial_end < emp.hire_date:
                 raise UserError("La fin de la période d'essai précède l'embauche.")
             if emp.exit_date and emp.exit_date < emp.hire_date:
                 raise UserError("La date de sortie précède l'embauche.")
-            if emp.contract_type == "cdd" and not emp.contract_end:
-                raise UserError("Un CDD a une date de fin.")
+
+    @api.depends("hire_date", "base_salary", "contract_type")
+    def _compute_to_complete(self):
+        for emp in self:
+            emp.to_complete = bool(emp._payroll_missing())
+
+    def _payroll_missing(self):
+        """Données obligatoires pour la paie qui manquent au dossier (libellés)."""
+        self.ensure_one()
+        missing = []
+        if not self.hire_date:
+            missing.append("Date d'embauche")
+        if not self.base_salary and self.contract_type in ("cdi", "cdd"):
+            missing.append("Salaire de base")
+        return missing
 
     @api.constrains("department_id", "activity_account_id", "company_id")
     def _check_links(self):
@@ -144,7 +176,11 @@ class EguitraRhEmployee(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get("photo"):
+                vals["photo_version"] = uuid.uuid4().hex[:16]
         records = super().create(vals_list)
+        records.filtered(lambda e: e.user_id and e.photo)._sync_user_photo()
         Partner = self.env["res.partner"].sudo()
         for emp in records:
             if not emp.matricule:
@@ -155,13 +191,15 @@ class EguitraRhEmployee(models.Model):
             })
             if emp.base_salary:
                 self.env["eguitra.rh.salary.change"].sudo().create({
-                    "employee_id": emp.id, "date": emp.hire_date, "old_salary": 0, "new_salary": emp.base_salary,
-                    "reason": "Embauche",
+                    "employee_id": emp.id, "date": emp.hire_date or fields.Date.context_today(self), "old_salary": 0,
+                    "new_salary": emp.base_salary, "reason": "Embauche" if emp.hire_date else "Reprise du dossier",
                 })
         records._draft_payrolls()._mark_stale()
         return records
 
     def write(self, vals):
+        if "photo" in vals:
+            vals = dict(vals, photo_version=uuid.uuid4().hex[:16] if vals["photo"] else False)
         reason = self.env.context.get("salary_reason")
         changes = []
         if "base_salary" in vals:
@@ -181,7 +219,19 @@ class EguitraRhEmployee(models.Model):
         sync = {k: vals[k] for k in ("name", "phone", "email") if k in vals}
         if sync:
             self.partner_id.sudo().write({k: v or False for k, v in sync.items()})
+        if "photo" in vals:
+            self.filtered("user_id")._sync_user_photo()
+        elif vals.get("user_id"):
+            # Compte lié après coup : il reçoit la photo du dossier, s'il y en a une.
+            self.filtered("photo")._sync_user_photo()
         return result
+
+    def _sync_user_photo(self):
+        """La photo du salarié devient celle de son compte NIMOVA (retirée avec elle). Écrite en sudo : le
+        salarié qui change sa photo n'a aucun droit sur les comptes."""
+        for emp in self.sudo():
+            if emp.user_id:
+                emp.user_id.write({"image_1920": emp.photo or False})
 
     def _base_salary_at(self, day):
         """Salaire de base en vigueur à une date, d'après l'historique du salaire (date de chaque
@@ -200,7 +250,7 @@ class EguitraRhEmployee(models.Model):
         result = Payroll
         for company in self.sudo().company_id:
             payrolls = Payroll.search([("company_id", "=", company.id), ("state", "=", "draft")])
-            for emp in self.sudo().filtered(lambda e, c=company: e.company_id == c):
+            for emp in self.sudo().filtered(lambda e, c=company: e.company_id == c and e.hire_date):
                 for payroll in payrolls:
                     start, end = month_bounds(payroll.month)
                     if emp.hire_date <= end and (not emp.exit_date or emp.exit_date >= start):
@@ -223,6 +273,8 @@ class EguitraRhEmployee(models.Model):
         today = today or fields.Date.context_today(self)
         if self.exit_date and self.exit_date < today:
             return "sorti"
+        if not self.hire_date:
+            return "actif"  # dossier repris sans date d'entrée : en poste, « à compléter » (to_complete)
         if self.hire_date > today:
             return "a_venir"
         if self.trial_end and self.trial_end >= today:
@@ -263,6 +315,8 @@ class EguitraRhEmployee(models.Model):
             issues.append("Numéro mobile money manquant")
         if not self.activity_account_id:
             issues.append("Activité d'imputation manquante")
+        if not self.hire_date:
+            issues.append("Date d'embauche manquante")
         if not self.base_salary:
             issues.append("Salaire de base non renseigné")
         if not self.id_number:
@@ -279,10 +333,11 @@ class EguitraRhEmployee(models.Model):
         start = self.leave_initial_date or self.hire_date
         end = min(on_date, self.exit_date) if self.exit_date else on_date
         acquired = full_months(start, end) * settings.leave_days_per_month
-        leaves = self.env["eguitra.rh.leave"].sudo().search([
-            ("employee_id", "=", self.id), ("type_id.deducts_balance", "=", True), ("date_from", ">=", start),
-            ("state", "in", ("submitted", "approved")),
-        ])
+        domain = [("employee_id", "=", self.id), ("type_id.deducts_balance", "=", True),
+                  ("state", "in", ("submitted", "approved"))]
+        if start:
+            domain.append(("date_from", ">=", start))
+        leaves = self.env["eguitra.rh.leave"].sudo().search(domain)
         taken = sum(leaves.filtered(lambda l: l.state == "approved").mapped("days"))
         pending = sum(leaves.filtered(lambda l: l.state == "submitted").mapped("days"))
         initial = self.leave_initial or 0.0

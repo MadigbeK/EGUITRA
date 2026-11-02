@@ -189,6 +189,11 @@ class EguitraRhPayroll(models.Model):
             if payroll.sudo()._prepared_by(user):
                 raise AccessError("La paie doit être validée par une autre personne que celle qui l'a préparée "
                                   "(création, calcul ou éléments variables).")
+            incomplete = payroll._incomplete_employees()
+            if incomplete:
+                raise UserError("Paie non validée : fiches à compléter, "
+                                + " ; ".join(f"{e.name} ({', '.join(e._payroll_missing()).lower()})" for e in incomplete)
+                                + ".")
             if not payroll.payslip_ids:
                 raise UserError("Aucun bulletin : aucun salarié n'est sous contrat ce mois-là.")
             if payroll.needs_compute:
@@ -209,6 +214,17 @@ class EguitraRhPayroll(models.Model):
             # Les paies suivantes en préparation qui retiennent ces avances sont à recalculer (reste dû
             # changé), sans inscrire la direction parmi leurs préparateurs.
             (advances._draft_payrolls() - payroll)._flag_stale()
+
+    def _incomplete_employees(self):
+        """Salariés de la société à qui manque une donnée obligatoire de la paie (date d'embauche, salaire de
+        base : fiche reprise par import, par exemple) et qui pourraient être sous contrat ce mois-là : la paie
+        attend qu'elle soit saisie, sans rien inventer."""
+        self.ensure_one()
+        start, end = month_bounds(self.month)
+        return self.env["eguitra.rh.employee"].sudo().search([
+            ("company_id", "=", self.company_id.id), ("to_complete", "=", True),
+            "|", ("hire_date", "=", False), ("hire_date", "<=", end),
+            "|", ("exit_date", "=", False), ("exit_date", ">=", start)])
 
     def _advance_excess(self):
         """Avances que cette paie retiendrait au-delà de leur reste dû (retenues des paies validées comprises)."""
