@@ -47,6 +47,8 @@ export interface Me {
   rights?: { free_accounts?: boolean };
   /** Application où la session a été ouverte ; une session de Rotations (« mobile ») n'ouvre que Rotations. */
   session_app?: string | null;
+  /** Version de la photo du compte (null : initiales) ; voir components/AvatarCompte. */
+  avatar?: string | null;
   /**
    * Posé par le serveur web (requireUser), jamais par le noyau : la société mémorisée pour
    * l'application n'est plus ouverte au compte ; la page travaille dans sa société par défaut
