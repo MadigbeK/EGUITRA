@@ -27,10 +27,14 @@ SIGNATURE_SIZE = (600, 240)
 class ResUsers(models.Model):
     _inherit = "res.users"
 
-    eguitra_signature = fields.Binary("Signature manuscrite scannée", attachment=True, copy=False)
-    eguitra_signature_mimetype = fields.Char("Format de la signature", copy=False)
-    eguitra_signature_at = fields.Datetime("Signature déposée le", copy=False)
-    eguitra_signature_by = fields.Many2one("res.users", "Signature déposée par", copy=False)
+    # Réservés au système : lus et écrits par les seules routes de signature et le gabarit, en sudo ; aucun
+    # autre compte ne lit la signature d'un collègue par l'ORM.
+    eguitra_signature = fields.Binary("Signature manuscrite scannée", attachment=True, copy=False,
+                                      groups="base.group_system")
+    eguitra_signature_mimetype = fields.Char("Format de la signature", copy=False, groups="base.group_system")
+    eguitra_signature_at = fields.Datetime("Signature déposée le", copy=False, groups="base.group_system")
+    eguitra_signature_by = fields.Many2one("res.users", "Signature déposée par", copy=False,
+                                           groups="base.group_system")
 
     def _eguitra_set_signature(self, content, author):
         """Dépose l'image (octets bruts) ; refus clair d'un autre format ou d'un fichier trop lourd."""
