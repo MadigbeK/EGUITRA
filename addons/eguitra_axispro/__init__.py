@@ -19,5 +19,9 @@ EXPERT_MODELS = ["axispro.plan", "axispro.plan.line", "axispro.risk", "axispro.a
 # Outil du cabinet version 3 (19.0.1.3.0) : compartiments de la grille et consultants des dossiers.
 COMPARTMENT_MODELS = ["axispro.compartment", "axispro.assignment"]
 
+# Relances du porteur (19.0.1.6.0) : piste d'audit posée aussi par la migration 19.0.1.6.1 sur une base
+# existante.
+RELANCE_MODELS = ["axispro.relance"]
+
 # Liste complète, lue par eguitra_base (eguitra.setup.audited_models).
-AUDITED_MODELS = CORE_MODELS + EXPERT_MODELS + COMPARTMENT_MODELS
+AUDITED_MODELS = CORE_MODELS + EXPERT_MODELS + COMPARTMENT_MODELS + RELANCE_MODELS
