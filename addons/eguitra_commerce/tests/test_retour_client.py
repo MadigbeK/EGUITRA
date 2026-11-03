@@ -149,7 +149,9 @@ class TestRetourClientAchats(CommerceDataMixin, TransactionCase):
         request.with_user(self.dg).action_approve()
         self.assertEqual(po.eguitra_status, "approved")
         self.assertEqual(len(request.step_ids.decided_by), 2, "Deux personnes différentes")
-        # Le comptable qui saisit un bon ne le contrôle pas : le contrôle revient à une autre personne.
+        # Société sans réserve de l'émission (comme MB AxisPro Consulting) : le comptable qui saisit un bon ne le
+        # contrôle pas, le contrôle revient à une autre personne.
+        self.groupe.eguitra_po_issue_reserved = False
         own = self.make_po(user=self.comptable, lines=[self.po_line("Ramettes (test)", 10, 50_000)])
         own.with_user(self.acheteur).sudo().action_eguitra_submit()
         with self.assertRaises(AccessError):
@@ -370,7 +372,7 @@ class TestRetourClientAchats(CommerceDataMixin, TransactionCase):
         commitment.action_submit()
         self._approve_all(self.request_of(commitment), users=(self.comptable, self.daf, self.dg))
         self.assertEqual(commitment.state, "approved")
-        po = self.make_po(user=self.chef_chantier, eguitra_commitment_id=commitment.id,
+        po = self.make_po(user=self.acheteur, eguitra_commitment_id=commitment.id,
                           lines=[self.po_line("Gasoil (litres)", 640, 12_500)])
         self.assertEqual((po.partner_ref, po.eguitra_quote_date, po.eguitra_quote_kind),
                          ("DEV-ENG-42", quote.date, "quote"))

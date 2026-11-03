@@ -12,7 +12,7 @@ import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Kpi, Mo
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { CREATION_TIERS, PagesListe, aujourdhui } from "@/components/finance/communPieces";
 import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
-import { ACHATS_PIECE, ACHATS_TOUS, CATEGORIES_PIECE, TON_BON, type Approbation, type Article, type BonCommande, type CircuitPrevu, type EvenementBon, type Page, type PieceAchat, type PieceJointeBon, type Referentiels } from "@/lib/commerce-types";
+import { ACHATS_PIECE, ACHATS_TOUS, CATEGORIES_PIECE, TON_BON, type Approbation, type Article, type BonCommande, type CircuitPrevu, type EvenementBon, type Page, type PageBons, type PieceAchat, type PieceJointeBon, type Referentiels } from "@/lib/commerce-types";
 import { useEnvoi } from "@/lib/envoi";
 import { AIDE_NOMBRE, fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtPct, lireNombre, nombreIllisible } from "@/lib/format";
 import { LignesSaisie, corpsLignes, lignesDe, nouvelleLigne, totalHt, type LigneSaisie } from "./LignesSaisie";
@@ -41,8 +41,9 @@ export function BonsCommandePage() {
   const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
   if (vue !== "all") params.set("view", vue);
   if (search) params.set("search", search);
-  const { data, error, mutate } = useApi<Page<BonCommande>>(`/commerce/purchase-orders?${params.toString()}`);
-  const saisie = useAutorise(ACHATS_TOUS);
+  const { data, error, mutate } = useApi<PageBons>(`/commerce/purchase-orders?${params.toString()}`);
+  // Émission (nouveau bon) : drapeau du noyau, qui tient compte de la réserve du service Achats.
+  const emission = useAutorise(ACHATS_TOUS) && !!data?.can_issue;
   const items = data?.items ?? [];
   return (
     <div>
@@ -52,10 +53,13 @@ export function BonsCommandePage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => setPieces(true)}><Paperclip className="h-4 w-4" /> Pièces des bons</Button>
-            {saisie && <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bon de commande</Button>}
+            {emission && <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bon de commande</Button>}
           </div>
         }
       />
+      {data?.issue_reserved && !data.can_issue && (
+        <div className="mb-4"><Notice tone="neutral">Émission réservée au service Achats (Responsable Achats et Contrats) : vous consultez, réceptionnez, contrôlez ou approuvez les bons ; leur création, leur modification, leur soumission et leur annulation avant approbation reviennent au service Achats.</Notice></div>
+      )}
       {data && vue === "open" && (
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Kpi label="Bons à recevoir" value={fmtInt(data.total)} />
@@ -321,6 +325,7 @@ function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void;
             </div>
             {o.conditions && <div className="text-[12.5px] text-ink-2"><span className="text-muted">Autres conditions : </span><span className="whitespace-pre-line">{o.conditions}</span></div>}
             {o.tax_exemption && <div className="text-[12.5px] text-ink-2"><span className="text-muted">Mention d&apos;exonération : </span>{o.tax_exemption}</div>}
+            {o.issue_reserved && (o.status === "draft" || o.status === "rejected") && !o.can.submit && <Notice tone="neutral">Émission réservée au service Achats : ce brouillon se modifie, se soumet ou s&apos;annule par le service Achats (Responsable Achats et Contrats).</Notice>}
             {o.status === "to_approve" && o.approval?.pending_with && <Notice tone="warn">En approbation, à l&apos;étape de : {o.approval.pending_with}. Celui qui l&apos;a saisi ou soumis n&apos;en tranche aucune étape.</Notice>}
             {o.status === "rejected" && <Notice tone="warn">Refusé{o.approval?.rejected_by ? ` par ${o.approval.rejected_by}` : ""}{o.approval?.rejected_reason ? ` : ${o.approval.rejected_reason}` : ""}. Modifiez-le au besoin, puis soumettez-le de nouveau.</Notice>}
             <DataTable dense rows={o.lines ?? []} rowKey={(l) => l.id} columns={[

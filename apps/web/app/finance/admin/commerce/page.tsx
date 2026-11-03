@@ -21,6 +21,9 @@ interface Reglages {
   match_mode: "approval" | "block";
   match_modes: Array<{ value: string; label: string }>;
   three_quotes_threshold: number;
+  /** Émission des bons de commande réservée au service Achats ; modifiable par l'administration seule. */
+  po_issue_reserved: boolean;
+  po_issue_reserved_editable: boolean;
   numbering: Numerotation[];
 }
 
@@ -29,8 +32,10 @@ export default function ReglagesCommercePage() {
   const envoi = useEnvoi();
   const [f, setF] = useState<Record<string, string>>({});
   const [num, setNum] = useState<Record<string, { prefix: string; next_number: string }>>({});
+  const [reserve, setReserve] = useState(false);
   useEffect(() => {
     if (!data) return;
+    setReserve(data.po_issue_reserved);
     setF({
       validity_days: String(data.validity_days), reminder_days: String(data.reminder_days),
       match_qty_tolerance: fmtDec(data.match_qty_tolerance), match_price_tolerance: fmtDec(data.match_price_tolerance),
@@ -55,6 +60,8 @@ export default function ReglagesCommercePage() {
       if (Object.keys(change).length) numbering[n.code] = change;
     }
     if (Object.keys(numbering).length) body.numbering = numbering;
+    // Réglage de l'administration seule : envoyé seulement s'il change (la finance enregistre le reste).
+    if (data.po_issue_reserved_editable && reserve !== data.po_issue_reserved) body.po_issue_reserved = reserve;
     if (await envoi.run("enregistrer", () => apiSend("PATCH", "/commerce/settings", body), "Réglages enregistrés.")) void mutate();
   }
 
@@ -78,6 +85,15 @@ export default function ReglagesCommercePage() {
                 <Field label="Tolérance sur les prix (%)" hint="Prix facturé admis au-delà du prix commandé."><Input inputMode="decimal" value={f.match_price_tolerance ?? ""} onChange={(e) => setF({ ...f, match_price_tolerance: e.target.value })} /></Field>
                 <Field label="Une pièce en écart"><Select value={f.match_mode ?? "approval"} onChange={(e) => setF({ ...f, match_mode: e.target.value })} options={d.match_modes} /></Field>
               </div>
+            </Card>
+            <Card title="Bons de commande fournisseur">
+              <label className="flex items-start gap-3 text-sm">
+                <input type="checkbox" className="mt-1 h-4 w-4" checked={reserve} disabled={!d.po_issue_reserved_editable} onChange={(e) => setReserve(e.target.checked)} />
+                <span>
+                  <span className="font-semibold text-ink">Émission des bons de commande réservée au service Achats</span>
+                  <span className="mt-1 block text-[12.5px] text-muted">Activé : seuls les comptes au profil Achats (Responsable Achats et Contrats) créent un bon de commande, modifient un brouillon, le soumettent et l&apos;annulent avant son approbation. Lecture, réception, pièces jointes, facture du fournisseur, contrôle et approbation ne changent pas.{d.po_issue_reserved_editable ? "" : " Réglage tenu par l'administration : consultation seulement."}</span>
+                </span>
+              </label>
             </Card>
             <Card title="Devis fournisseurs">
               <Field label="Trois devis exigés au-delà de (GNF HT)" hint="Engagements de plus de ce montant : trois devis de fournisseurs différents et le devis retenu, motivé. 0 : règle désactivée."><Input inputMode="decimal" value={f.three_quotes_threshold ?? ""} onChange={(e) => setF({ ...f, three_quotes_threshold: e.target.value })} /></Field>

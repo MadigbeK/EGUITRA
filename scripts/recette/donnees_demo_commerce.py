@@ -18,6 +18,9 @@ Pour que le cahier 11 se joue :
   contrôlé par test.comptable, en attente de l'approbation de la direction générale (test.dg) ;
   un bon « Gardiennage exonéré (démo) » sans TVA, avec sa mention d'exonération, en brouillon.
 
+Tous les bons de commande sont émis par test.achats (profil Achats) : chez EGUITRA GROUP SARLU, l'émission est
+réservée au service Achats. Lancer d'abord comptes_test.py.
+
   docker compose exec -T odoo-recette odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \\
       < ../scripts/recette/donnees_demo_commerce.py
 
@@ -176,11 +179,15 @@ def decide(request, stop_before=None):
 
 
 PO = env["purchase.order"]
+# Émetteur des bons : le compte Achats de la recette (émission réservée au service Achats chez EGUITRA GROUP).
+BUYER = env["res.users"].search([("login", "=", "test.achats")], limit=1)
+assert BUYER and "achats" in BUYER._eguitra_profiles(), \
+    "Compte test.achats (profil Achats) absent : lancer d'abord scripts/recette/comptes_test.py."
 if not PO.search_count([("eguitra_object", "=", "Ciment du chantier (démo)")]):
     quincaillerie = partner("Démo - Quincaillerie du port", supplier_rank=1)
-    buyer = env["res.users"].search([("login", "=", "test.achats")], limit=1)
+    buyer = BUYER
     planned = fields.Datetime.now() + timedelta(days=3)
-    Orders = PO.with_user(buyer.id or env.uid).sudo().with_company(groupe)._eguitra_quiet()
+    Orders = PO.with_user(buyer.id).sudo().with_company(groupe)._eguitra_quiet()
     po = Orders.create({
         "partner_id": quincaillerie.id, "company_id": groupe.id, "eguitra_object": "Ciment du chantier (démo)",
         "date_planned": planned, "eguitra_conditions": "Livraison au chantier de l'entrepôt de stockage (démo).",
@@ -196,7 +203,7 @@ if not PO.search_count([("eguitra_object", "=", "Ciment du chantier (démo)")]):
         po._eguitra_approve()
     po.action_eguitra_mark_sent()
     po.eguitra_receive({po.order_line: 120}, date=today, note="Première livraison, 120 sacs (démo)",
-                       received_by=buyer or env.user)
+                       received_by=buyer)
     bill = po.eguitra_create_bill(ref="FAC-QDP-0001 (démo)", quantities={po.order_line: 150},
                                   prices={po.order_line: 97_500})
     match = bill._eguitra_match()
@@ -208,10 +215,10 @@ if not PO.search_count([("eguitra_object", "=", "Ciment du chantier (démo)")]):
 if not PO.search_count([("eguitra_object", "=", "Groupe électrogène du chantier (démo)")]):
     fournisseur = partner("Démo - Énergie et groupes de Guinée", supplier_rank=1, vat="000111222",
                           company_registry="RCCM démo 0001", city="Conakry")
-    buyer = env["res.users"].search([("login", "=", "test.achats")], limit=1)
+    buyer = BUYER
     term = env["account.payment.term"].search([("company_id", "in", [False, groupe.id])], limit=1)
     planned = fields.Datetime.now() + timedelta(days=10)
-    po = PO.with_user(buyer.id or env.uid).sudo().with_company(groupe)._eguitra_quiet().create({
+    po = PO.with_user(buyer.id).sudo().with_company(groupe)._eguitra_quiet().create({
         "partner_id": fournisseur.id, "company_id": groupe.id, "eguitra_object": "Groupe électrogène du chantier (démo)",
         "date_planned": planned, "partner_ref": "PRO-EGG-0007 (démo)", "eguitra_quote_kind": "proforma",
         "eguitra_quote_date": today - timedelta(days=2), "payment_term_id": term.id or False,
@@ -228,7 +235,7 @@ if not PO.search_count([("eguitra_object", "=", "Groupe électrogène du chantie
         "name": "proforma-PRO-EGG-0007-demo.pdf", "mimetype": "application/pdf", "res_model": "purchase.order",
         "res_id": po.id, "datas": base64.b64encode(b"%PDF-1.4\n% Facture proforma fictive (demo)\n%%EOF\n"),
     })
-    env["eguitra.commerce.purchase.document"].with_user(buyer.id or env.uid).sudo().create({
+    env["eguitra.commerce.purchase.document"].with_user(buyer.id).sudo().create({
         "order_id": po.id, "category": "proforma", "name": attachment.name, "attachment_id": attachment.id,
         "note": "Pièce fictive de démonstration"})
     po.action_eguitra_submit()
@@ -237,9 +244,9 @@ if not PO.search_count([("eguitra_object", "=", "Groupe électrogène du chantie
 
 if not PO.search_count([("eguitra_object", "=", "Gardiennage exonéré (démo)")]):
     gardien = partner("Démo - Gardiennage et sécurité", supplier_rank=1)
-    buyer = env["res.users"].search([("login", "=", "test.achats")], limit=1)
+    buyer = BUYER
     planned = fields.Datetime.now() + timedelta(days=5)
-    po = PO.with_user(buyer.id or env.uid).sudo().with_company(groupe)._eguitra_quiet().create({
+    po = PO.with_user(buyer.id).sudo().with_company(groupe)._eguitra_quiet().create({
         "partner_id": gardien.id, "company_id": groupe.id, "eguitra_object": "Gardiennage exonéré (démo)",
         "date_planned": planned, "eguitra_tax_exemption": "Prestation exonérée de TVA (mention de démonstration)",
         "order_line": [Command.create({"product_id": env["product.template"]._eguitra_generic_product(groupe, "purchase").id,

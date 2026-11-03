@@ -12,14 +12,16 @@ from odoo.addons.eguitra_finance.controllers.common import as_float, as_int, che
 
 from ..models.documents import document_filename, send_document
 from ..models.purchase_document import DOCUMENT_CATEGORIES, EDITABLE_STATES
-from ..models.purchase_order import QUOTE_KINDS, STATUS
+from ..models.purchase_order import PRE_APPROVAL, QUOTE_KINDS, STATUS
 from .common import (
     PURCHASE_ALL,
     PURCHASE_BILL,
     PURCHASE_FULL,
     QUOTES,
     check_company,
+    check_issuer,
     company,
+    issuing,
     line_row,
     order_line_of,
     partner_of,
@@ -157,6 +159,7 @@ def po_row(order, detail=False):
     billed = sum(l.qty_invoiced * l.price_unit * (1 - (l.discount or 0) / 100) for l in lines)
     status = order.eguitra_status
     approved = order.state == "purchase"
+    issuer = order.company_id._eguitra_can_issue_purchase_orders(request.env.user)
     data = {
         "id": order.id, "name": order.name, "status": status, "status_label": STATUS_LABELS.get(status, status),
         "partner": ref(order.partner_id), "object": order.eguitra_object or None, "partner_ref": order.partner_ref or None,
@@ -176,11 +179,13 @@ def po_row(order, detail=False):
         "sent_at": order.eguitra_sent_at, "sent_by": user_ref(order.eguitra_sent_by),
         "emailed_to": order.eguitra_emailed_to or None, "created_by": user_ref(order.create_uid),
         "approval": order._eguitra_approval_info(), "company": ref(order.company_id),
+        "issue_reserved": order.company_id.eguitra_po_issue_reserved,
         "can": {
-            "edit": order.state == "draft", "submit": order.state == "draft", "send": approved,
+            "edit": order.state == "draft" and issuer, "submit": order.state == "draft" and issuer, "send": approved,
             "receive": approved and any(l.qty_received < l.product_qty for l in lines),
             "bill": approved and any(l.qty_received > l.qty_invoiced for l in lines),
-            "cancel": order.state != "cancel" and not order.eguitra_receipt_ids.filtered(lambda r: r.state == "done"),
+            "cancel": order.state != "cancel" and not order.eguitra_receipt_ids.filtered(lambda r: r.state == "done")
+            and (issuer or order.state not in PRE_APPROVAL),
         },
     }
     if detail:
@@ -268,7 +273,7 @@ class EguitraCommercePurchases(http.Controller):
         limit, offset = int_arg(kw, "limit", 100, 1, 500), int_arg(kw, "offset", 0, 0)
         orders = Order.search(domain, limit=limit, offset=offset, order="id desc")
         return {"items": [po_row(o) for o in orders], "total": Order.search_count(domain), "limit": limit,
-                "offset": offset}
+                "offset": offset, **issuing()}
 
     @api_route("/commerce/purchase-orders/<int:order_id>", profiles=PURCHASE_ALL)
     def purchase_order(self, order_id, **_kw):
@@ -278,6 +283,7 @@ class EguitraCommercePurchases(http.Controller):
     def create_purchase_order(self, **_kw):
         """Bon de commande direct, ou depuis un engagement approuvé (commitment_id : son fournisseur, son objet,
         et sans lignes, une ligne du reste à commander sur son compte et son analytique). submit=true le soumet."""
+        check_issuer()
         data = read_json()
         comp = company()
         commitment = None
@@ -313,6 +319,7 @@ class EguitraCommercePurchases(http.Controller):
     def update_purchase_order(self, order_id, **_kw):
         """Modification d'un bon de commande en brouillon (ou refusé), avant sa soumission."""
         order = _po(order_id)
+        check_issuer()
         if order.state != "draft":
             raise ApiError(422, "business_rule", "Seul un bon de commande en brouillon ou refusé se modifie.")
         data = read_json()
@@ -331,6 +338,8 @@ class EguitraCommercePurchases(http.Controller):
     def act(self, order_id, action, **_kw):
         order = _po(order_id)
         data = read_json()
+        if action == "submit" or (action == "cancel" and order.state in PRE_APPROVAL):
+            check_issuer()
         if action == "submit":
             order.action_eguitra_submit()
         elif action == "send":
@@ -554,7 +563,8 @@ class EguitraCommercePurchases(http.Controller):
                 "selected_by": user_ref(q.selected_by), "selected_at": q.selected_at,
             } for q in quotes],
             "purchase_orders": [po_row(o) for o in orders.sorted("id")],
-            "can_order": commitment.state == "approved",
+            "can_order": commitment.state == "approved" and comp._eguitra_can_issue_purchase_orders(request.env.user),
+            "issue_reserved": comp.eguitra_po_issue_reserved,
         }
 
     @api_route("/commerce/commitments/<int:commitment_id>/purchasing", profiles=QUOTES)

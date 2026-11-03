@@ -1,6 +1,7 @@
 """Réglages des achats et des ventes de la société de travail (administration et finance) : validité des
 offres, relance avant expiration, rapprochement des pièces d'achat (tolérances, écart bloquant ou soumis au
-circuit), règle des trois devis, numérotation des offres, des bons de commande et des réceptions."""
+circuit), règle des trois devis, numérotation des offres, des bons de commande et des réceptions ; émission des
+bons de commande réservée au service Achats, réglée par l'administration seule (lue par la finance)."""
 
 import re
 
@@ -11,7 +12,11 @@ from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, r
 from odoo.addons.eguitra_finance.controllers.common import as_float, as_int
 
 from ..models.res_company import MATCH_MODES, SEQUENCES
-from .common import SETTINGS, company
+from .common import SETTINGS, company, profiles
+
+# Séparation des responsabilités : l'administration seule lève ou pose la réserve (la finance contrôle des bons
+# qu'elle ne doit pas pouvoir émettre elle-même en levant la réserve).
+ISSUE_SETTING = ("admin",)
 
 PREFIX = re.compile(r"^[A-Za-z0-9/._ -]*(%\((year|y)\)s[A-Za-z0-9/._ -]*)*$")
 NUMBERED = {"sale.order": "sale.order", "purchase.order": "purchase.order",
@@ -39,6 +44,8 @@ def settings_row(comp):
         "match_price_tolerance": comp.eguitra_match_price_tolerance,
         "match_mode": comp.eguitra_match_mode, "match_modes": [{"value": k, "label": v} for k, v in MATCH_MODES],
         "three_quotes_threshold": comp.eguitra_three_quotes_threshold or 0.0,
+        "po_issue_reserved": comp.eguitra_po_issue_reserved,
+        "po_issue_reserved_editable": bool(profiles() & set(ISSUE_SETTING)),
         "numbering": numbering,
     }
 
@@ -79,6 +86,10 @@ class EguitraCommerceSettings(http.Controller):
             if amount < 0:
                 raise ApiError(422, "business_rule", "Le seuil des trois devis n'est pas négatif (0 : règle désactivée).")
             values["eguitra_three_quotes_threshold"] = amount
+        if "po_issue_reserved" in data and bool(data["po_issue_reserved"]) != comp.eguitra_po_issue_reserved:
+            if not profiles() & set(ISSUE_SETTING):
+                raise ApiError(403, "forbidden", "L'émission des bons de commande se règle par l'administration.")
+            values["eguitra_po_issue_reserved"] = bool(data["po_issue_reserved"])
         if values:
             comp.write(values)
         for code, change in (data.get("numbering") or {}).items():

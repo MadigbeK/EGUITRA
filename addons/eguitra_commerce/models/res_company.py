@@ -1,14 +1,15 @@
 """Réglages des achats et des ventes, propres à chaque société (Finance > Administration > Achats et ventes,
 administration et finance) : validité des offres, relance avant expiration, rapprochement des pièces d'achat
-avec les commandes (tolérances, écart bloquant ou soumis au circuit), règle des trois devis. Les modifications
-passent par la piste d'audit (res.company est suivi par eguitra_base).
+avec les commandes (tolérances, écart bloquant ou soumis au circuit), règle des trois devis, émission des bons
+de commande réservée au service Achats (réglée par l'administration seule). Les modifications passent par la
+piste d'audit (res.company est suivi par eguitra_base).
 
 Numérotation propre à chaque société : offres (OF/EG/2026/0001, OF/MBAX/2026/0001), bons de commande
 (BC/…) et réceptions (REC/…), par des séquences rattachées à la société sous les codes du noyau
 (sale.order, purchase.order) : le noyau prend d'abord la séquence de la société.
 """
 
-from odoo import fields, models
+from odoo import SUPERUSER_ID, fields, models
 from odoo.exceptions import UserError
 
 from .approval import ensure_purchase_order_rules
@@ -45,6 +46,20 @@ class ResCompany(models.Model):
         "Trois devis au-delà de (HT)", currency_field="currency_id", default=0.0,
         help="Un engagement de dépense de plus de ce montant se soumet avec trois devis fournisseurs au moins et "
              "le devis retenu, motivé ; 0 : règle désactivée.")
+    eguitra_po_issue_reserved = fields.Boolean(
+        "Émission des bons de commande réservée aux achats", default=False,
+        help="Activé : seuls les comptes au profil Achats (responsable Achats et Contrats) créent un bon de commande, "
+             "modifient un brouillon, le soumettent et l'annulent avant son approbation. Lecture, réception, pièces "
+             "jointes, facture du fournisseur, contrôle et approbation ne changent pas. Réglé par l'administration.")
+
+    def _eguitra_can_issue_purchase_orders(self, user):
+        """Le compte émet-il des bons de commande dans cette société ? Toujours sans la réservation ; avec elle, le
+        seul profil Achats (l'administration non plus : séparation stricte). Le compte du système (tâches
+        techniques, migrations, scripts) n'est pas concerné."""
+        self.ensure_one()
+        if not self.eguitra_po_issue_reserved or user.id == SUPERUSER_ID:
+            return True
+        return "achats" in user._eguitra_profiles()
 
     def _eguitra_tag(self):
         self.ensure_one()
