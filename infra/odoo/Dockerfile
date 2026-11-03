@@ -7,5 +7,7 @@ COPY oca-src/requirements.txt /tmp/oca-requirements.txt
 RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/oca-requirements.txt \
  && rm /tmp/oca-requirements.txt
 # Lecture des business plans par l'IA (eguitra_axispro, lecture_ia.py) : bibliothèque officielle d'Anthropic.
-RUN pip3 install --no-cache-dir --break-system-packages anthropic==2.3.0
+# --ignore-installed : typing_extensions et idna de Debian ne se désinstallent pas ; les versions plus
+# récentes qu'exige la bibliothèque s'installent à côté (/usr/local) et passent devant.
+RUN pip3 install --no-cache-dir --break-system-packages --ignore-installed anthropic==2.3.0
 USER odoo
