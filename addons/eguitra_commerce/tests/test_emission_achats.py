@@ -153,7 +153,8 @@ class TestApiEmissionAchats(CommerceDataMixin, ApiCase):
             "name": "Fournitures (émission, essai)", "nature": "opex_metier", "account_id": cls.acc_purchase.id,
             "company_id": cls.groupe.id,
         })
-        cabinet_account = cls.env["account.account"].search(
+        # Code de compte propre à chaque société : recherche faite dans la société du cabinet.
+        cabinet_account = cls.env["account.account"].with_company(cls.cabinet).search(
             [("code", "=like", "60%"), ("company_ids", "in", cls.cabinet.ids)], order="code", limit=1)
         cls.category_cabinet = cls.env["eguitra.expense.category"].create({
             "name": "Fournitures du cabinet (essai)", "nature": "opex_metier", "account_id": cabinet_account.id,
