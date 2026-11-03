@@ -202,6 +202,17 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 3 novembre 2026, 7 h 46 : réponses du client sur le circuit des bons de commande en production (version 20261103-0746)
+
+- En production : version 20261103-0746 (commit 318fc4a), sauvegarde prise avant (20261103T0746) ; seize modules, eguitra_commerce 19.0.1.1.3 ; noyau, web et trois adresses HTTPS sains, aucune erreur au noyau ; répétition réussie avant. Mise en production non annoncée 48 heures à l'avance.
+- Réponses transmises par le gérant :
+  - la direction générale est l'approbateur final des bons de 10 M GNF HT ou moins : la règle s'intitule désormais « Approbation : direction générale (jusqu'à 10 M GNF HT) » (migration : renommée là où le libellé de la 19.0.1.1.1 était resté ; profil et plafond inchangés) ;
+  - chez MB AxisPro Consulting, la même personne émet : réserve activée aussi chez MB AxisPro Consulting (migration ; la réserve d'EGUITRA GROUP n'est pas touchée) ; contrôlé en production, réservée dans les deux sociétés ;
+  - fonctions des comptes, tirées de la liste du personnel transmise le 2 novembre : `scripts/comptes/comptes.py` accepte une « fonction » facultative (imprimée sur les bons). Liste du serveur mise à jour (copie `comptes-client.json.bak-20261103`) ; script lancé sur les trois seuls comptes concernés : Président Directeur Général (direction), Chef Comptable (finance), Responsable Achats & Contrats (achats, désormais ouverte aux deux sociétés). Profils et mots de passe inchangés.
+- Vérifications : achats et approbations 99/99 ; recette à jour ; contrôle par société et par profil (test.achats et test.achatvente émettent dans les deux sociétés, test.comptable, test.daf, test.dg et test.admin dans aucune) ; cahier 11 adapté (ACV-28 avec test.achatvente, ACV-29, ACV-70, ACV-72 ; 544 scénarios).
+- Suppléant aux Achats (le chef comptable) : **pas mis en place**. Le client n'a qu'un compte finance, celui du chef comptable, et aucun DAF parmi son personnel. Un bon émis par le chef comptable ne pourrait être contrôlé par personne d'autre, car celui qui émet ne contrôle pas. Il tomberait dans la corbeille des seuls comptes d'E-VOLUTION XP qui ont le profil finance. Décision demandée au gérant : un compte DAF ou finance de plus, ou un autre suppléant hors finance.
+- Restent à faire confirmer par le client : le texte des mentions d'exonération de TVA ; une signature qualifiée éventuelle.
+
 ### 3 novembre 2026, 3 h 02 : circuit des bons de commande d'EGUITRA GROUP et émission réservée au service Achats en production (version 20261103-0302)
 
 - En production : version 20261103-0302 (commit 8081d49), sauvegarde prise avant (20261103T0302) ; seize modules, eguitra_commerce 19.0.1.1.2 ; noyau, web et trois adresses HTTPS sains, aucune erreur au noyau ; répétition réussie avant. Mise en production non annoncée 48 heures à l'avance.
