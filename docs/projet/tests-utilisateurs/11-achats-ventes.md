@@ -693,17 +693,16 @@ catégorie fixe le compte. Notez le numéro.
 
 Objectif : vérifier que celui qui saisit un bon de commande n'en tranche aucune étape.
 
-Compte : test.comptable, puis test.daf, dans la société MB AxisPro Consulting (où l'émission des bons
-n'est pas réservée au service Achats).
+Compte : test.achatvente (finance et achats, il émet et pourrait contrôler), puis test.daf.
 
-Données : un bon de commande direct de 3 000 000 saisi et soumis par test.comptable, ligne libre et
+Données : un bon de commande direct de 3 000 000 saisi et soumis par test.achatvente, ligne libre et
 catégorie de dépense au choix.
 
-1. test.comptable : choisissez la société MB AxisPro Consulting ; créez et soumettez le bon de commande.
-2. test.comptable : ouvrez « À valider ».
+1. test.achatvente : créez et soumettez le bon de commande.
+2. test.achatvente : ouvrez « À valider ».
 3. test.daf : ouvrez « À valider », puis la demande du bon.
 
-Résultat attendu : chez test.comptable, la demande n'est pas dans la corbeille « À valider » (elle
+Résultat attendu : chez test.achatvente, la demande n'est pas dans la corbeille « À valider » (elle
 figure dans ses demandes). Chez test.daf, elle y est, avec le détail du bon (« Saisi par … : ni lui,
 ni le demandeur de son engagement ne tranchent une étape »), et « Approuver » est proposé.
 
@@ -1339,7 +1338,7 @@ Données : ligne libre « Climatiseurs (essai) », d'abord 4 à 2 500 000 (10 00
 
 Résultat attendu : la carte montre trois règles. Pour 10 000 000 HT, « 1. Contrôle : chef comptable ou
 DAF » (« Finance et comptabilité », dès le premier franc) et « 2. Approbation : direction générale
-(jusqu'à 10 M GNF HT, niveau à définir avec la direction générale) » (« Jusqu'à 10 000 000 GNF HT
+(jusqu'à 10 M GNF HT) » (« Jusqu'à 10 000 000 GNF HT
 inclus ») sont « Requise » ; « 2. Approbation : direction générale (plus de 10 M GNF HT) » est « Sans
 objet ». Pour 12 500 000 HT, c'est l'inverse pour les deux règles de la direction : une seule
 approbation de la direction générale s'applique. La carte rappelle que celui qui saisit le bon n'en
@@ -1649,12 +1648,14 @@ Compte : test.daf, test.dg, puis test.comptable.
 
 Données : le premier bon d'ACV-69, en approbation ; un brouillon saisi par test.achats.
 
-1. test.daf : onglet « Bons de commande » ; lisez le haut de l'écran ; ouvrez le brouillon.
+1. test.daf : onglet « Bons de commande » ; lisez le haut de l'écran ; ouvrez le brouillon. Passez
+   ensuite dans MB AxisPro Consulting et relisez le haut de l'écran.
 2. test.dg : même chose.
 3. test.comptable : « À valider », approuvez le bon d'ACV-69 (contrôle).
 4. test.dg : « À valider », approuvez-le.
 
-Résultat attendu : aux étapes 1 et 2, pas de bouton « Nouveau bon de commande » ; l'indication
+Résultat attendu : aux étapes 1 et 2, dans les deux sociétés, pas de bouton « Nouveau bon de
+commande » ; l'indication
 « Émission réservée au service Achats (Responsable Achats et Contrats) » s'affiche ; le brouillon se
 lit, son PDF s'imprime, mais « Modifier », « Soumettre à l'approbation » et « Annuler » ne sont pas
 proposés (« ce brouillon se modifie, se soumet ou s'annule par le service Achats »). Le contrôle de
@@ -1702,9 +1703,9 @@ Données : aucune.
 
 Résultat attendu : chez test.daf, la case « Émission des bons de commande réservée au service Achats »
 est cochée et grisée (« Réglage tenu par l'administration : consultation seulement ») ; ses autres
-réglages s'enregistrent comme avant. Chez test.admin, la case se modifie : cochée pour EGUITRA GROUP
-SARLU, décochée pour MB AxisPro Consulting. Ne la décochez pas pour EGUITRA GROUP SARLU (ou recochez-la
-aussitôt) : les autres scénarios la supposent active.
+réglages s'enregistrent comme avant. Chez test.admin, la case se modifie ; elle est cochée dans les
+deux sociétés (le même Responsable Achats et Contrats émet pour EGUITRA GROUP SARLU et MB AxisPro
+Consulting). Ne la décochez pas (ou recochez-la aussitôt) : les autres scénarios la supposent active.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
