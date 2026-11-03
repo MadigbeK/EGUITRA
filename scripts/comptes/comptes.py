@@ -2,8 +2,9 @@
 """Création des comptes des utilisateurs du client, en production ou en recette.
 
 La liste nominative n'est jamais dans le dépôt : elle arrive par la variable COMPTES_JSON, liste
-d'objets {"login", "nom", "email", "telephone", "profils": [...], "societes": ["groupe", "cabinet"]}
-(la première société est celle par défaut). COMPTES_ENVIRONNEMENT doit valoir le libellé de la base
+d'objets {"login", "nom", "email", "telephone", "fonction", "profils": [...], "societes": ["groupe", "cabinet"]}
+(la première société est celle par défaut ; la fonction, facultative, est imprimée sur les bons de commande
+que le compte émet, contrôle ou approuve). COMPTES_ENVIRONNEMENT doit valoir le libellé de la base
 (« production » ou « recette ») : un garde-fou contre une base inattendue.
 
 Chaque compte nouveau reçoit un mot de passe provisoire (à remplacer à la première connexion, avec
@@ -89,10 +90,13 @@ for c in comptes:
         user.write(dict(valeurs, active=True))
     if c.get("telephone"):
         user.partner_id.phone = c["telephone"]
+    if c.get("fonction"):
+        user.partner_id.function = c["fonction"]
     user._eguitra_set_profiles(c["profils"])
     if password:
         print(f"COMPTE\t{login}\t{password}\t{c['nom']}")
     print(f"RESUME\t{login}\t{'créé' if nouveau else 'mis à jour'}\tprofils={','.join(user._eguitra_profiles())}\t"
-          f"applications={','.join(user._eguitra_apps())}\tsociétés={', '.join(user.company_ids.mapped('name'))}")
+          f"applications={','.join(user._eguitra_apps())}\tsociétés={', '.join(user.company_ids.mapped('name'))}\t"
+          f"fonction={user.partner_id.function or ''}")
 
 env.cr.commit()
