@@ -95,6 +95,20 @@ Les relances des clients partent par courriel dès qu'un serveur d'envoi est par
 les variables `SMTP_*` de `.env`, puis `infra/mail-server.sh production` (et `recette` si besoin) ;
 le script teste la connexion. Sans serveur, les relances s'impriment.
 
+## Lecture des business plans par l'IA (AxisPro Suite)
+
+À l'ouverture d'un dossier, le cabinet peut faire lire le business plan du promoteur par Claude
+(Anthropic) pour préremplir la fiche. Le document part chez Anthropic le temps de la lecture ;
+chaque lecture est facturée à l'usage sur le compte qui porte la clé. Pour l'activer :
+
+1. créer une clé sur console.anthropic.com (une pour la production, une autre pour la recette) ;
+2. la renseigner dans `.env` : `ANTHROPIC_API_KEY` (production), `RECETTE_ANTHROPIC_API_KEY`
+   (recette) ; `AXISPRO_IA_MODELE` change le modèle (Claude Opus 5.5 par défaut) ;
+3. recréer le noyau : `docker compose up -d odoo` (ou `odoo-recette`).
+
+Sans clé, le cadre de lecture n'apparaît pas et la fiche se saisit à la main. Le journal du noyau
+note chaque lecture (modèle, nombre de jetons), jamais le contenu du document.
+
 ## Supervision
 
 `infra/monitor-install.sh` (une fois, à relancer après une mise à jour de ce script) planifie
