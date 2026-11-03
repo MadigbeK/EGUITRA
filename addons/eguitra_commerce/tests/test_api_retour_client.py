@@ -102,9 +102,14 @@ class TestApiRetourClient(RefusParProfil, CommerceDataMixin, ApiCase):
     # ─── Circuit prévu, devis, conditions, pièces jointes, historique ─────
 
     def test_circuit_prevu(self):
-        big = self._ok("GET", "/commerce/purchase-orders/circuit?amount=12000000")
-        self.assertEqual((big["document"], big["steps"]), ("purchase_order", 3))
-        self.assertEqual([r["profile"] for r in big["rules"] if r["applies"]], ["finance", "finance", "direction"])
+        big = self._ok("GET", "/commerce/purchase-orders/circuit?amount=10000001")
+        self.assertEqual((big["document"], big["steps"]), ("purchase_order", 2))
+        self.assertEqual([(r["profile"], r["min_amount"], r["max_amount"]) for r in big["rules"] if r["applies"]],
+                         [("finance", 0, None), ("direction", 10_000_000, None)], "Contrôle, puis direction (plus de 10 M)")
+        edge = self._ok("GET", "/commerce/purchase-orders/circuit?amount=10000000", token=self.achats)
+        self.assertEqual([(r["profile"], r["min_amount"], r["max_amount"]) for r in edge["rules"] if r["applies"]],
+                         [("finance", 0, None), ("direction", 0, 10_000_000)], "Exactement 10 M : règle « jusqu'à 10 M »")
+        self.assertEqual(len(edge["rules"]), 3, "Les trois règles sont montrées, avec celles qui s'appliquent")
         small = self._ok("GET", "/commerce/purchase-orders/circuit?amount=5000000", token=self.achats)
         self.assertEqual(small["steps"], 2)
         commitment = self.env["eguitra.commitment"].create({

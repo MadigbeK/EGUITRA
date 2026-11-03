@@ -1,5 +1,6 @@
-"""Retour du client du 2 novembre 2026 sur les bons de commande : circuit en trois étapes selon le seuil et
-séparation des responsabilités, bon imprimé (approbateurs, fonctions, dates et heures de Conakry, empreinte,
+"""Retour du client du 2 novembre 2026 sur les bons de commande : circuit (contrôle par le chef comptable ou le
+DAF, puis direction générale selon le seuil), séparation des responsabilités, remplacement de l'ancien
+circuit par défaut, bon imprimé (approbateurs, fonctions, dates et heures de Conakry, empreinte,
 signature manuscrite), TVA (avec, sans, mixte, arrondis), historique, pièces jointes et leur archivage, devis
 retenu repris de l'engagement, conditions de paiement et de livraison. Données fictives."""
 
@@ -14,7 +15,14 @@ from odoo.tests import TransactionCase, tagged
 
 from odoo.addons.eguitra_base.lettres import amount_in_words, capitalize, money
 
-from ..models.approval import PO_DOCUMENT, PURCHASE_ORDER_RULES, ensure_purchase_order_rules
+from ..models.approval import (
+    PO_DOCUMENT,
+    PURCHASE_ORDER_RULES,
+    PURCHASE_ORDER_RULES_V1,
+    REPLACED_PREFIX,
+    ensure_purchase_order_rules,
+    upgrade_purchase_order_rules,
+)
 from ..models.purchase_order import company_address
 from .common import CommerceDataMixin
 
@@ -53,60 +61,141 @@ class TestRetourClientAchats(CommerceDataMixin, TransactionCase):
         po.action_eguitra_submit()
         return po, self.request_of(po)
 
-    # ─── Circuit en trois étapes ──────────────────────────────────────────
+    # ─── Circuit : contrôle, puis direction générale ─────────────────────
+
+    def _rules(self, company, active=True):
+        Rule = self.env["eguitra.approval.rule"].sudo().with_context(active_test=False)
+        domain = [("company_id", "=", company.id), ("document", "=", PO_DOCUMENT)]
+        return Rule.search(domain + ([("active", "=", True)] if active else []))
+
+    def _set_rules(self, company, rules):
+        self._rules(company, active=False).unlink()
+        for values in rules:
+            self.env["eguitra.approval.rule"].sudo().create(dict(values, company_id=company.id))
 
     def test_circuit_par_defaut_et_idempotent(self):
-        Rule = self.env["eguitra.approval.rule"].with_context(active_test=False)
-        rules = Rule.search([("company_id", "=", self.groupe.id), ("document", "=", PO_DOCUMENT)])
+        rules = self._rules(self.groupe)
         self.assertEqual(len(rules), len(PURCHASE_ORDER_RULES))
-        self.assertEqual(rules.sorted("sequence").mapped("approver_profile"), ["finance", "finance", "direction"])
-        self.assertEqual(rules.sorted("sequence")[-1].min_amount, 10_000_000)
+        control = rules.filtered(lambda r: r.sequence == 1)
+        small = rules.filtered(lambda r: r.sequence == 2 and r.max_amount)
+        large = rules.filtered(lambda r: r.sequence == 2 and r.min_amount)
+        self.assertEqual((control.approver_profile, control.min_amount, control.max_amount), ("finance", 0, 0))
+        self.assertEqual((small.approver_profile, small.min_amount, small.max_amount), ("direction", 0, 10_000_000))
+        self.assertEqual((large.approver_profile, large.min_amount, large.max_amount), ("direction", 10_000_000, 0))
         ensure_purchase_order_rules(self.env)
-        self.assertEqual(Rule.search_count([("company_id", "=", self.groupe.id), ("document", "=", PO_DOCUMENT)]),
-                         len(PURCHASE_ORDER_RULES), "Relancée, la mise en place ne crée rien en double")
-        rules[-1].active = False
+        self.assertEqual(len(self._rules(self.groupe, active=False)), len(PURCHASE_ORDER_RULES),
+                         "Relancée, la mise en place ne crée rien en double")
+        small.active = False
         ensure_purchase_order_rules(self.env)
-        self.assertEqual(Rule.search_count([("company_id", "=", self.groupe.id), ("document", "=", PO_DOCUMENT)]),
-                         len(PURCHASE_ORDER_RULES), "Une règle désactivée par l'administration n'est pas recréée")
-        Rule.search([("company_id", "=", self.cabinet.id), ("document", "=", PO_DOCUMENT)]).unlink()
-        self.assertEqual(Rule._eguitra_po_document(self.cabinet), "commitment",
+        self.assertEqual(len(self._rules(self.groupe, active=False)), len(PURCHASE_ORDER_RULES),
+                         "Une règle désactivée par l'administration n'est pas recréée")
+        self._rules(self.cabinet, active=False).unlink()
+        self.assertEqual(self.env["eguitra.approval.rule"]._eguitra_po_document(self.cabinet), "commitment",
                          "Sans règle propre, le circuit des engagements s'applique, comme avant")
 
-    def test_trois_etapes_selon_le_seuil(self):
+    def test_circuit_selon_le_seuil(self):
+        rules = self._rules(self.groupe)
+        control = rules.filtered(lambda r: r.sequence == 1)
+        small = rules.filtered(lambda r: r.sequence == 2 and r.max_amount)
+        large = rules.filtered(lambda r: r.sequence == 2 and r.min_amount)
         preview = self.make_po(lines=[self.po_line("Petit achat (test)", 1, 5_000_000)])._eguitra_circuit_preview()
         self.assertEqual(preview["steps"], 2)
-        self.assertEqual([r["applies"] for r in preview["rules"]], [True, True, False])
-        po, request = self._submitted(5_000_000)
-        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "finance"])
-        self.assertTrue(request.step_ids[0].label.startswith("Contrôle"))
-        self.assertTrue(request.step_ids[1].label.startswith("Validation"))
+        self.assertEqual({r["id"]: r["applies"] for r in preview["rules"]},
+                         {control.id: True, small.id: True, large.id: False})
         po, request = self._submitted(10_000_000)
-        self.assertEqual(len(request.step_ids), 2, "Exactement 10 M : pas « au-delà de 10 M »")
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"])
+        self.assertTrue(request.step_ids[0].label.startswith("Contrôle"))
+        self.assertEqual(request.step_ids[1].rule_id, small, "Exactement 10 M : règle « jusqu'à 10 M » (plafond inclus)")
+        po, request = self._submitted(10_000_001)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"],
+                         "Deux règles de même niveau, plages disjointes : une seule étape de direction")
+        self.assertEqual(request.step_ids[1].rule_id, large, "10 000 001 : règle « plus de 10 M »")
+        po, request = self._submitted(150_000)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"],
+                         "En attendant la décision de la direction générale, elle approuve aussi les petits bons")
+        small.approver_profile = "admin"
+        po, request = self._submitted(150_000)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "admin"],
+                         "Niveau des petits bons changé dans Circuits, sans développement")
         po, request = self._submitted(12_000_000)
-        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "finance", "direction"])
-        self.assertTrue(request.step_ids[2].label.startswith("Approbation"))
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"], "Les grands bons ne changent pas")
+
+    def test_chef_comptable_ou_daf_controle(self):
+        for controller in (self.comptable, self.daf):
+            po, request = self._submitted(10_000_000)
+            request.with_user(controller).action_approve("Conforme, budget disponible")
+            self.assertEqual(request.step_ids[0].decided_by, controller)
+            other = self.daf if controller == self.comptable else self.comptable
+            with self.assertRaises(AccessError, msg="Une seule étape de contrôle : l'autre n'approuve pas en plus"):
+                request.with_user(other).action_approve()
+            request.with_user(self.dg).action_approve()
+            self.assertEqual(po.eguitra_status, "approved")
+            self.assertEqual(len(request.step_ids), 2)
 
     def test_separation_des_responsabilites(self):
-        po, request = self._submitted(12_000_000)
-        with self.assertRaises(AccessError, msg="Celui qui saisit et soumet ne tranche rien"):
+        po, request = self._submitted(10_000_001)
+        with self.assertRaises(AccessError, msg="Celui qui émet et soumet le bon ne tranche rien"):
             request.with_user(self.acheteur).action_approve()
         with self.assertRaises(AccessError, msg="La direction ne fait pas le contrôle"):
             request.with_user(self.dg).action_approve()
         request.with_user(self.comptable).action_approve("Devis et budget vérifiés")
-        with self.assertRaises(AccessError, msg="Le contrôleur ne valide pas aussi"):
+        self.assertEqual(po.state, "to approve", "Reste l'approbation de la direction générale")
+        with self.assertRaises(AccessError, msg="Le contrôleur n'approuve pas"):
             request.with_user(self.comptable).action_approve()
-        request.with_user(self.daf).action_approve()
-        self.assertEqual(po.state, "to approve", "Reste l'approbation de la direction")
-        with self.assertRaises(AccessError):
+        with self.assertRaises(AccessError, msg="Le DAF non plus : l'approbation revient à la direction"):
             request.with_user(self.daf).action_approve()
+        with self.assertRaises(AccessError, msg="Ni l'émetteur"):
+            request.with_user(self.acheteur).action_approve()
         request.with_user(self.dg).action_approve()
         self.assertEqual(po.eguitra_status, "approved")
-        self.assertEqual(len(request.step_ids.decided_by), 3, "Trois personnes différentes")
+        self.assertEqual(len(request.step_ids.decided_by), 2, "Deux personnes différentes")
         # Le comptable qui saisit un bon ne le contrôle pas : le contrôle revient à une autre personne.
         own = self.make_po(user=self.comptable, lines=[self.po_line("Ramettes (test)", 10, 50_000)])
         own.with_user(self.acheteur).sudo().action_eguitra_submit()
         with self.assertRaises(AccessError):
             self.request_of(own).with_user(self.comptable).action_approve()
+        self.request_of(own).with_user(self.daf).action_approve()
+        # La direction qui émet un bon ne l'approuve pas : une autre personne de la direction le fera.
+        dg_po = self.make_po(user=self.dg, lines=[self.po_line("Mobilier de direction (test)", 1, 2_000_000)])
+        dg_po.with_user(self.dg).sudo().action_eguitra_submit()
+        dg_request = self.request_of(dg_po)
+        dg_request.with_user(self.daf).action_approve()
+        with self.assertRaises(AccessError):
+            dg_request.with_user(self.dg).action_approve()
+
+    def test_migration_ancien_defaut_remplace_circuit_modifie_laisse(self):
+        self._set_rules(self.groupe, PURCHASE_ORDER_RULES_V1)
+        modified = [dict(values) for values in PURCHASE_ORDER_RULES_V1]
+        modified[2]["min_amount"] = 20_000_000
+        self._set_rules(self.cabinet, modified)
+        # Demande ouverte sous l'ancien circuit : trois étapes, contrôle déjà donné.
+        po, request = self._submitted(12_000_000)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "finance", "direction"])
+        request.with_user(self.comptable).action_approve()
+
+        replaced, kept = upgrade_purchase_order_rules(self.env)
+        self.assertIn(self.groupe, replaced)
+        self.assertIn(self.cabinet, kept)
+        self.assertEqual(sorted((r.sequence, r.approver_profile, r.min_amount, r.max_amount)
+                                for r in self._rules(self.groupe)),
+                         [(1, "finance", 0, 0), (2, "direction", 0, 10_000_000), (2, "direction", 10_000_000, 0)])
+        archived = self._rules(self.groupe, active=False).filtered(lambda r: not r.active)
+        self.assertEqual(len(archived), 3, "Anciennes règles archivées, jamais supprimées")
+        self.assertTrue(all(r.name.startswith(REPLACED_PREFIX) for r in archived))
+        self.assertEqual(sorted(self._rules(self.cabinet).mapped("min_amount")), [0, 0, 20_000_000],
+                         "Circuit modifié par l'administration : laissé tel quel")
+        replaced, kept = upgrade_purchase_order_rules(self.env)
+        self.assertNotIn(self.groupe, replaced, "Relancée, la migration ne refait rien")
+        self.assertNotIn(self.groupe, kept)
+
+        # La demande ouverte garde ses trois étapes et s'achève comme prévu.
+        self.assertEqual(len(request.step_ids), 3)
+        request.with_user(self.daf).action_approve()
+        request.with_user(self.dg).action_approve()
+        self.assertEqual(po.eguitra_status, "approved")
+        # Un bon soumis ensuite suit le nouveau circuit.
+        po, request = self._submitted(12_000_000)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"])
 
     # ─── Bon imprimé : circuit, preuve, signature ─────────────────────────
 
@@ -118,16 +207,18 @@ class TestRetourClientAchats(CommerceDataMixin, TransactionCase):
         circuit = po._eguitra_report_values()["circuit"]
         self.assertIn(self.acheteur.name, circuit["established"])
         self.assertIn("soumis par", circuit["established"])
-        self.assertEqual(len(circuit["rows"]), 3)
+        self.assertEqual(len(circuit["rows"]), 2)
         by_name = {row["name"]: row for row in circuit["rows"]}
-        self.assertEqual(set(by_name), {self.comptable.name, self.daf.name, self.dg.name})
+        self.assertEqual(set(by_name), {self.comptable.name, self.dg.name})
+        self.assertTrue(by_name[self.comptable.name]["step"].startswith("Contrôle"))
+        self.assertTrue(by_name[self.dg.name]["step"].startswith("Approbation"))
         for row in circuit["rows"]:
             self.assertTrue(row["decision"].startswith("Approuvé"))
             self.assertRegex(row["date"], r"^\d{2}/\d{2}/\d{4} à \d{2}:\d{2}$", "Date et heure de Conakry")
         self.assertEqual(by_name[self.dg.name]["function"], "Directeur général (test)")
-        self.assertEqual(by_name[self.daf.name]["function"], "Finance et comptabilité", "À défaut, le profil")
+        self.assertEqual(by_name[self.comptable.name]["function"], "Finance et comptabilité", "À défaut, le profil")
         self.assertTrue(by_name[self.comptable.name]["signature"].startswith("data:image/png;base64,"))
-        self.assertIsNone(by_name[self.daf.name]["signature"], "Pas de signature déposée : rien d'imprimé")
+        self.assertIsNone(by_name[self.dg.name]["signature"], "Pas de signature déposée : rien d'imprimé")
         self.assertIn(f"n° {request.id}", circuit["proof"])
         self.assertIn(request.fingerprint[:16], circuit["proof"])
         self.assertIsNone(circuit["warning"])

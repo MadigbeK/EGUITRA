@@ -23,8 +23,9 @@ profil.
 
 Document préparé par E-VOLUTION XP le 27 octobre 2026, d'après les écrans de la plateforme à cette
 date ; complété le 2 novembre 2026 (partie M) après le retour d'EGUITRA GROUP sur les bons de commande :
-fournisseur créé depuis le bon, circuit en trois étapes, traçabilité et signature, TVA, devis et
-conditions.
+fournisseur créé depuis le bon, circuit d'approbation, traçabilité et signature, TVA, devis et
+conditions ; circuit mis à jour le même jour selon la réponse d'EGUITRA GROUP : contrôle par le chef
+comptable ou le DAF, puis approbation de la direction générale.
 
 <!-- saut de page -->
 
@@ -59,9 +60,9 @@ compris les erreurs.
 
 | Compte {18} | Profil {22} | Périmètre {26} | Rôle dans ce cahier {34} |
 |---|---|---|---|
-| test.daf | Finance | les deux sociétés | offres, facturation, réglages, validation des bons de commande |
-| test.comptable | Finance | les deux sociétés | contrôle des bons de commande, approbations, pièces d'achat |
-| test.dg | Direction | les deux sociétés | offres, approbation des bons de plus de 10 M, lecture |
+| test.daf | Finance | les deux sociétés | offres, facturation, réglages, contrôle des bons de commande (DAF) |
+| test.comptable | Finance | les deux sociétés | contrôle des bons de commande (chef comptable), approbations, pièces d'achat |
+| test.dg | Direction | les deux sociétés | offres, approbation des bons de commande, lecture |
 | test.achats | Achats | les deux sociétés | bons de commande, réceptions, pièces d'achat |
 | test.achatvente | Finance et achats | les deux sociétés | tout le cahier d'un seul compte, sauf les scénarios à deux personnes |
 | test.chantiers | BTP | EGUITRA GROUP SARLU | engagement et bon de commande du chantier, situations |
@@ -81,7 +82,7 @@ faisabilité d'une unité de séchage (démo) » de MB AxisPro Consulting, en br
 200, avec la pièce d'achat « FAC-QDP-0001 (démo) » en brouillon (150 sacs à 97 500 GNF) ; chantier
 « Entrepôt de stockage (démo) » ; bon de commande « Groupe électrogène du chantier (démo) » chez
 « Démo - Énergie et groupes de Guinée », 14 000 000 HT, facture proforma « PRO-EGG-0007 (démo) »
-jointe, contrôlé et validé, en attente de l'approbation de la direction ; bon de commande
+jointe, contrôlé, en attente de l'approbation de la direction générale ; bon de commande
 « Gardiennage exonéré (démo) » sans TVA, en brouillon.
 
 ## A. Catalogue
@@ -674,8 +675,9 @@ ligne libre « Peinture acrylique, seau de 20 l », 40 seaux à 150 000, catégo
 3. « Soumettre à l'approbation ».
 
 Résultat attendu : avant la soumission, le formulaire montre le circuit prévu pour 6 000 000 HT :
-« Contrôle » et « Validation » requises, « Approbation » de la direction sans objet. Après, le bon
-est « En approbation », « chez : Finance et comptabilité ». Aucun champ de compte n'est proposé : la
+« Contrôle : chef comptable ou DAF » et « Approbation : direction générale (jusqu'à 10 M GNF HT…) »
+requises, « Approbation : direction générale (plus de 10 M GNF HT) » sans objet. Après, le bon est
+« En approbation », « chez : Finance et comptabilité ». Aucun champ de compte n'est proposé : la
 catégorie fixe le compte. Notez le numéro.
 
 | Résultat {22} | Remarques {78} |
@@ -706,7 +708,7 @@ ni le demandeur de son engagement ne tranchent une étape »), et « Approuver �
 
 ### ACV-29. Approuver un bon de commande de plus de 10 M
 
-Objectif : vérifier les trois étapes du circuit et leurs approbateurs.
+Objectif : vérifier les deux étapes du circuit (contrôle, approbation) et leurs responsables.
 
 Compte : test.achats, test.comptable, test.daf, puis test.dg.
 
@@ -714,13 +716,14 @@ Données : bon de commande direct « Groupe électrogène 100 kVA (essai) », un
 
 1. test.achats : créez et soumettez le bon.
 2. test.comptable : « À valider », ouvrez la demande, « Approuver » (contrôle).
-3. test.daf : « À valider », ouvrez la demande, « Approuver » (validation).
+3. test.daf : ouvrez « À valider ».
 4. test.dg : « À valider », ouvrez la demande, « Approuver », confirmez.
 
-Résultat attendu : la demande porte trois étapes : contrôle et validation par la finance, puis
-approbation de la direction (« plus de 10 M GNF HT »). Après test.comptable puis test.daf, le bon
-reste « En approbation », chez la direction. Après test.dg, le bon est « Approuvé » ; son PDF porte
-le bloc « CIRCUIT D'APPROBATION » avec les trois noms, leurs décisions, dates et heures.
+Résultat attendu : la demande porte deux étapes : « Contrôle : chef comptable ou DAF », puis
+« Approbation : direction générale (plus de 10 M GNF HT) ». Après test.comptable, le bon reste « En
+approbation », chez la direction générale ; la demande n'est pas dans la corbeille de test.daf (le
+contrôle est fait, une seule fois). Après test.dg, le bon est « Approuvé » ; son PDF porte le bloc
+« CIRCUIT D'APPROBATION » avec les deux noms, leurs décisions, dates et heures.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -762,9 +765,9 @@ Données : le bon d'ACV-26 (approuvé).
 
 Résultat attendu : le document porte « BON DE COMMANDE », « N° BC/EG/2026/… », le bloc « FOURNISSEUR »,
 « Engagement : ENG/… », les lignes, « Arrêté le présent bon de commande, toutes taxes comprises, à la
-somme de : ». Le courriel
-part avec le bon joint, ou le message d'absence de serveur s'affiche ; après « Marquer envoyé », l'état
-est « Envoyé ».
+somme de : », et le bloc « CIRCUIT D'APPROBATION » : « Établi par … », puis « Approuvé d'office : dans
+la limite de l'engagement approuvé ENG/… ». Le courriel part avec le bon joint, ou le message
+d'absence de serveur s'affiche ; après « Marquer envoyé », l'état est « Envoyé ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -1316,47 +1319,54 @@ une nouvelle fiche » reste possible si le cas est réel.
 
 ### ACV-57. Circuit prévu selon le montant, avant la soumission
 
-Objectif : vérifier que le formulaire montre les étapes de contrôle, de validation et d'approbation
-qui s'appliqueront, selon le seuil.
+Objectif : vérifier que le formulaire montre les étapes de contrôle et d'approbation qui
+s'appliqueront, selon le seuil de 10 000 000 GNF HT.
 
 Compte : test.achats.
 
-Données : ligne libre « Climatiseurs (essai) », d'abord 2 à 2 500 000, puis 5 à 2 500 000.
+Données : ligne libre « Climatiseurs (essai) », d'abord 4 à 2 500 000 (10 000 000 exactement), puis
+5 à 2 500 000.
 
 1. « Nouveau bon de commande », fournisseur « Démo - Quincaillerie du port », ajoutez la ligne.
 2. Lisez la carte « Circuit d'approbation prévu ».
 3. Passez la quantité à 5 et relisez la carte.
 
-Résultat attendu : pour 5 000 000 HT, « 1. Contrôle » et « 2. Validation » sont « Requise », tranchées
-par « Finance et comptabilité », dès le premier franc ; « 3. Approbation : direction générale » est
-« Sans objet » (« Au-delà de 10 000 000 GNF HT »). Pour 12 500 000 HT, les trois étapes sont
-« Requise ». La carte rappelle que celui qui saisit le bon n'en tranche aucune étape.
+Résultat attendu : la carte montre trois règles. Pour 10 000 000 HT, « 1. Contrôle : chef comptable ou
+DAF » (« Finance et comptabilité », dès le premier franc) et « 2. Approbation : direction générale
+(jusqu'à 10 M GNF HT, niveau à définir avec la direction générale) » (« Jusqu'à 10 000 000 GNF HT
+inclus ») sont « Requise » ; « 2. Approbation : direction générale (plus de 10 M GNF HT) » est « Sans
+objet ». Pour 12 500 000 HT, c'est l'inverse pour les deux règles de la direction : une seule
+approbation de la direction générale s'applique. La carte rappelle que celui qui saisit le bon n'en
+tranche aucune étape.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### ACV-58. Trois étapes, trois personnes
+### ACV-58. Émission, contrôle, approbation : trois personnes
 
-Objectif : vérifier la séparation des responsabilités : celui qui saisit ne tranche rien, une même
-personne ne tranche qu'une étape.
+Objectif : vérifier la séparation des responsabilités : celui qui émet le bon ne tranche rien, le
+contrôle est fait par le chef comptable ou le DAF (l'un ou l'autre, une seule fois), l'approbation par
+la direction générale.
 
 Compte : test.achats, test.comptable, test.daf, puis test.dg.
 
-Données : le bon d'ACV-57 (12 500 000 HT).
+Données : le bon d'ACV-57 (12 500 000 HT) ; un second bon identique, « Climatiseurs, second site
+(essai) ».
 
-1. test.achats : « Soumettre à l'approbation » ; ouvrez « À valider ».
-2. test.comptable : « À valider », ouvrez la demande, « Approuver » avec le commentaire
-   « Devis et budget vérifiés (essai) ».
-3. test.comptable : rouvrez « À valider ».
-4. test.daf : « À valider », « Approuver ».
-5. test.dg : « À valider », « Approuver ».
+1. test.achats : soumettez les deux bons ; ouvrez « À valider ».
+2. test.comptable : « À valider », ouvrez la demande du premier bon, « Approuver » avec le
+   commentaire « Devis et budget vérifiés (essai) ».
+3. test.comptable et test.daf : rouvrez « À valider ».
+4. test.daf : ouvrez la demande du second bon, « Approuver » (contrôle).
+5. test.dg : « À valider », approuvez les deux demandes.
 
-Résultat attendu : test.achats ne voit pas la demande dans sa corbeille. Après l'étape 2, la demande
-n'est plus dans la corbeille de test.comptable (la validation revient à une autre personne) ; elle
-est dans celle de test.daf. Après test.daf, le bon est chez la direction ; après test.dg, il est
-« Approuvé ». La fiche du bon montre la carte « Circuit d'approbation » : chaque étape, le profil
+Résultat attendu : test.achats ne voit aucune des deux demandes dans sa corbeille. Après l'étape 2, la
+demande du premier bon n'est plus dans la corbeille de test.comptable ni dans celle de test.daf : le
+contrôle est fait, l'approbation revient à la direction générale. Le second bon est contrôlé par
+test.daf : le chef comptable ou le DAF peuvent chacun contrôler. Après test.dg, les deux bons sont
+« Approuvés ». La fiche du bon montre la carte « Circuit d'approbation » : chaque étape, le profil
 attendu, la décision, la personne, la date et l'heure, le commentaire.
 
 | Résultat {22} | Remarques {78} |
@@ -1371,13 +1381,14 @@ et la preuve de l'approbation.
 
 Compte : test.dg, puis test.achats.
 
-Données : bon « Groupe électrogène du chantier (démo) », en attente de la direction.
+Données : bon « Groupe électrogène du chantier (démo) », contrôlé, en attente de la direction
+générale.
 
 1. test.dg : « À valider », ouvrez la demande du bon, vérifiez la proforma jointe, « Approuver ».
 2. test.achats : ouvrez le bon, « Bon de commande en PDF ».
 
 Résultat attendu : le document porte le bloc « CIRCUIT D'APPROBATION » : « Établi par … le … à … ;
-soumis par … le … à … », puis une ligne par étape (contrôle, validation, approbation) avec le nom, la
+soumis par … le … à … », puis une ligne par étape du circuit (contrôle, approbation) avec le nom, la
 fonction ou le profil, « Approuvé », la date et l'heure de Conakry. Sous le tableau : « Demande
 d'approbation n° … · empreinte SHA-256 du bon soumis : … » et la mention de la signature électronique
 simple. Le bandeau « BROUILLON » a disparu.
@@ -1421,14 +1432,14 @@ fictive) ; un fichier PDF quelconque.
 1. test.daf : « À valider », onglet « Circuits », carte « Ma signature manuscrite », « Déposer ma
    signature » avec le PDF.
 2. Recommencez avec l'image.
-3. Un nouveau bon de 5 000 000, saisi et soumis par test.achats, contrôlé par test.comptable :
-   test.daf l'approuve (validation).
+3. Un nouveau bon de 5 000 000, saisi et soumis par test.achats : test.daf le contrôle
+   (« Approuver »), test.dg l'approuve.
 4. test.achats : imprimez ce bon une fois approuvé.
 
 Résultat attendu : le PDF est refusé (« La signature est une image PNG ou JPEG »). L'image est
 acceptée et montrée en aperçu, avec la date du dépôt. Sur le bon imprimé, la signature figure dans
-la colonne « Signature » de la ligne de test.daf seulement ; les autres lignes restent sans image si
-leurs approbateurs n'en ont pas déposé.
+la colonne « Signature » de la ligne de test.daf (contrôle) seulement ; la ligne de la direction
+générale reste sans image si test.dg n'en a pas déposé.
 
 | Résultat {22} | Remarques {78} |
 |---|---|

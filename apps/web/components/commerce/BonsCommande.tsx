@@ -48,7 +48,7 @@ export function BonsCommandePage() {
     <div>
       <PageHeader
         title="Bons de commande fournisseur"
-        subtitle="Depuis un engagement approuvé (approuvé d'office dans sa limite) ou directement (contrôle, validation, puis approbation de la direction au-delà du seuil) ; la réception constate le service fait, la pièce d'achat se rapproche de la commande et de la réception."
+        subtitle="Depuis un engagement approuvé (approuvé d'office dans sa limite) ou directement (contrôle par le chef comptable ou le DAF, puis approbation de la direction générale) ; la réception constate le service fait, la pièce d'achat se rapproche de la commande et de la réception."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => setPieces(true)}><Paperclip className="h-4 w-4" /> Pièces des bons</Button>
@@ -234,12 +234,20 @@ export function CircuitApercu({ circuit }: { circuit: CircuitPrevu }) {
       <DataTable dense rows={circuit.rules} rowKey={(r) => r.id} empty="Aucune règle : le bon sera approuvé dès sa soumission." columns={[
         { key: "sequence", label: "Étape", render: (r) => `${r.sequence}. ${r.name}` },
         { key: "profile_label", label: "Tranchée par" },
-        { key: "min_amount", label: "Seuil", render: (r) => (r.min_amount ? `Au-delà de ${fmtGNF(r.min_amount)} HT` : "Dès le premier franc") + (r.max_amount ? `, jusqu'à ${fmtGNF(r.max_amount)}` : "") + (r.account_prefix ? ` (comptes ${r.account_prefix}…)` : "") },
+        { key: "min_amount", label: "Seuil", render: (r) => seuil(r.min_amount, r.max_amount) + (r.account_prefix ? ` (comptes ${r.account_prefix}…)` : "") },
         { key: "applies", label: "Pour ce bon", render: (r) => (r.applies ? <Badge tone="warn">Requise</Badge> : <Badge>Sans objet</Badge>) },
       ]} />
       <p className="px-4 py-2 text-[12px] text-muted">Séparation des responsabilités : celui qui saisit ou soumet le bon n&apos;en tranche aucune étape, et une même personne ne tranche qu&apos;une étape.</p>
     </Card>
   );
+}
+
+/** Plage de montant d'une règle : « au-delà de » strict, « jusqu'à » inclus (comme le moteur). */
+function seuil(min: number, max: number | null): string {
+  if (min && max) return `Au-delà de ${fmtGNF(min)}, jusqu'à ${fmtGNF(max)} HT inclus`;
+  if (max) return `Jusqu'à ${fmtGNF(max)} HT inclus`;
+  if (min) return `Au-delà de ${fmtGNF(min)} HT`;
+  return "Dès le premier franc";
 }
 
 /** Avancement du circuit d'un bon soumis : étapes, décisions, auteurs, dates et commentaires. */

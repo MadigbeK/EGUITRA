@@ -10,7 +10,7 @@ modules sale et purchase du noyau, sans stock (ni sale_stock ni purchase_stock :
 contrat). Les factures restent celles de la plateforme, au gabarit des sociétés ; les bons de commande
 passent par le moteur d'approbation existant (eguitra_approval), prolongé ici par héritage.
 """,
-    "version": "19.0.1.1.0",
+    "version": "19.0.1.1.1",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

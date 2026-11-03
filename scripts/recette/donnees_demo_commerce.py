@@ -8,13 +8,14 @@ Pour que le cahier 11 se joue :
 - EGUITRA GROUP SARLU : l'offre « Crépissage du bâtiment administratif (démo) » acceptée et facturée par
   acomptes (avance de démarrage 50 %, deuxième acompte 30 %, validés), et l'offre « Location de deux
   camions-bennes (démo) » envoyée, qui expire dans cinq jours ;
-- un bon de commande « Ciment du chantier (démo) » approuvé (saisi par test.achats, approuvé par test.daf),
+- un bon de commande « Ciment du chantier (démo) » approuvé (saisi par test.achats, contrôlé par
+  test.comptable, approuvé par test.dg),
   reçu en partie (120 sacs sur 200) avec la pièce d'achat du fournisseur en brouillon : 150 sacs à 97 500
   pour 120 reçus à 95 000, soit un écart de quantité et de prix ;
 - MB AxisPro Consulting : une offre d'accompagnement en brouillon ;
 - retour du client du 2 novembre (circuit, traçabilité, TVA, devis et conditions) : un bon « Groupe électrogène
   du chantier (démo) » de 14 M HT sur facture proforma jointe, avec ses conditions de paiement et de livraison,
-  contrôlé par test.comptable et validé par test.daf, en attente de l'approbation de la direction (test.dg) ;
+  contrôlé par test.comptable, en attente de l'approbation de la direction générale (test.dg) ;
   un bon « Gardiennage exonéré (démo) » sans TVA, avec sa mention d'exonération, en brouillon.
 
   docker compose exec -T odoo-recette odoo shell -c /etc/odoo/odoo.conf -d eguitra_recette --no-http \\
@@ -156,11 +157,13 @@ if not Order.search_count([("eguitra_object", "=", "Étude de faisabilité d'une
 
 # ─── Bon de commande reçu en partie, pièce d'achat en écart ──────────────────
 
-DECIDERS = env["res.users"].search([("login", "in", ("test.comptable", "test.daf", "test.dg"))])
+# Dans cet ordre : test.comptable contrôle (test.daf à défaut), test.dg approuve.
+DECIDERS = [user for login in ("test.comptable", "test.daf", "test.dg")
+            for user in env["res.users"].search([("login", "=", login)], limit=1)]
 
 
 def decide(request, stop_before=None):
-    """Étapes tranchées chacune par un compte de test différent (contrôle, validation, direction) ; stop_before :
+    """Étapes tranchées chacune par un compte de test différent (contrôle, direction générale) ; stop_before :
     profil d'étape laissé en attente."""
     while request.state == "pending":
         step = request.current_step_id
@@ -230,7 +233,7 @@ if not PO.search_count([("eguitra_object", "=", "Groupe électrogène du chantie
         "note": "Pièce fictive de démonstration"})
     po.action_eguitra_submit()
     decide(po._eguitra_last_request(), stop_before="direction")
-    report.append(f"bon de commande {po.name} (14 M HT, proforma jointe) contrôlé et validé, en attente de la direction")
+    report.append(f"bon de commande {po.name} (14 M HT, proforma jointe) contrôlé, en attente de la direction générale")
 
 if not PO.search_count([("eguitra_object", "=", "Gardiennage exonéré (démo)")]):
     gardien = partner("Démo - Gardiennage et sécurité", supplier_rank=1)

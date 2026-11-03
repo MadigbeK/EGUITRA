@@ -3,20 +3,26 @@ héritage, sans second moteur : mêmes étapes, même corbeille, même empreinte
 porte la nature « Bons de commande fournisseur » ; la dernière approbation approuve le bon de commande, un
 refus le renvoie en brouillon.
 
-Circuit propre aux bons de commande (retour du client du 2 novembre 2026, carte blanche du gérant), en trois
-étapes explicites, réglables par l'administration (Finance > Circuits, nature « Bons de commande
-fournisseur ») et créées par défaut pour chaque société :
-1. Contrôle : conformité de la commande, budget, pièces jointes (devis, proforma) ; finance (comptable), dès le
-   premier franc ;
-2. Validation : finance (directeur administratif et financier), dès le premier franc, par une autre personne
-   que celle du contrôle ;
-3. Approbation : direction générale, pour un bon de plus de 10 000 000 GNF HT.
-Seuils proposés, à confirmer par le gérant. Une société sans aucune règle de cette nature garde le circuit
-des engagements de dépense (comportement antérieur).
+Circuit propre aux bons de commande, réglable par l'administration (Finance > À valider > Circuits, nature
+« Bons de commande fournisseur ») et créé par défaut pour chaque société. Réponse d'EGUITRA GROUP du
+2 novembre 2026 : le bon est émis par le responsable Achats et Contrats, contrôlé par le chef comptable ou le
+DAF (une seule étape, l'un ou l'autre), approuvé par la direction générale au-delà de 10 000 000 GNF HT ; le
+niveau d'autorisation des bons de 10 000 000 GNF HT ou moins reste à définir avec la direction générale.
+Circuit par défaut (carte blanche du gérant) :
+1. Contrôle : chef comptable ou DAF (profil finance), dès le premier franc ;
+2. Approbation : direction générale, en deux règles de même niveau et de plages disjointes, dont une seule
+   s'applique à un montant donné :
+   - jusqu'à 10 000 000 GNF HT inclus (« niveau à définir avec la direction générale ») : en attendant sa
+     décision, la direction générale approuve aussi les petits bons ; le jour venu, l'administration change
+     le profil ou le plafond de cette règle dans Circuits, sans développement ;
+   - plus de 10 000 000 GNF HT (strictement au-delà).
+Une société sans aucune règle de cette nature garde le circuit des engagements de dépense (comportement
+antérieur).
 
 Séparation des responsabilités, comme pour toute demande : celui qui a saisi le bon, celui qui le soumet et le
 demandeur de l'engagement d'où il vient n'en tranchent aucune étape, et un même compte ne tranche qu'une étape
-d'une même demande.
+d'une même demande. Les étapes d'une demande sont figées à sa soumission (libellé, profil) : changer le circuit
+ne modifie pas les demandes déjà ouvertes.
 """
 
 from odoo import api, fields, models
@@ -27,6 +33,17 @@ PURCHASE_ORDER = "purchase.order"
 PO_DOCUMENT = "purchase_order"
 PO_DIRECTION_THRESHOLD = 10_000_000
 PURCHASE_ORDER_RULES = [
+    {"document": PO_DOCUMENT, "sequence": 1, "min_amount": 0, "max_amount": 0, "approver_profile": "finance",
+     "name": "Contrôle : chef comptable ou DAF"},
+    {"document": PO_DOCUMENT, "sequence": 2, "min_amount": 0, "max_amount": PO_DIRECTION_THRESHOLD,
+     "approver_profile": "direction",
+     "name": "Approbation : direction générale (jusqu'à 10 M GNF HT, niveau à définir avec la direction générale)"},
+    {"document": PO_DOCUMENT, "sequence": 2, "min_amount": PO_DIRECTION_THRESHOLD, "max_amount": 0,
+     "approver_profile": "direction", "name": "Approbation : direction générale (plus de 10 M GNF HT)"},
+]
+# Circuit par défaut de la version 19.0.1.1.0 (contrôle, validation, direction au-delà de 10 M), remplacé par la
+# migration 19.0.1.1.1 là où l'administration ne l'a pas modifié.
+PURCHASE_ORDER_RULES_V1 = [
     {"document": PO_DOCUMENT, "sequence": 1, "min_amount": 0, "approver_profile": "finance",
      "name": "Contrôle : conformité, budget et pièces (comptabilité)"},
     {"document": PO_DOCUMENT, "sequence": 2, "min_amount": 0, "approver_profile": "finance",
@@ -34,6 +51,7 @@ PURCHASE_ORDER_RULES = [
     {"document": PO_DOCUMENT, "sequence": 3, "min_amount": PO_DIRECTION_THRESHOLD, "approver_profile": "direction",
      "name": "Approbation : direction générale (plus de 10 M GNF HT)"},
 ]
+REPLACED_PREFIX = "Ancien circuit, remplacé le 2 novembre 2026 : "
 
 
 def ensure_purchase_order_rules(env, companies=None):
@@ -44,6 +62,40 @@ def ensure_purchase_order_rules(env, companies=None):
         if not Rule.search_count([("company_id", "=", company.id), ("document", "=", PO_DOCUMENT)]):
             for values in PURCHASE_ORDER_RULES:
                 Rule.create(dict(values, company_id=company.id))
+
+
+def _rule_key(rule):
+    return (rule.sequence, rule.name, rule.approver_profile, float(rule.min_amount or 0),
+            float(rule.max_amount or 0), rule.account_prefix or "", bool(rule.active))
+
+
+def _default_keys(rules):
+    return sorted((v["sequence"], v["name"], v["approver_profile"], float(v.get("min_amount") or 0),
+                   float(v.get("max_amount") or 0), "", True) for v in rules)
+
+
+def upgrade_purchase_order_rules(env, companies=None):
+    """Remplace l'ancien circuit par défaut (PURCHASE_ORDER_RULES_V1) par le nouveau, société par société, là où
+    il est resté exactement tel quel (trois règles, mêmes noms, profils, montants, actives, sans préfixe de
+    compte). Les anciennes règles sont archivées et renommées, jamais supprimées : les étapes des demandes déjà
+    ouvertes y restent rattachées et gardent leur libellé et leur profil. Une société dont l'administration a
+    modifié le circuit n'est pas touchée. Idempotent. Rend (sociétés mises à jour, sociétés laissées)."""
+    Rule = env["eguitra.approval.rule"].sudo().with_context(active_test=False)
+    Company = env["res.company"].sudo()
+    replaced, kept = Company.browse(), Company.browse()
+    for company in companies if companies is not None else Company.search([]):
+        rules = Rule.search([("company_id", "=", company.id), ("document", "=", PO_DOCUMENT)])
+        if not rules or sorted(_rule_key(r) for r in rules.filtered("active")) == _default_keys(PURCHASE_ORDER_RULES):
+            continue  # sans circuit (créé ensuite par ensure_purchase_order_rules) ou déjà à jour
+        if sorted(_rule_key(r) for r in rules) != _default_keys(PURCHASE_ORDER_RULES_V1):
+            kept |= company
+            continue
+        for rule in rules:
+            rule.write({"active": False, "name": REPLACED_PREFIX + rule.name})
+        for values in PURCHASE_ORDER_RULES:
+            Rule.create(dict(values, company_id=company.id))
+        replaced |= company
+    return replaced, kept
 
 
 class EguitraApprovalRule(models.Model):
