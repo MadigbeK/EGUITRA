@@ -4,7 +4,7 @@ NIMOVA · MB AxisPro Consulting, l'application du cabinet MB AxisPro Consulting.
 
 Dossiers, évaluation par critère et par gate, compartiments, comité et décision scellée à deux,
 data room, plan d'actions, financements, modèle financier, temps et honoraires, équipe et accès
-des porteurs, outils du portail des porteurs.
+des porteurs, outils du portail des porteurs, relances des porteurs, lecture du business plan.
 
 | Rubrique {28} | À remplir {72} |
 |---|---|
@@ -916,6 +916,151 @@ l'action est supprimée (« Action supprimée. »).
 | ☐ Réussi | |
 | ☐ Échoué | |
 
+## G. Relances du porteur et lecture du business plan
+
+### AXP-37. Relancer le porteur pour les pièces manquantes
+
+Objectif : vérifier la liste des pièces attendues, le message préparé et l'enregistrement d'une
+relance, sans qu'un intitulé de critère de la grille ne figure dans le message.
+
+Compte : test.consultant.
+
+Données : le dossier de AXP-02 ; contact « Mariama Camara », téléphone « 622 00 00 00 ».
+
+1. Ouvrez le dossier, onglet « Relances ». Lisez le cadre « Suivi du porteur » et le tableau
+   « Pièces attendues ».
+2. Cadre « Contact du promoteur » : saisissez le nom et le téléphone, puis « Enregistrer le
+   contact ».
+3. Cadre « Message de relance » : lisez le message, modifiez une phrase, puis cliquez sur
+   « Message proposé ».
+4. Cliquez sur « Copier », puis sur « WhatsApp » (un nouvel onglet s'ouvre ; fermez-le sans envoyer).
+5. Sous le message, ouvrez le calendrier de « Date » et cherchez la date de demain. Gardez la date
+   du jour, canal « WhatsApp », note « Essai de relance », puis « Enregistrer la relance ».
+6. Lisez le cadre « Suivi du porteur » et l'« Historique des relances ».
+
+Résultat attendu : le suivi indique « Jamais relancé » et le nombre de pièces attendues. Le tableau
+classe les pièces de la plus prioritaire à la moins prioritaire (« Knock-out », « Prioritaire ») et
+ne réclame rien au-delà du gate qui suit le gate en cours ; sous chaque pièce, les codes des
+critères ne sont visibles que du cabinet. Le message commence par « Objet : », salue « Bonjour
+Mariama Camara », sépare les « Pièces prioritaires » des « Autres pièces attendues » et ne cite que
+des noms de pièces ou de documents, jamais l'intitulé d'un critère. « Message proposé » rétablit le
+texte. « Copier » affiche « Copié » ; WhatsApp s'ouvre avec le message, sur le numéro précédé de 224.
+Le calendrier ne propose pas de date après aujourd'hui. Après l'enregistrement, « Relance
+enregistrée. », le suivi passe à « Relancé » avec la prochaine relance dans quatorze jours, et
+l'historique montre la relance, son canal, le nombre de pièces demandées, la note et le message.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-38. Retrouver les porteurs à relancer depuis le portefeuille
+
+Objectif : vérifier que le portefeuille signale les porteurs à relancer.
+
+Compte : test.consultant.
+
+Données : les dossiers de démonstration et le dossier de AXP-37.
+
+1. Ouvrez /axispro. Lisez l'indicateur « Porteurs à relancer ».
+2. Au-dessus des dossiers, choisissez « À relancer ».
+3. Passez en affichage liste et lisez la colonne « Suivi du porteur ».
+4. Revenez à « Tous les dossiers ».
+
+Résultat attendu : l'indicateur compte les dossiers ouverts dont des pièces manquent et dont le
+porteur n'a jamais été relancé, l'a été il y a quatorze jours ou plus, ou a une échéance dépassée.
+« À relancer » ne montre que ces dossiers, avec le même nombre ; le dossier de AXP-37, relancé
+aujourd'hui, n'y figure pas. La colonne « Suivi du porteur » donne pour chaque dossier « Jamais
+relancé », « À relancer », « Échéance dépassée », « Relancé », « Dossier complet » ou « Sans
+relance » (dossier suspendu ou clos).
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-39. Relancer par le portail et lire la relance côté porteur
+
+Objectif : vérifier qu'une relance envoyée par le portail arrive au porteur, sans note interne ni
+intitulé de critère.
+
+Compte : test.consultant, puis test.porteur.
+
+Données : le dossier « Unité de séchage de mangues (démo) », suivi au portail par test.porteur.
+
+1. test.consultant : ouvrez ce dossier, onglet « Relances ». Lisez la phrase sous le message.
+2. Cliquez sur « Envoyer par le portail ».
+3. Lisez l'« Historique des relances ».
+4. test.porteur : connectez-vous au portail et ouvrez « Messages ».
+
+Résultat attendu : la phrase indique que l'envoi par le portail notifie le porteur et enregistre la
+relance. À l'étape 2, « Message envoyé au porteur sur le portail, relance enregistrée. ».
+L'historique montre une relance au canal « Message du portail ». Le porteur reçoit une notification
+et lit le message dans « Messages » : objet, liste des pièces attendues, signature du consultant ;
+aucun intitulé de critère, aucune note du cabinet.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-40. Ouvrir un dossier à partir du business plan
+
+Objectif : vérifier que la lecture du business plan préremplit la fiche, que chaque champ lu est
+signalé et que rien n'est enregistré avant « Ouvrir le dossier ».
+
+Compte : test.consultant.
+
+Données : un business plan fictif en PDF ou en Word (.docx), sans donnée réelle d'un client ; puis
+une image (PNG ou JPG).
+
+1. Portefeuille : « Nouveau dossier ». Regardez le haut de la fenêtre « Ouverture d'un dossier ».
+2. Si le cadre « Remplir la fiche à partir du business plan » est absent, la lecture n'est pas
+   activée sur cet environnement : notez-le dans les remarques et arrêtez le scénario ici.
+3. « Lire le business plan » : choisissez l'image (choix « Tous les fichiers » dans la fenêtre). Lisez
+   le message.
+4. « Lire le business plan » : choisissez le business plan. Attendez la fin de la lecture.
+5. Lisez les champs remplis et leur mention, puis la case « Ajouter … à la data room du dossier ».
+6. Corrigez un montant, choisissez le promoteur s'il n'a pas été reconnu, puis « Ouvrir le
+   dossier ».
+7. Dans le dossier, ouvrez l'onglet « Data room ».
+
+Résultat attendu : l'image est refusée : « Formats lus : PDF, Word (.docx) ou texte (.txt). ».
+Pendant la lecture, le bouton indique « Lecture… » et la fenêtre annonce quinze à soixante secondes
+en général. À la fin, un bandeau donne le nombre de champs lus et demande de les vérifier ; chaque champ lu porte la mention
+« Lu dans le business plan : à vérifier. ». La description reprend les points clés relevés. Un
+promoteur absent des tiers est signalé sous « Promoteur » ; rien n'est créé tant que vous n'avez pas
+cliqué sur « Ouvrir le dossier ». Le dossier s'ouvre avec les valeurs corrigées, et la data room
+contient « Business plan du promoteur (lu à l'ouverture) » si la case est restée cochée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-41. La direction lit les relances sans relancer
+
+Objectif : vérifier que la direction consulte les relances en lecture seule et qu'un dossier clos ne
+se relance pas.
+
+Compte : test.dg, puis test.consultant.
+
+Données : le dossier de AXP-37 ; le dossier clos de AXP-17.
+
+1. test.dg : ouvrez le dossier de AXP-37, onglet « Relances ».
+2. test.dg : revenez au portefeuille et cherchez le bouton « Nouveau dossier ».
+3. test.consultant : ouvrez le dossier clos, onglet « Relances ».
+
+Résultat attendu : test.dg lit les pièces attendues, le message et l'historique, avec la mention
+« Lecture seule : seul le cabinet relance les porteurs. » ; le message n'est pas modifiable et aucun
+bouton n'enregistre ni n'envoie de relance. La direction n'a pas de bouton « Nouveau dossier ». Le
+dossier clos indique « Sans relance » : « Dossier suspendu ou clos : il ne se relance pas. ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
 ## Synthèse
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
@@ -926,7 +1071,8 @@ l'action est supprimée (« Action supprimée. »).
 | D. Direction | 1 | | | |
 | E. Refus attendus | 4 | | | |
 | F. Contrôles de saisie et de sécurité | 3 | | | |
-| Total | 36 | | | |
+| G. Relances du porteur et lecture du business plan | 5 | | | |
+| Total | 41 | | | |
 
 Réserves et anomalies relevées :
 
