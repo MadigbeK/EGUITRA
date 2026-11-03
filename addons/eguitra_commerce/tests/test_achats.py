@@ -83,9 +83,9 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         with self.assertRaises(AccessError, msg="Le demandeur de l'engagement ne tranche pas le bon qui en découle"):
             request.with_user(self.comptable).action_approve()
         request.with_user(self.chef_comptable).action_approve()
-        with self.assertRaises(AccessError, msg="Ni la validation"):
+        with self.assertRaises(AccessError, msg="Ni l'approbation"):
             request.with_user(self.comptable).action_approve()
-        request.with_user(self.daf).action_approve()
+        request.with_user(self.dg).action_approve()
         self.assertEqual(po.eguitra_status, "approved")
 
     def test_circuit_d_approbation_et_quatre_yeux(self):
@@ -94,17 +94,18 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         self.assertEqual((po.state, po.eguitra_status), ("to approve", "to_approve"))
         request = self.request_of(po)
         self.assertEqual(request.document, "purchase_order")
-        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "finance", "direction"],
-                         "Circuit des bons de commande : contrôle, validation, direction au-delà de 10 M")
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance", "direction"],
+                         "Circuit des bons de commande : contrôle (chef comptable ou DAF), puis direction générale")
         with self.assertRaises(AccessError, msg="Celui qui crée et soumet le bon ne l'approuve pas"):
             request.with_user(self.acheteur).action_approve()
-        with self.assertRaises(AccessError, msg="L'étape de la finance ne revient pas à la direction"):
+        with self.assertRaises(AccessError, msg="Le contrôle ne revient pas à la direction"):
             request.with_user(self.dg).action_approve()
         request.with_user(self.comptable).action_approve()
-        self.assertEqual(po.state, "to approve", "Il reste la validation et l'étape de la direction")
-        with self.assertRaises(AccessError, msg="Le contrôleur ne valide pas aussi"):
+        self.assertEqual(po.state, "to approve", "Il reste l'approbation de la direction générale")
+        with self.assertRaises(AccessError, msg="Le contrôleur n'approuve pas"):
             request.with_user(self.comptable).action_approve()
-        request.with_user(self.chef_comptable).action_approve()
+        with self.assertRaises(AccessError, msg="Ni une autre personne de la finance"):
+            request.with_user(self.chef_comptable).action_approve()
         request.with_user(self.dg).action_approve()
         self.assertEqual((po.state, po.eguitra_status), ("purchase", "approved"))
         self.assertEqual(request.state, "approved")
@@ -117,9 +118,9 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         with self.assertRaises(AccessError, msg="L'auteur du bon de commande n'en tranche aucune étape"):
             request.with_user(self.chef_comptable).action_approve()
         request.with_user(self.comptable).action_approve()
-        with self.assertRaises(AccessError, msg="Ni la validation"):
+        with self.assertRaises(AccessError, msg="Ni l'approbation"):
             request.with_user(self.chef_comptable).action_approve()
-        request.with_user(self.daf).action_approve()
+        request.with_user(self.dg).action_approve()
         self.assertEqual(po.state, "purchase")
 
     def test_refus_puis_resoumission_et_empreinte(self):
