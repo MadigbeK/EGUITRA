@@ -86,6 +86,10 @@ services:
       WHATSAPP_GROUPE_PHONE_NUMBER_ID: ${WHATSAPP_GROUPE_PHONE_NUMBER_ID:-}
       WHATSAPP_CABINET_PHONE_NUMBER_ID: ${WHATSAPP_CABINET_PHONE_NUMBER_ID:-}
       WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-}
+      # Lecture des business plans par l'IA (eguitra_axispro, lecture_ia.py) : clé de l'API d'Anthropic ; vide,
+      # la lecture est indisponible et l'ouverture d'un dossier se fait à la main.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AXISPRO_IA_MODELE: ${AXISPRO_IA_MODELE:-}
     ports:
       - "127.0.0.1:8069:8069"
       - "127.0.0.1:8072:8072"
@@ -201,6 +205,8 @@ services:
       WHATSAPP_GROUPE_PHONE_NUMBER_ID: ${RECETTE_WHATSAPP_GROUPE_PHONE_NUMBER_ID:-}
       WHATSAPP_CABINET_PHONE_NUMBER_ID: ${RECETTE_WHATSAPP_CABINET_PHONE_NUMBER_ID:-}
       WHATSAPP_API_VERSION: ${RECETTE_WHATSAPP_API_VERSION:-}
+      ANTHROPIC_API_KEY: ${RECETTE_ANTHROPIC_API_KEY:-}
+      AXISPRO_IA_MODELE: ${RECETTE_AXISPRO_IA_MODELE:-}
     ports:
       - "127.0.0.1:8169:8069"
       - "127.0.0.1:8172:8072"

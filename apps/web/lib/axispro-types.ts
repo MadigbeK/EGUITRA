@@ -119,6 +119,82 @@ export interface DossierSummary {
   financial: FinancialBrief | null;
   risks: RiskSummary;
   actions: ActionSummary;
+  /** Relances du porteur. Absent des réponses antérieures au noyau qui le sert. */
+  followup?: Followup;
+}
+
+/**
+ * Suivi des relances du porteur : complete (aucune pièce attendue), overdue (échéance dépassée), never
+ * (jamais relancé), due (dernière relance de quatorze jours ou plus), recent (relancé récemment),
+ * inactive (dossier suspendu ou clos). `due` : le porteur est à relancer.
+ */
+export type FollowupState = "complete" | "overdue" | "never" | "due" | "recent" | "inactive";
+export interface Followup {
+  state: FollowupState;
+  due: boolean;
+  missing: number;
+  overdue: number;
+  count: number;
+  last_date: string | null;
+  last_channel: string | null;
+  next_date: string | null;
+  delay_days: number;
+}
+
+/** Pièce ou document attendu du porteur ; `criteria` : codes des critères justifiés (cabinet seulement). */
+export interface RelanceItem {
+  key: string;
+  label: string;
+  category: string | null;
+  state: "missing" | "partial" | "to_redo";
+  priority: number;
+  blocking: boolean;
+  knockout: boolean;
+  due_date: string | null;
+  criteria: string[];
+}
+
+export interface RelanceHistory {
+  id: number;
+  date: string;
+  channel: string;
+  channel_label: string;
+  note: string | null;
+  body: string | null;
+  pieces: number;
+  user: string;
+}
+
+export interface Relances {
+  followup: Followup;
+  contact: { name: string | null; email: string | null; phone: string | null };
+  portal: boolean;
+  items: RelanceItem[];
+  message: string;
+  channels: Array<{ key: string; label: string }>;
+  history: RelanceHistory[];
+}
+
+/** Fiche d'ouverture proposée par la lecture du business plan (IA), à vérifier avant l'ouverture. */
+export interface FicheBusinessPlan {
+  fields: {
+    name: string;
+    promoter: string;
+    contact_name: string;
+    contact_email: string;
+    contact_phone: string;
+    sector: string;
+    location: string;
+    capacity: string;
+    description: string;
+    investment: number | null;
+    financing_need: number | null;
+    currency: string;
+    date_start: string;
+    key_points: string[];
+  };
+  currency: { id: number; name: string } | null;
+  promoter: { id: number; name: string } | null;
 }
 
 /** Indicateurs du modèle financier repris dans la synthèse d'un dossier. */
@@ -267,6 +343,8 @@ export interface DossierDetail extends DossierSummary {
   scoring: Scoring;
   gaps: Gap[];
   portal_users: Array<{ id: number; name: string; login: string }>;
+  /** Contact chez le promoteur saisi sur le dossier (relances). Absent des réponses antérieures. */
+  contact?: { name: string | null; email: string | null; phone: string | null };
   reviews: Review[];
   locked_review: { id: number; date: string; decision: Decision; fingerprint: string | null; locked_by: string | null } | null;
 }

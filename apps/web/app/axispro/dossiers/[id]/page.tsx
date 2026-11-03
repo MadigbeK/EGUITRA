@@ -17,11 +17,12 @@ import { Comites } from "@/components/axispro/dossier/Comites";
 import { DataRoom } from "@/components/axispro/dossier/DataRoom";
 import { Gates } from "@/components/axispro/dossier/Gates";
 import { Journal, Rapport } from "@/components/axispro/dossier/Rapport";
+import { Relances } from "@/components/axispro/dossier/Relances";
 import { Synthese } from "@/components/axispro/dossier/Synthese";
 import { montant, note, useCabinet, useRetour } from "@/components/axispro/dossier/commun";
 import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 
-type Tab = "synthese" | "evaluation" | "gates" | "modele" | "risques" | "actions" | "financements" | "dataroom" | "comites" | "journal" | "echanges" | "rapport" | "temps";
+type Tab = "synthese" | "evaluation" | "gates" | "modele" | "risques" | "actions" | "financements" | "dataroom" | "relances" | "comites" | "journal" | "echanges" | "rapport" | "temps";
 
 const ETAT_DOSSIER: Record<DossierDetail["state"], { label: string; tone: "ok" | "warn" | "neutral" }> = {
   open: { label: "En cours", tone: "ok" },
@@ -170,6 +171,8 @@ function Dossier({ d, relire }: { d: DossierDetail; relire: () => void }) {
           { key: "actions", label: "Actions", count: d.actions.open },
           { key: "financements", label: "Financements" },
           { key: "dataroom", label: "Data room" },
+          // Pastille : porteur à relancer (pièces manquantes, quatorze jours sans relance ou échéance dépassée).
+          { key: "relances", label: "Relances", count: d.followup?.due ? d.followup.missing : undefined },
           { key: "comites", label: "Comités", count: d.reviews.length },
           { key: "journal", label: "Journal" },
           { key: "echanges", label: "Échanges" },
@@ -187,6 +190,7 @@ function Dossier({ d, relire }: { d: DossierDetail; relire: () => void }) {
       {tab === "actions" && <PlanActions dossierId={d.id} onChanged={relire} />}
       {tab === "financements" && <Financements dossierId={d.id} besoin={d.financing_need} devise={d.currency?.name} onChanged={relire} />}
       {tab === "dataroom" && <DataRoom d={d} onChanged={relire} />}
+      {tab === "relances" && <Relances d={d} onChanged={relire} />}
       {tab === "comites" && <Comites d={d} onChanged={relire} />}
       {tab === "journal" && <Journal d={d} />}
       {tab === "echanges" && <Messages d={d} />}

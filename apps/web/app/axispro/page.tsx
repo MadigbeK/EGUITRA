@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { FileText, Lock, Plus, ShieldAlert } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Donut, ErrorBox, Etat, FEUILLE, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, cx } from "@/components/ui";
+import { FileText, FileUp, Lock, Plus, ShieldAlert, Sparkles } from "@/components/icons";
+import { Badge, Button, Card, DataTable, Donut, ErrorBox, Etat, FEUILLE, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Segmented, Select, Tabs, Textarea, classesBouton, cx } from "@/components/ui";
 import { COULEUR_VERDICT } from "@/lib/couleurs";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { apiSend, useApi } from "@/lib/api-client";
-import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type Gate, type Recommendation } from "@/lib/axispro-types";
+import { apiSend, apiUpload, useApi } from "@/lib/api-client";
+import { GATE_DECISION, RECO, type Currency, type DossierDetail, type DossierSummary, type FicheBusinessPlan, type Gate, type Recommendation } from "@/lib/axispro-types";
 import { AIDE_NOMBRE, aujourdhui, fmtInt, fmtPct, lireNombre, nombreIllisible, pluriel } from "@/lib/format";
 import { Portefeuille } from "@/components/axispro/Portefeuille";
 import { montantDevise, montantsParDevise, ratio, totauxParDevise } from "@/components/axispro/cellules";
 import { fermerSiConfirme, note, useCabinet, useRetour } from "@/components/axispro/dossier/commun";
+import { SUIVI } from "@/components/axispro/dossier/Relances";
 
 type Vue = "tableau" | "liste";
 
@@ -83,8 +84,12 @@ export default function DossiersPage() {
   // Devise de la société en tête des totaux (les devises ne s'additionnent pas).
   const { data: devises } = useApi<Currency[]>("/axispro/currencies");
   const [creating, setCreating] = useState(false);
+  const [filtre, setFiltre] = useState<"tous" | "relancer">("tous");
   const { cabinet } = useCabinet();
   const rows = useMemo(() => data ?? [], [data]);
+  // Porteurs à relancer : pièces manquantes et quatorze jours sans relance, ou échéance dépassée.
+  const aRelancer = rows.filter((d) => d.followup?.due);
+  const affiches = filtre === "relancer" ? aRelancer : rows;
 
   useEffect(() => {
     try {
@@ -124,6 +129,15 @@ export default function DossiersPage() {
         actions={
           <>
             <Segmented
+              label="Porteurs"
+              value={filtre}
+              onChange={setFiltre}
+              options={[
+                { key: "tous", label: "Tous les dossiers" },
+                { key: "relancer", label: `À relancer${data ? ` (${fmtInt(aRelancer.length)})` : ""}` },
+              ]}
+            />
+            <Segmented
               label="Présentation"
               value={vue}
               onChange={choisirVue}
@@ -146,11 +160,17 @@ export default function DossiersPage() {
           <ErrorBox titre="Grille en vigueur indisponible : l'ouverture d'un dossier attend sa lecture." error={erreurGrille} onRetry={() => void relireGrille()} />
         </div>
       )}
-      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Kpi label="Dossiers" value={compte(rows.length)} hint={data ? `Besoin de financement : ${besoin}` : undefined} />
         <Kpi label="Bankable, APD READY ou GO" value={compte(rows.filter((d) => FAVORABLES.includes(d.recommendation)).length)} tone="ok" hint={data ? pluriel(rows.filter((d) => d.recommendation === "bankable").length, "bankable candidate") : undefined} />
         <Kpi label="CONDITIONAL GO ou HOLD" value={compte(rows.filter((d) => d.recommendation === "conditional" || d.recommendation === "hold").length)} tone="warn" />
         <Kpi label="Knock-out actif" value={compte(rows.filter((d) => d.knockouts > 0).length)} tone="danger" />
+        <Kpi
+          label="Porteurs à relancer"
+          value={compte(aRelancer.length)}
+          tone="warn"
+          hint={data ? pluriel(aRelancer.filter((d) => d.followup?.state === "overdue").length, "échéance dépassée", "échéances dépassées") : undefined}
+        />
       </div>
       {rows.length >= LIMITE && <div className="mb-5"><Notice tone="warn">Les {fmtInt(LIMITE)} dossiers les plus récents sont affichés : chiffres, entonnoir et tableau portent sur eux seuls.</Notice></div>}
 
@@ -192,10 +212,10 @@ export default function DossiersPage() {
           <Etat error={error} onRetry={() => void mutate()} label="Chargement des dossiers…" />
         </Card>
       ) : vue === "tableau" && etapes.length > 0 ? (
-        <Tableau etapes={etapes} rows={rows} rang={rang} />
+        <Tableau etapes={etapes} rows={affiches} rang={rang} />
       ) : (
         <Card padded={false}>
-          <Liste rows={rows} />
+          <Liste rows={affiches} />
         </Card>
       )}
       {creating && (
@@ -316,11 +336,14 @@ function CarteDossier({ d }: { d: DossierSummary }) {
           )}
         </div>
       )}
-      {d.knockouts > 0 && assessed > 0 && (
-        <div className="mt-2">
-          <Badge tone="danger">
-            <ShieldAlert aria-hidden className="mr-1.5 h-3.5 w-3.5" /> {pluriel(d.knockouts, "knock-out actif", "knock-outs actifs")}
-          </Badge>
+      {((d.knockouts > 0 && assessed > 0) || d.followup?.due) && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {d.knockouts > 0 && assessed > 0 && (
+            <Badge tone="danger">
+              <ShieldAlert aria-hidden className="mr-1.5 h-3.5 w-3.5" /> {pluriel(d.knockouts, "knock-out actif", "knock-outs actifs")}
+            </Badge>
+          )}
+          {d.followup?.due && <Badge tone={SUIVI[d.followup.state].tone}>{SUIVI[d.followup.state].label}</Badge>}
         </div>
       )}
       <div className="mt-3">
@@ -412,6 +435,12 @@ function Liste({ rows }: { rows: DossierSummary[] }) {
         { key: "dscr", label: "DSCR min.", align: "right", sortValue: (d) => d.financial?.dscr_min ?? null, render: (d) => ratio(d.financial?.dscr_min) },
         { key: "financing_need", label: "Besoin", align: "right", render: (d) => <span className="whitespace-nowrap">{montantDevise(d.financing_need, d.currency?.name)}</span> },
         { key: "documents", label: "Data room", align: "right", sortValue: (d) => d.dataroom_completeness, render: (d) => fmtPct(d.dataroom_completeness, 0) },
+        {
+          key: "followup",
+          label: "Suivi du porteur",
+          sortValue: (d) => (d.followup ? (d.followup.due ? 0 : 1) : 2),
+          render: (d) => (d.followup ? <Badge tone={SUIVI[d.followup.state].tone}>{SUIVI[d.followup.state].label}</Badge> : "–"),
+        },
       ]}
     />
   );
@@ -429,57 +458,145 @@ function erreurMontant(v: string): string | undefined {
   return n !== null && n < 0 ? "Montant positif attendu." : undefined;
 }
 
+/** Champs de la fiche que la lecture du business plan peut remplir. */
+type ChampLu = "name" | "sector" | "location" | "capacity" | "investment" | "financing_need" | "description" | "date_start" | "contact_name" | "contact_email" | "contact_phone" | "currency_id" | "promoter";
+const FORMATS_BP = ".pdf,.docx,.txt";
+
+/** Montant lu par l'IA, écrit comme une saisie (virgule décimale) ; vide s'il manque. */
+function montantEcrit(v: number | null): string {
+  return v === null ? "" : String(v).replace(".", ",");
+}
+
 /**
  * Ouverture d'un dossier : un seul dossier par envoi (double clic, réseau lent : le second clic est
  * ignoré, le bouton tourne) ; montants lus par lireNombre, envoi bloqué sur une saisie illisible ;
  * fenêtre non fermable pendant l'envoi, et fermée sur confirmation quand la saisie a changé.
+ *
+ * Business plan (souhait du cabinet, 3 novembre 2026) : lu par l'IA quand le serveur en a la clé
+ * (POST /axispro/business-plan), il préremplit la fiche ; chaque champ lu le dit, le consultant vérifie
+ * avant d'ouvrir. Le document peut ensuite rejoindre la data room du dossier (PDF ou Word).
  */
 function DossierForm({ onClose, onDone }: { onClose: () => void; onDone: (id: number) => void }) {
   const [promoter, setPromoter] = useState<{ id: number; name: string } | null>(null);
-  const [initial] = useState(() => ({ name: "", sector: "", location: "", capacity: "", investment: "", financing_need: "", description: "", hypotheses: "", currency_id: "", date_evaluation: aujourdhui() }));
+  const [initial] = useState(() => ({ name: "", sector: "", location: "", capacity: "", investment: "", financing_need: "", description: "", hypotheses: "", currency_id: "", date_evaluation: aujourdhui(), date_start: "", contact_name: "", contact_email: "", contact_phone: "" }));
   const [f, setF] = useState(initial);
   const { data: currencies } = useApi<Currency[]>("/axispro/currencies");
+  const { data: lecture } = useApi<{ available: boolean }>("/axispro/business-plan");
+  const [plan, setPlan] = useState<File | null>(null);
+  const [lus, setLus] = useState<Set<ChampLu>>(new Set());
+  const [promoteurLu, setPromoteurLu] = useState<string | null>(null);
+  const [joindre, setJoindre] = useState(true);
   const devise = currencies?.find((c) => String(c.id) === f.currency_id)?.name ?? currencies?.[0]?.name ?? null;
-  const { envoyer, enCours, bandeau } = useRetour();
+  const { envoyer, enCours, bandeau, setRetour } = useRetour();
   const investissement = montantLu(f.investment);
   const besoin = montantLu(f.financing_need);
   const erreurs = { investment: erreurMontant(f.investment), financing_need: erreurMontant(f.financing_need) };
   const bloque = !f.name.trim() || !promoter || investissement === null || besoin === null || !!(erreurs.investment || erreurs.financing_need);
-  const modifie = !!promoter || JSON.stringify(f) !== JSON.stringify(initial);
+  const modifie = !!promoter || !!plan || JSON.stringify(f) !== JSON.stringify(initial);
+  const joignable = !!plan && /\.(pdf|docx)$/i.test(plan.name);
+  const lu = (k: ChampLu) => (lus.has(k) ? "Lu dans le business plan : à vérifier." : undefined);
   async function fermer() {
     if (enCours) return;
     if (await fermerSiConfirme(modifie)) onClose();
   }
+  async function lire(fichier: File) {
+    setPlan(fichier);
+    const form = new FormData();
+    form.append("file", fichier);
+    const r = await envoyer(() => apiUpload<FicheBusinessPlan>("/axispro/business-plan", form), undefined, "lecture");
+    if (!r) return;
+    const x = r.fields;
+    const champs: Partial<Record<ChampLu, string>> = {
+      name: x.name, sector: x.sector, location: x.location, capacity: x.capacity, date_start: x.date_start,
+      contact_name: x.contact_name, contact_email: x.contact_email, contact_phone: x.contact_phone,
+      investment: montantEcrit(x.investment), financing_need: montantEcrit(x.financing_need),
+      description: [x.description, x.key_points.length ? `Points clés relevés dans le business plan :\n${x.key_points.map((p) => `- ${p}`).join("\n")}` : ""].filter(Boolean).join("\n\n"),
+    };
+    // Devise de la société : option vide du choix ; autre devise proposée : son identifiant.
+    if (r.currency && currencies) champs.currency_id = currencies[0]?.id === r.currency.id ? "" : String(r.currency.id);
+    const remplis = (Object.keys(champs) as ChampLu[]).filter((k) => champs[k]);
+    setF((avant) => ({ ...avant, ...Object.fromEntries(remplis.map((k) => [k, champs[k]])) }));
+    if (r.promoter) setPromoter(r.promoter);
+    setPromoteurLu(r.promoter ? null : x.promoter || null);
+    setLus(new Set<ChampLu>([...remplis, ...(r.promoter ? (["promoter"] as ChampLu[]) : [])]));
+    const autre = x.currency && !r.currency ? ` Montants en ${x.currency}, devise non proposée : choisissez la devise du dossier et vérifiez les montants.` : "";
+    setRetour({ tone: autre ? "warn" : "ok", text: `${pluriel(remplis.length + (r.promoter ? 1 : 0), "champ lu", "champs lus")} dans le business plan : vérifiez-les avant d'ouvrir le dossier.${autre}` });
+  }
   async function submit() {
     if (bloque) return;
     const d = await envoyer(
-      () => apiSend<DossierDetail>("POST", "/axispro/dossiers", { ...f, name: f.name.trim(), currency_id: f.currency_id || undefined, promoter_id: promoter.id, investment: investissement, financing_need: besoin }),
+      () => apiSend<DossierDetail>("POST", "/axispro/dossiers", { ...f, name: f.name.trim(), currency_id: f.currency_id || undefined, date_start: f.date_start || undefined, promoter_id: promoter.id, investment: investissement, financing_need: besoin }),
       undefined,
       "ouvrir",
     );
-    if (d) onDone(d.id);
+    if (!d) return;
+    if (plan && joignable && joindre) {
+      // Le dossier est ouvert : un échec du dépôt ne l'empêche pas, la pièce se dépose ensuite dans la data room.
+      const form = new FormData();
+      form.append("file", plan);
+      form.append("name", "Business plan du promoteur (lu à l'ouverture)");
+      await apiUpload(`/axispro/dossiers/${d.id}/documents`, form).catch(() => undefined);
+    }
+    onDone(d.id);
   }
   const suffixe = devise ? ` (${devise})` : "";
   return (
     <Modal open wide title="Ouverture d'un dossier" onClose={() => void fermer()} footer={
       <>
         <Button variant="ghost" disabled={!!enCours} onClick={() => void fermer()}>Annuler</Button>
-        <Button variant="primary" loading={enCours === "ouvrir"} onClick={() => void submit()} disabled={bloque}>Ouvrir le dossier</Button>
+        <Button variant="primary" loading={enCours === "ouvrir"} onClick={() => void submit()} disabled={bloque || enCours === "lecture"}>Ouvrir le dossier</Button>
       </>
     }>
       <fieldset disabled={!!enCours} className="min-w-0">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {lecture?.available && (
+            <div className="rounded-xl border border-dashed border-accent/40 bg-accent-doux/40 p-3 md:col-span-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <Sparkles aria-hidden className="h-5 w-5 flex-none text-accent" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">Remplir la fiche à partir du business plan</div>
+                  <div className="text-xs text-muted">
+                    {enCours === "lecture"
+                      ? `Lecture de ${plan?.name ?? "du document"} : quinze à soixante secondes en général.`
+                      : "PDF, Word (.docx) ou texte, 20 Mo au plus. Le document est lu par l'IA (Claude) le temps de la lecture ; vous vérifiez chaque champ avant d'ouvrir le dossier."}
+                  </div>
+                </div>
+                <label className={cx(classesBouton("secondary"), enCours ? "pointer-events-none opacity-60" : "cursor-pointer")}>
+                  <FileUp className="h-4 w-4" /> {enCours === "lecture" ? "Lecture…" : plan ? "Lire un autre fichier" : "Lire le business plan"}
+                  <input
+                    type="file"
+                    accept={FORMATS_BP}
+                    className="sr-only"
+                    onChange={(e) => {
+                      const fichier = e.target.files?.[0];
+                      e.target.value = "";
+                      if (fichier) void lire(fichier);
+                    }}
+                  />
+                </label>
+              </div>
+              {plan && joignable && (
+                <label className="mt-2 flex items-center gap-2 text-xs">
+                  <input type="checkbox" checked={joindre} onChange={(e) => setJoindre(e.target.checked)} /> Ajouter {plan.name} à la data room du dossier
+                </label>
+              )}
+            </div>
+          )}
           {bandeau && <div className="md:col-span-2">{bandeau}</div>}
-          <Field label="Projet"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
-          <Field label="Promoteur"><PartnerPicker value={promoter} onChange={setPromoter} kind="customer" /></Field>
-          <Field label="Secteur"><Input value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value })} /></Field>
-          <Field label="Localisation"><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
-          <Field label="Capacité"><Input value={f.capacity} onChange={(e) => setF({ ...f, capacity: e.target.value })} /></Field>
-          <Field label="Devise du dossier"><Select value={f.currency_id} onChange={(e) => setF({ ...f, currency_id: e.target.value })} options={(currencies ?? []).map((c, i) => ({ value: i === 0 ? "" : String(c.id), label: c.name }))} /></Field>
+          <Field label="Projet" hint={lu("name")}><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label="Promoteur" hint={lu("promoter") ?? (promoteurLu && !promoter ? `Lu : « ${promoteurLu} », absent des tiers : créez-le ou choisissez-le.` : undefined)}><PartnerPicker value={promoter} onChange={setPromoter} kind="customer" /></Field>
+          <Field label="Secteur" hint={lu("sector")}><Input value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value })} /></Field>
+          <Field label="Localisation" hint={lu("location")}><Input value={f.location} onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
+          <Field label="Capacité" hint={lu("capacity")}><Input value={f.capacity} onChange={(e) => setF({ ...f, capacity: e.target.value })} /></Field>
+          <Field label="Devise du dossier" hint={lu("currency_id")}><Select value={f.currency_id} onChange={(e) => setF({ ...f, currency_id: e.target.value })} options={(currencies ?? []).map((c, i) => ({ value: i === 0 ? "" : String(c.id), label: c.name }))} /></Field>
           <Field label="Date d'évaluation"><Input type="date" value={f.date_evaluation} onChange={(e) => setF({ ...f, date_evaluation: e.target.value })} /></Field>
-          <Field label={`Investissement prévu${suffixe}`} error={erreurs.investment}><Input inputMode="decimal" className="font-mono" aria-invalid={erreurs.investment ? true : undefined} value={f.investment} onChange={(e) => setF({ ...f, investment: e.target.value })} /></Field>
-          <Field label={`Besoin de financement${suffixe}`} error={erreurs.financing_need}><Input inputMode="decimal" className="font-mono" aria-invalid={erreurs.financing_need ? true : undefined} value={f.financing_need} onChange={(e) => setF({ ...f, financing_need: e.target.value })} /></Field>
-          <Field label="Description" className="md:col-span-2"><Textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
+          <Field label="Démarrage prévu" hint={lu("date_start")}><Input type="date" value={f.date_start} onChange={(e) => setF({ ...f, date_start: e.target.value })} /></Field>
+          <Field label={`Investissement prévu${suffixe}`} error={erreurs.investment} hint={lu("investment")}><Input inputMode="decimal" className="font-mono" aria-invalid={erreurs.investment ? true : undefined} value={f.investment} onChange={(e) => setF({ ...f, investment: e.target.value })} /></Field>
+          <Field label={`Besoin de financement${suffixe}`} error={erreurs.financing_need} hint={lu("financing_need")}><Input inputMode="decimal" className="font-mono" aria-invalid={erreurs.financing_need ? true : undefined} value={f.financing_need} onChange={(e) => setF({ ...f, financing_need: e.target.value })} /></Field>
+          <Field label="Contact chez le promoteur" hint={lu("contact_name")}><Input value={f.contact_name} onChange={(e) => setF({ ...f, contact_name: e.target.value })} /></Field>
+          <Field label="Courriel du contact" hint={lu("contact_email")}><Input type="email" value={f.contact_email} onChange={(e) => setF({ ...f, contact_email: e.target.value })} /></Field>
+          <Field label="Téléphone du contact" hint={lu("contact_phone")}><Input type="tel" value={f.contact_phone} onChange={(e) => setF({ ...f, contact_phone: e.target.value })} /></Field>
+          <Field label="Description" className="md:col-span-2" hint={lu("description")}><Textarea rows={lus.has("description") ? 7 : undefined} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
           <Field label="Hypothèses de décision" className="md:col-span-2"><Textarea value={f.hypotheses} onChange={(e) => setF({ ...f, hypotheses: e.target.value })} /></Field>
         </div>
       </fieldset>

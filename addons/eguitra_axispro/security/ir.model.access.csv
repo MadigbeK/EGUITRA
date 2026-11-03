@@ -40,3 +40,5 @@ access_compartment_cabinet,compartiments cabinet,model_axispro_compartment,eguit
 access_compartment_direction,compartiments direction,model_axispro_compartment,eguitra_base.group_profile_direction,1,0,0,0
 access_assignment_cabinet,équipe des dossiers cabinet,model_axispro_assignment,eguitra_base.group_profile_cabinet,1,1,1,1
 access_assignment_direction,équipe des dossiers direction,model_axispro_assignment,eguitra_base.group_profile_direction,1,0,0,0
+access_relance_cabinet,relances du porteur cabinet,model_axispro_relance,eguitra_base.group_profile_cabinet,1,1,1,0
+access_relance_direction,relances du porteur direction,model_axispro_relance,eguitra_base.group_profile_direction,1,0,0,0

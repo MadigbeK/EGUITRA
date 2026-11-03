@@ -55,6 +55,8 @@ def dossier_summary(d, result=None):
         "financial": _financial_brief(r.get("financial")),
         "risks": d.risk_summary(),
         "actions": d.action_summary(),
+        # Relances du porteur (models/relance.py) : à relancer, échéances dépassées, dernière relance.
+        "followup": d.followup(result=r),
     }
 
 
@@ -78,6 +80,7 @@ def dossier_detail(d, result=None):
         },
         "scoring": d.scoring(r), "gaps": d.gaps(5, r),
         "portal_users": [{"id": u.id, "name": u.name, "login": u.login} for u in d.portal_user_ids],
+        "contact": {"name": d.contact_name or None, "email": d.contact_email or None, "phone": d.contact_phone or None},
         "reviews": [review_row(x) for x in d.review_ids],
         "locked_review": {"id": locked.id, "date": locked.date, "decision": locked.decision,
                           "fingerprint": locked.fingerprint, "locked_by": locked.locked_by.name or None}

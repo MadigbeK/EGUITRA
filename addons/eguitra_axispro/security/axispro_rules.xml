@@ -112,6 +112,12 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
+    <record id="rule_relance_company" model="ir.rule">
+        <field name="name">Relances du porteur : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_relance"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
     <record id="rule_journal_company" model="ir.rule">
         <field name="name">Journal des dossiers : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_journal"/>

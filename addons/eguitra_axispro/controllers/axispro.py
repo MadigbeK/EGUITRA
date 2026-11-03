@@ -10,12 +10,15 @@ from odoo.addons.eguitra_api.controllers.auth import _password_shared
 from odoo.addons.eguitra_api.controllers.framework import ApiError, api_route, int_arg, read_json, require
 from odoo.addons.eguitra_finance.controllers.common import as_float, move_summary, parse_date, today
 
+from .. import lecture_ia
 from ..engine import INDICATORS, MONEY, indicator_unit
 from ..models.dossier import COMMITTEE_DECISIONS, HYPOTHESES, STATUSES, YES_NO
 from ..models.policy import SCOPES, WEIGHTINGS, grid_template
+from ..models.relance import CHANNELS
 from ..models.review import MOTIVE_REQUIRED, SNAPSHOT_FINANCIAL, motive_missing
 from ..scoring import REQUIREMENTS, RULES
 from .common import (
+    MAX_FILE,
     document_row,
     dossier_detail,
     dossier_summary,
@@ -386,6 +389,12 @@ class EguitraAxispro(http.Controller):
     def _values(self, data):
         values = {k: data[k] or False for k in ("name", "sector", "location", "capacity", "description", "hypotheses")
                   if k in data}
+        # Contact chez le promoteur (relances) : hors de la fiche figée par une décision verrouillée.
+        for key, size in (("contact_name", 120), ("contact_email", 120), ("contact_phone", 40)):
+            if key in data:
+                values[key] = " ".join(str(data[key] or "").split())[:size] or False
+        if values.get("contact_email") and not lecture_ia.EMAIL.match(values["contact_email"]):
+            raise ApiError(400, "invalid_parameter", "Courriel du contact invalide.", fields=["contact_email"])
         for key in ("investment", "financing_need", "dscr_manual", "irr_manual"):
             if key in data:
                 values[key] = as_float(data[key] or 0, key)
@@ -426,6 +435,40 @@ class EguitraAxispro(http.Controller):
         dossier = _dossier(dossier_id)
         dossier.write(self._values(read_json()))
         return dossier_detail(dossier)
+
+    # ─── Lecture d'un business plan (IA) ──────────────────────────────────
+
+    @api_route("/axispro/business-plan", profiles=WRITE)
+    def business_plan_available(self, **_kw):
+        return {"available": lecture_ia.available()}
+
+    @api_route("/axispro/business-plan", methods=("POST",), profiles=WRITE)
+    def business_plan(self, **_kw):
+        """Fiche d'ouverture proposée à partir du business plan du promoteur (lecture_ia) : rien n'est
+        enregistré ; la devise est rapprochée des devises proposées, le promoteur d'un tiers existant de
+        même nom."""
+        upload = request.httprequest.files.get("file")
+        if not upload:
+            raise ApiError(400, "missing_fields", "Fichier manquant.", fields=["file"])
+        content = upload.read(MAX_FILE + 1)
+        if len(content) > MAX_FILE:
+            raise ApiError(413, "too_large", "Fichier trop volumineux (20 Mo maximum).")
+        try:
+            fields = lecture_ia.read_business_plan(content, upload.filename)
+        except lecture_ia.ReadingError as e:
+            raise ApiError(e.status, e.code, e.message) from e
+        currency = None
+        if fields["currency"]:
+            found = request.env["res.currency"].search([("name", "=", fields["currency"]), ("active", "=", True)], limit=1)
+            currency = {"id": found.id, "name": found.name} if found else None
+        promoter = None
+        if fields["promoter"]:
+            company = request.env.company
+            partners = request.env["res.partner"].search([("name", "=ilike", fields["promoter"]),
+                                                          ("company_id", "in", (False, company.id))], limit=2)
+            if len(partners) == 1:
+                promoter = {"id": partners.id, "name": partners.name}
+        return {"fields": fields, "currency": currency, "promoter": promoter}
 
     @api_route("/axispro/consultants", profiles=READ)
     def consultants(self, **_kw):
@@ -831,6 +874,54 @@ class EguitraAxispro(http.Controller):
             {"dossier_id": dossier.id, "body": str(body)[:5000], "internal": bool(data.get("internal"))}
         )
         return message_row(message)
+
+    # ─── Relances du porteur ──────────────────────────────────────────────
+
+    @staticmethod
+    def _relances(dossier):
+        items = dossier.relance_items()
+        labels = dict(CHANNELS)
+        return {
+            "followup": dossier.followup(items),
+            "contact": dossier.contact(),
+            "portal": bool(dossier.portal_user_ids),
+            "items": items,
+            "message": dossier.relance_message(items),
+            "channels": [{"key": key, "label": label} for key, label in CHANNELS],
+            "history": [{"id": x.id, "date": x.date, "channel": x.channel, "channel_label": labels[x.channel],
+                         "note": x.note or None, "body": x.body or None, "pieces": x.pieces,
+                         "user": x.user_id.name} for x in dossier.relance_ids],
+        }
+
+    @api_route("/axispro/dossiers/<int:dossier_id>/relances", profiles=READ)
+    def relances(self, dossier_id, **_kw):
+        return self._relances(_dossier(dossier_id))
+
+    @api_route("/axispro/dossiers/<int:dossier_id>/relances", methods=("POST",), profiles=WRITE)
+    def add_relance(self, dossier_id, **_kw):
+        """Relance enregistrée (date, canal, note, message envoyé) ; par le portail, le message part
+        aussi au porteur, qui en est notifié. Un dossier clos ne se relance pas."""
+        dossier = _dossier(dossier_id)
+        dossier._check_open()
+        data = read_json()
+        channel = data.get("channel") or "email"
+        if channel not in dict(CHANNELS):
+            raise ApiError(400, "invalid_parameter", "Canal de relance inconnu.", fields=["channel"])
+        body = str(data.get("body") or "").strip()[:10000]
+        message = request.env["axispro.message"]
+        if channel == "portal":
+            if not dossier.portal_user_ids:
+                raise ApiError(422, "business_rule", "Le porteur n'a pas d'accès au portail : relancez-le par un "
+                                                     "autre canal.")
+            if not body:
+                raise ApiError(400, "missing_fields", "Message à envoyer au porteur manquant.", fields=["body"])
+            message = message.create({"dossier_id": dossier.id, "body": body[:5000], "internal": False})
+        request.env["axispro.relance"].create({
+            "dossier_id": dossier.id, "date": parse_date(data, "date") or today(), "channel": channel,
+            "note": str(data.get("note") or "").strip()[:2000] or False, "body": body or False,
+            "pieces": len(dossier.relance_items()), "message_id": message.id or False,
+        })
+        return self._relances(dossier)
 
     # ─── Temps et facturation ─────────────────────────────────────────────
 
