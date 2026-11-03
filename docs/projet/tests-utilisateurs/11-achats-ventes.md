@@ -25,7 +25,8 @@ Document préparé par E-VOLUTION XP le 27 octobre 2026, d'après les écrans de
 date ; complété le 2 novembre 2026 (partie M) après le retour d'EGUITRA GROUP sur les bons de commande :
 fournisseur créé depuis le bon, circuit d'approbation, traçabilité et signature, TVA, devis et
 conditions ; circuit mis à jour le même jour selon la réponse d'EGUITRA GROUP : contrôle par le chef
-comptable ou le DAF, puis approbation de la direction générale.
+comptable ou le DAF, puis approbation de la direction générale ; partie N : émission des bons de
+commande réservée au service Achats chez EGUITRA GROUP SARLU (décision du même jour).
 
 <!-- saut de page -->
 
@@ -63,7 +64,7 @@ compris les erreurs.
 | test.daf | Finance | les deux sociétés | offres, facturation, réglages, contrôle des bons de commande (DAF) |
 | test.comptable | Finance | les deux sociétés | contrôle des bons de commande (chef comptable), approbations, pièces d'achat |
 | test.dg | Direction | les deux sociétés | offres, approbation des bons de commande, lecture |
-| test.achats | Achats | les deux sociétés | bons de commande, réceptions, pièces d'achat |
+| test.achats | Achats | les deux sociétés | émission des bons de commande (seul profil chez EGUITRA GROUP SARLU), réceptions, pièces d'achat |
 | test.achatvente | Finance et achats | les deux sociétés | tout le cahier d'un seul compte, sauf les scénarios à deux personnes |
 | test.chantiers | BTP | EGUITRA GROUP SARLU | engagement et bon de commande du chantier, situations |
 | test.exploitation | Exploitation | EGUITRA GROUP SARLU | refus |
@@ -635,7 +636,7 @@ Résultat attendu : la facture déduit 18 000 000, le reste de l'avance ; « Ava
 
 Objectif : vérifier qu'un bon de commande dans la limite de son engagement est approuvé d'office.
 
-Compte : test.chantiers, puis test.comptable.
+Compte : test.chantiers, test.comptable, puis test.achats.
 
 Données : engagement « Fers à béton du chantier (essai) », fournisseur « Démo - Quincaillerie du
 port », 6 000 000 HT ; ligne libre « Fer à béton de 12, la barre », 1 000 barres à 6 000, catégorie
@@ -644,12 +645,15 @@ de dépense au choix.
 1. test.chantiers : Pilotage > Engagements de dépense, « Nouvel engagement », remplissez et
    « Soumettre à l'approbation ».
 2. test.comptable : « À valider », approuvez la demande.
-3. test.chantiers : rouvrez l'engagement ; dans la carte « Bons de commande », cliquez sur « Bon de
-   commande ».
-4. Ajoutez la ligne (« Ligne », désignation, quantité, prix, « Catégorie de dépense »), puis
+3. test.chantiers : rouvrez l'engagement ; regardez la carte « Bons de commande ».
+4. test.achats : Achats et dépenses, onglet « Bons de commande », « Nouveau bon de commande » ;
+   choisissez l'engagement dans « Engagement de dépense approuvé ».
+5. Ajoutez la ligne (« Ligne », désignation, quantité, prix, « Catégorie de dépense »), puis
    « Soumettre à l'approbation ».
 
-Résultat attendu : le fournisseur et l'objet de l'engagement sont repris. Le bon de commande
+Résultat attendu : à l'étape 3, la carte n'offre pas « Bon de commande » à test.chantiers et indique
+que le service Achats émet le bon depuis l'engagement (émission réservée chez EGUITRA GROUP SARLU).
+Le fournisseur et l'objet de l'engagement sont repris. Le bon de commande
 BC/EG/2026/… est aussitôt « Approuvé », sans nouvelle demande dans « À valider » : il reste dans
 l'engagement approuvé. Il apparaît dans la carte « Bons de commande » de l'engagement et sous
 Pilotage > Bons de commande. Un bon saisi sans ligne depuis un engagement dont la finance a précisé
@@ -689,11 +693,13 @@ catégorie fixe le compte. Notez le numéro.
 
 Objectif : vérifier que celui qui saisit un bon de commande n'en tranche aucune étape.
 
-Compte : test.comptable, puis test.daf.
+Compte : test.comptable, puis test.daf, dans la société MB AxisPro Consulting (où l'émission des bons
+n'est pas réservée au service Achats).
 
-Données : un bon de commande direct de 3 000 000 saisi et soumis par test.comptable.
+Données : un bon de commande direct de 3 000 000 saisi et soumis par test.comptable, ligne libre et
+catégorie de dépense au choix.
 
-1. test.comptable : créez et soumettez le bon de commande.
+1. test.comptable : choisissez la société MB AxisPro Consulting ; créez et soumettez le bon de commande.
 2. test.comptable : ouvrez « À valider ».
 3. test.daf : ouvrez « À valider », puis la demande du bon.
 
@@ -1589,7 +1595,7 @@ bon », « Lieu de livraison : … », « Autres conditions : Garantie d'un an (
 Objectif : vérifier qu'un bon issu d'un engagement reprend la référence, la date et la pièce du
 devis retenu.
 
-Compte : test.chantiers, test.comptable.
+Compte : test.chantiers, test.comptable, puis test.achats.
 
 Données : engagement « Agrégats du chantier (essai) », fournisseur « Démo - Quincaillerie du port »,
 4 000 000 ; devis « DEV-AGR-03 » daté d'avant-hier, 4 000 000, avec un PDF joint.
@@ -1597,11 +1603,108 @@ Données : engagement « Agrégats du chantier (essai) », fournisseur « Démo 
 1. test.chantiers : créez l'engagement ; dans sa carte des devis, ajoutez le devis, joignez le PDF,
    retenez-le avec un motif ; soumettez l'engagement.
 2. test.comptable : approuvez-le.
-3. test.chantiers : depuis l'engagement, « Bon de commande », enregistrez-le.
+3. test.achats : « Nouveau bon de commande », choisissez l'engagement dans « Engagement de dépense
+   approuvé », enregistrez le bon.
 
 Résultat attendu : le bon porte « Devis du fournisseur : DEV-AGR-03 du … » ; sa carte « Pièces
 jointes » contient le devis, catégorie « Devis du fournisseur », provenance « Devis retenu de
 l'engagement ENG/… ». Le PDF imprime la référence et la date du devis.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## N. Émission des bons de commande réservée au service Achats
+
+### ACV-69. Le service Achats émet le bon de commande
+
+Objectif : vérifier que le Responsable Achats et Contrats crée, modifie, soumet et annule un bon de
+commande chez EGUITRA GROUP SARLU.
+
+Compte : test.achats.
+
+Données : fournisseur « Démo - Quincaillerie du port » ; ligne libre « Tôles ondulées (essai) », 50 à
+85 000, catégorie de dépense au choix ; puis un second bon identique, « Tôles, second lot (essai) ».
+
+1. Achats et dépenses, onglet « Bons de commande » : « Nouveau bon de commande », remplissez,
+   « Enregistrer en brouillon ».
+2. Ouvrez le bon, « Modifier », passez la quantité à 60, « Soumettre à l'approbation ».
+3. Créez et soumettez le second bon, ouvrez-le, « Annuler », confirmez.
+
+Résultat attendu : les boutons « Nouveau bon de commande », « Modifier », « Soumettre à
+l'approbation » et « Annuler » sont proposés. Le premier bon est « En approbation », chez « Finance et
+comptabilité » ; le second est « Annulé », sa demande d'approbation abandonnée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-70. La finance et la direction n'émettent pas, mais contrôlent et approuvent
+
+Objectif : vérifier la séparation entre émission, contrôle et approbation.
+
+Compte : test.daf, test.dg, puis test.comptable.
+
+Données : le premier bon d'ACV-69, en approbation ; un brouillon saisi par test.achats.
+
+1. test.daf : onglet « Bons de commande » ; lisez le haut de l'écran ; ouvrez le brouillon.
+2. test.dg : même chose.
+3. test.comptable : « À valider », approuvez le bon d'ACV-69 (contrôle).
+4. test.dg : « À valider », approuvez-le.
+
+Résultat attendu : aux étapes 1 et 2, pas de bouton « Nouveau bon de commande » ; l'indication
+« Émission réservée au service Achats (Responsable Achats et Contrats) » s'affiche ; le brouillon se
+lit, son PDF s'imprime, mais « Modifier », « Soumettre à l'approbation » et « Annuler » ne sont pas
+proposés (« ce brouillon se modifie, se soumet ou s'annule par le service Achats »). Le contrôle de
+test.comptable et l'approbation de test.dg se font normalement : le bon est « Approuvé ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-71. Les métiers n'émettent pas depuis leur engagement
+
+Objectif : vérifier qu'un conducteur de travaux ne crée pas de bon de commande, même depuis son
+engagement approuvé, et que la suite du bon reste ouverte (réception).
+
+Compte : test.chantiers, puis test.achats.
+
+Données : un engagement approuvé de test.chantiers (celui d'ACV-26 par exemple).
+
+1. test.chantiers : ouvrez l'engagement, carte « Bons de commande » ; puis l'onglet « Bons de
+   commande ».
+2. test.achats : émettez le bon depuis l'engagement (« Nouveau bon de commande », « Engagement de
+   dépense approuvé »), soumettez-le.
+3. test.chantiers : une fois le bon approuvé, ouvrez-le, « Enregistrer une réception ».
+
+Résultat attendu : à l'étape 1, aucun bouton de création ; la carte indique que le service Achats émet
+le bon depuis l'engagement. À l'étape 3, test.chantiers voit le bon de son engagement et enregistre la
+réception (service fait) : seule l'émission est réservée.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### ACV-72. Réglage tenu par l'administration
+
+Objectif : vérifier que la réserve de l'émission se règle par société, par l'administration seule.
+
+Compte : test.daf, puis test.admin.
+
+Données : aucune.
+
+1. test.daf : Administration > Achats et ventes, carte « Bons de commande fournisseur ».
+2. test.admin : même écran, société EGUITRA GROUP SARLU, puis MB AxisPro Consulting.
+
+Résultat attendu : chez test.daf, la case « Émission des bons de commande réservée au service Achats »
+est cochée et grisée (« Réglage tenu par l'administration : consultation seulement ») ; ses autres
+réglages s'enregistrent comme avant. Chez test.admin, la case se modifie : cochée pour EGUITRA GROUP
+SARLU, décochée pour MB AxisPro Consulting. Ne la décochez pas pour EGUITRA GROUP SARLU (ou recochez-la
+aussitôt) : les autres scénarios la supposent active.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -1625,7 +1728,8 @@ l'engagement ENG/… ». Le PDF imprime la référence et la date du devis.
 | K. Refus attendus | 4 | | | |
 | L. Séparation des deux sociétés | 2 | | | |
 | M. Bons de commande : retour du client du 2 novembre | 14 | | | |
-| Total | 68 | | | |
+| N. Émission des bons de commande réservée au service Achats | 4 | | | |
+| Total | 72 | | | |
 
 Réserves et anomalies relevées :
 
