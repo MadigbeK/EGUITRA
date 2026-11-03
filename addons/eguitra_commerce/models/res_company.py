@@ -81,7 +81,7 @@ class ResCompany(models.Model):
                 values["po_double_validation"] = "one_step"
             if values:
                 company.write(values)
-        # Circuit des bons de commande (contrôle, validation, approbation au-delà du seuil), s'il manque.
+        # Circuit des bons de commande (contrôle, approbation de la direction générale), s'il manque.
         ensure_purchase_order_rules(self.env, self)
         return True
 
