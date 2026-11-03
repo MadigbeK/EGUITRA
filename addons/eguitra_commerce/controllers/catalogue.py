@@ -14,7 +14,7 @@ from odoo.addons.eguitra_finance.controllers.exporting import table_response
 from odoo.addons.eguitra_finance.models.analytic import ACTIVITY_PLAN
 
 from ..models.purchase_order import company_address
-from .common import CATALOGUE_READ, CATALOGUE_WRITE, company, finance_user, purchase_restricted, ref, text
+from .common import CATALOGUE_READ, CATALOGUE_WRITE, company, finance_user, issuing, purchase_restricted, ref, text
 
 MAX_IMPORT = 5 * 1024 * 1024
 KINDS = {"service": "service", "prestation": "service", "article": "consu", "fourniture": "consu"}
@@ -321,5 +321,7 @@ class EguitraCommerceCatalogue(http.Controller):
             "payment_terms": [{"id": t.id, "name": t.name} for t in env["account.payment.term"].sudo().search(
                 [("company_id", "in", [False, comp.id])], order="sequence, id")],
             "delivery_place": company_address(comp),
+            # Émission des bons de commande (réservée au service Achats ou non, permise au compte).
+            **issuing(),
         }
 

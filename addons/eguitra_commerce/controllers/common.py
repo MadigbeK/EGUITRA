@@ -6,7 +6,9 @@ Profils (règle du projet) :
 - achats (bons de commande, réceptions) : le profil Achats avec ses bornes actuelles (catégorie de dépense,
   taxes d'achat, jamais le choix du compte), l'exploitation, le BTP et l'immobilier pour leurs demandes (ils
   ne voient que les bons qu'ils ont saisis ou ceux de leurs engagements), la finance, la direction ; la pièce
-  d'achat, par ceux qui la saisissent aujourd'hui (administration, finance, Achats) ;
+  d'achat, par ceux qui la saisissent aujourd'hui (administration, finance, Achats) ; quand la société réserve
+  l'émission au service Achats (réglage), seul le profil Achats crée, modifie, soumet et annule avant
+  approbation un bon de commande, les autres le lisent, le réceptionnent, le contrôlent ou l'approuvent ;
 - paramètres et catalogue : administration et finance (le catalogue se lit aussi depuis les achats).
 
 Les commandes du noyau (sale.order, purchase.order) sont manipulées avec les droits du noyau (sudo), après le
@@ -28,6 +30,8 @@ from odoo.addons.eguitra_finance.controllers.common import (
     with_rules,
 )
 from odoo.addons.eguitra_finance.controllers.moves import category_of, chosen_account
+
+from ..models.purchase_order import ISSUE_RESERVED
 
 SALES_READ = ("admin", "direction", "finance")
 SALES_WRITE = ("admin", "direction", "finance")
@@ -64,6 +68,21 @@ def purchase_restricted():
     """Compte qui n'atteint les achats que par un profil métier (exploitation, BTP, immobilier) : il ne voit que
     ses demandes."""
     return not profiles() & set(PURCHASE_FULL)
+
+
+def issuing():
+    """Émission des bons de commande dans la société de travail : réservée au service Achats ? permise au compte ?
+    (les écrans lisent ces drapeaux, sans logique de profil propre)."""
+    comp = request.env.company
+    return {"issue_reserved": comp.eguitra_po_issue_reserved,
+            "can_issue": comp._eguitra_can_issue_purchase_orders(request.env.user)}
+
+
+def check_issuer():
+    """Refus clair (403) avant toute saisie quand l'émission est réservée au service Achats ; le modèle le
+    contrôle aussi (purchase_order.py, _eguitra_check_issuer)."""
+    if not issuing()["can_issue"]:
+        raise ApiError(403, "forbidden", ISSUE_RESERVED)
 
 
 def finance_user():

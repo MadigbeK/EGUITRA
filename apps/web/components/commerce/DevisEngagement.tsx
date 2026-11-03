@@ -49,7 +49,7 @@ export function AchatsEngagement({ commitmentId, onChanged }: { commitmentId: nu
             ]} />
           </Card>
           <Card title="Bons de commande" padded={false} actions={commande && d.can_order ? <Button size="sm" variant="primary" onClick={() => setBon(true)}><Plus className="h-4 w-4" /> Bon de commande</Button> : undefined}>
-            <DataTable dense rows={d.purchase_orders} rowKey={(o) => o.id} empty={d.can_order ? "Aucun bon de commande : créez-le depuis cet engagement (approuvé d'office dans sa limite)." : "Le bon de commande se crée une fois l'engagement approuvé."} columns={[
+            <DataTable dense rows={d.purchase_orders} rowKey={(o) => o.id} empty={d.can_order ? "Aucun bon de commande : créez-le depuis cet engagement (approuvé d'office dans sa limite)." : d.commitment.state === "approved" && d.issue_reserved ? "Aucun bon de commande : le service Achats (Responsable Achats et Contrats) l'émet depuis cet engagement." : "Le bon de commande se crée une fois l'engagement approuvé."} columns={[
               { key: "name", label: "Bon", render: (o) => <span className="font-mono text-xs">{o.name}</span> },
               { key: "date", label: "Date", render: (o) => fmtDate(o.date) },
               { key: "amount_untaxed", label: "HT (GNF)", align: "right", render: (o) => fmtInt(o.amount_untaxed) },

@@ -47,6 +47,8 @@ export interface Referentiels {
   /** Bons de commande : conditions de paiement de la société, lieu de livraison par défaut. */
   payment_terms?: RefC[];
   delivery_place?: string;
+  issue_reserved?: boolean;
+  can_issue?: boolean;
 }
 
 export interface Article {
@@ -177,6 +179,14 @@ export interface Page<T> {
   limit: number;
   offset: number;
 }
+
+/** Émission des bons de commande dans la société de travail : réservée au service Achats ? permise au compte ? */
+export interface Emission {
+  issue_reserved: boolean;
+  can_issue: boolean;
+}
+
+export type PageBons = Page<BonCommande> & Emission;
 
 export type EtatBon = "draft" | "rejected" | "to_approve" | "approved" | "sent" | "partial" | "received" | "invoiced" | "cancelled";
 
@@ -309,6 +319,8 @@ export interface BonCommande {
   created_by: RefC | null;
   approval: Approbation | null;
   company: RefC;
+  /** Émission réservée au service Achats dans la société du bon (les drapeaux « can » en tiennent compte). */
+  issue_reserved?: boolean;
   can: { edit: boolean; submit: boolean; send: boolean; receive: boolean; bill: boolean; cancel: boolean };
   conditions?: string | null;
   payment_term?: RefC | null;
@@ -347,6 +359,7 @@ export interface Achats {
   }>;
   purchase_orders: BonCommande[];
   can_order: boolean;
+  issue_reserved?: boolean;
 }
 
 /** Ton et libellé des états d'une offre. */

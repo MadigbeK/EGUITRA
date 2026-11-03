@@ -19,7 +19,7 @@ from datetime import date
 import pytz
 
 from odoo import Command, api, fields, models
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError
 
 from odoo.addons.eguitra_approval.models.account_move import fingerprint
 from odoo.addons.eguitra_base.lettres import amount_in_words, capitalize, money
@@ -53,6 +53,14 @@ TRACKED = {
 DECISIONS = {"approved": "Approuvé", "rejected": "Refusé", "pending": "En attente", "skipped": "Sans objet"}
 # Profils approbateurs, tels qu'imprimés quand le compte n'a pas de fonction sur sa fiche.
 PROFILE_TITLES = {"finance": "Finance et comptabilité", "direction": "Direction générale", "admin": "Administration"}
+# Émission réservée au service Achats (res.company.eguitra_po_issue_reserved).
+ISSUE_RESERVED = "L'émission des bons de commande est réservée au service Achats (Responsable Achats et Contrats)."
+DRAFT_STATES = ("draft", "sent")
+PRE_APPROVAL = ("draft", "sent", "to approve")
+# Champs d'un brouillon que seul l'émetteur modifie (ceux de l'écran, lignes comprises).
+ISSUE_FIELDS = set(TRACKED) | {"order_line", "eguitra_commitment_id", "currency_id", "fiscal_position_id"}
+ISSUE_LINE_FIELDS = {"product_id", "name", "product_qty", "price_unit", "discount", "tax_ids", "product_uom_id",
+                     "eguitra_account_id", "eguitra_expense_category_id", "analytic_distribution", "display_type"}
 
 
 def conakry(moment):
@@ -131,13 +139,31 @@ class PurchaseOrder(models.Model):
     def _eguitra_product_lines(self):
         return self.order_line.filtered(lambda l: not l.display_type)
 
+    # ─── Émission réservée au service Achats (réglage de la société) ──────
+
+    def _eguitra_check_issuer(self, companies=None):
+        """Émission (création, modification d'un brouillon, soumission, annulation avant approbation) : refusée au
+        compte qui n'est pas du service Achats quand la société la lui réserve. Contrôle du modèle : aucun chemin
+        (route, engagement, duplication, action groupée) ne le contourne ; seul le compte du système y échappe."""
+        user = self.env.user
+        for company in companies if companies is not None else self.company_id:
+            if not company._eguitra_can_issue_purchase_orders(user):
+                raise AccessError(ISSUE_RESERVED)
+
+    def _eguitra_pre_approval(self):
+        """Bons pas encore approuvés : brouillons, refusés, en approbation."""
+        return self.filtered(lambda o: o.state in PRE_APPROVAL)
+
     # ─── Création, historique, devis repris de l'engagement ───────────────
 
     @api.model_create_multi
     def create(self, vals_list):
+        Company = self.env["res.company"]
+        companies = Company.browse(list({vals.get("company_id") or self.env.company.id for vals in vals_list}))
+        self._eguitra_check_issuer(companies.sudo())
         for vals in vals_list:
             if not vals.get("eguitra_delivery_place"):
-                company = self.env["res.company"].browse(vals["company_id"]) if vals.get("company_id") else self.env.company
+                company = Company.browse(vals["company_id"]) if vals.get("company_id") else self.env.company
                 vals["eguitra_delivery_place"] = company_address(company)
         orders = super().create(vals_list)
         orders._eguitra_take_selected_quote()
@@ -155,6 +181,8 @@ class PurchaseOrder(models.Model):
         return json.dumps(key, default=str), text
 
     def write(self, vals):
+        if set(vals) & ISSUE_FIELDS:
+            self.filtered(lambda o: o.state in DRAFT_STATES)._eguitra_check_issuer()
         tracked = [name for name in TRACKED if name in vals]
         lines = "order_line" in vals
         if self.env.context.get("eguitra_no_history") or not (tracked or lines):
@@ -290,6 +318,7 @@ class PurchaseOrder(models.Model):
 
     def action_eguitra_submit(self):
         """Soumission : circuit d'approbation, ou approbation d'office dans la limite de l'engagement approuvé."""
+        self._eguitra_check_issuer()
         self._eguitra_check_submittable()
         Request = self.env["eguitra.approval.request"]
         for order in self:
@@ -351,7 +380,9 @@ class PurchaseOrder(models.Model):
     # ─── Cycle de vie ─────────────────────────────────────────────────────
 
     def action_eguitra_cancel(self, reason=None):
-        """Annulation : sans réception enregistrée ni pièce d'achat validée ; la demande en cours est annulée."""
+        """Annulation : sans réception enregistrée ni pièce d'achat validée ; la demande en cours est annulée. Avant
+        l'approbation, elle relève de l'émetteur (service Achats, si la société le lui réserve)."""
+        self._eguitra_pre_approval()._eguitra_check_issuer()
         for order in self:
             if order.eguitra_receipt_ids.filtered(lambda r: r.state == "done"):
                 raise UserError(f"Le bon de commande {order.name} a des réceptions : annulez-les d'abord.")
@@ -648,6 +679,22 @@ class PurchaseOrderLine(models.Model):
     eguitra_account_id = fields.Many2one("account.account", "Compte de charge",
                                          help="Compte de la ligne (catégorie, engagement) ; sinon celui de l'article.")
     eguitra_receipt_line_ids = fields.One2many("eguitra.commerce.receipt.line", "purchase_line_id", "Réceptions")
+
+    # Lignes d'un brouillon : réservées à l'émetteur, comme l'en-tête (PurchaseOrder._eguitra_check_issuer).
+    @api.model_create_multi
+    def create(self, vals_list):
+        orders = self.env["purchase.order"].sudo().browse(list({vals["order_id"] for vals in vals_list if vals.get("order_id")}))
+        orders.filtered(lambda o: o.state in DRAFT_STATES)._eguitra_check_issuer()
+        return super().create(vals_list)
+
+    def write(self, vals):
+        if set(vals) & ISSUE_LINE_FIELDS:
+            self.order_id.sudo().filtered(lambda o: o.state in DRAFT_STATES)._eguitra_check_issuer()
+        return super().write(vals)
+
+    def unlink(self):
+        self.order_id.sudo().filtered(lambda o: o.state in DRAFT_STATES)._eguitra_check_issuer()
+        return super().unlink()
 
     def _eguitra_expense_account(self):
         self.ensure_one()
