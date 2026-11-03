@@ -26,13 +26,13 @@ def hide_core_menus(env):
             menu.sudo().write({"group_ids": [(6, 0, technical.ids)]})
 
 
-def reserve_purchase_order_issue(env):
+def reserve_purchase_order_issue(env, entities=("groupe", "cabinet")):
     """Émission des bons de commande réservée au service Achats chez EGUITRA GROUP SARLU (décision du gérant, à la
-    demande du client, 2 novembre 2026) ; pas chez MB AxisPro Consulting, qui n'a peut-être aucun compte Achats
-    (à confirmer par le client). Une société créée ensuite garde l'émission ouverte (défaut du champ)."""
-    companies = env["res.company"].sudo().search([("eguitra_entity", "in", ("groupe", "cabinet"))])
-    for company in companies:
-        company.eguitra_po_issue_reserved = company.eguitra_entity == "groupe"
+    demande du client, 2 novembre 2026) et chez MB AxisPro Consulting (même personne, le Responsable Achats et
+    Contrats : réponse du client du 3 novembre). Ne lève jamais la réserve ; une société créée ensuite garde
+    l'émission ouverte (défaut du champ)."""
+    env["res.company"].sudo().search([("eguitra_entity", "in", list(entities))]).write(
+        {"eguitra_po_issue_reserved": True})
 
 
 def post_init_hook(env):

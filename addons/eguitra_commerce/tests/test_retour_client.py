@@ -17,10 +17,12 @@ from odoo.addons.eguitra_base.lettres import amount_in_words, capitalize, money
 
 from ..models.approval import (
     PO_DOCUMENT,
+    PO_SMALL_RULE_NAME_V2,
     PURCHASE_ORDER_RULES,
     PURCHASE_ORDER_RULES_V1,
     REPLACED_PREFIX,
     ensure_purchase_order_rules,
+    rename_small_purchase_order_rule,
     upgrade_purchase_order_rules,
 )
 from ..models.purchase_order import company_address
@@ -73,6 +75,23 @@ class TestRetourClientAchats(CommerceDataMixin, TransactionCase):
         for values in rules:
             self.env["eguitra.approval.rule"].sudo().create(dict(values, company_id=company.id))
 
+    def test_regle_jusqu_a_10_m_renommee(self):
+        """Migration 19.0.1.1.3 : la règle « jusqu'à 10 M » perd sa mention « niveau à définir », là où son libellé
+        est resté celui de la version 19.0.1.1.1 ; profil, plafond et règle retouchée ou archivée inchangés."""
+        small = self._rules(self.groupe).filtered(lambda r: r.sequence == 2 and r.max_amount)
+        small.name = PO_SMALL_RULE_NAME_V2
+        other = self._rules(self.cabinet).filtered(lambda r: r.sequence == 2 and r.max_amount)
+        other.name = "Approbation : directeur général adjoint (test)"
+        archived = small.copy({"name": PO_SMALL_RULE_NAME_V2, "active": False})
+        po, request = self._submitted(3_000_000)
+        self.assertEqual(rename_small_purchase_order_rule(self.env), small)
+        self.assertEqual((small.name, small.approver_profile, small.max_amount),
+                         ("Approbation : direction générale (jusqu'à 10 M GNF HT)", "direction", 10_000_000))
+        self.assertEqual(other.name, "Approbation : directeur général adjoint (test)", "Règle retouchée : laissée")
+        self.assertEqual(archived.name, PO_SMALL_RULE_NAME_V2, "Règle archivée : laissée")
+        self.assertEqual(request.step_ids[1].label, PO_SMALL_RULE_NAME_V2, "Demande ouverte : étapes figées")
+        self.assertFalse(rename_small_purchase_order_rule(self.env), "Relancée, la migration ne change rien")
+
     def test_circuit_par_defaut_et_idempotent(self):
         rules = self._rules(self.groupe)
         self.assertEqual(len(rules), len(PURCHASE_ORDER_RULES))
@@ -82,6 +101,8 @@ class TestRetourClientAchats(CommerceDataMixin, TransactionCase):
         self.assertEqual((control.approver_profile, control.min_amount, control.max_amount), ("finance", 0, 0))
         self.assertEqual((small.approver_profile, small.min_amount, small.max_amount), ("direction", 0, 10_000_000))
         self.assertEqual((large.approver_profile, large.min_amount, large.max_amount), ("direction", 10_000_000, 0))
+        self.assertEqual(small.name, "Approbation : direction générale (jusqu'à 10 M GNF HT)",
+                         "La direction générale approuve aussi les bons de 10 M ou moins (réponse du 3 novembre)")
         ensure_purchase_order_rules(self.env)
         self.assertEqual(len(self._rules(self.groupe, active=False)), len(PURCHASE_ORDER_RULES),
                          "Relancée, la mise en place ne crée rien en double")

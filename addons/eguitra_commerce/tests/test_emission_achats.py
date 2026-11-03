@@ -48,16 +48,23 @@ class TestEmissionAchats(CommerceDataMixin, TransactionCase):
         self.assertTrue(self.groupe.eguitra_po_issue_reserved)
         self.assertFalse(self.cabinet.eguitra_po_issue_reserved)
         (self.groupe | self.cabinet).write({"eguitra_po_issue_reserved": False})
+        reserve_purchase_order_issue(self.env, ("cabinet",))
+        self.assertEqual((self.groupe.eguitra_po_issue_reserved, self.cabinet.eguitra_po_issue_reserved), (False, True),
+                         "Migration 19.0.1.1.3 : MB AxisPro Consulting seule, la réserve d'EGUITRA GROUP non touchée")
         reserve_purchase_order_issue(self.env)
-        self.assertEqual((self.groupe.eguitra_po_issue_reserved, self.cabinet.eguitra_po_issue_reserved), (True, False),
-                         "Migration : réservée chez EGUITRA GROUP SARLU, ouverte chez MB AxisPro Consulting")
+        self.assertEqual((self.groupe.eguitra_po_issue_reserved, self.cabinet.eguitra_po_issue_reserved), (True, True),
+                         "Mise en place : réservée dans les deux sociétés (le même Responsable Achats et Contrats)")
         other = self.env["res.company"].create({"name": "Société créée plus tard (test)"})
         self.assertFalse(other.eguitra_po_issue_reserved, "Nouvelle société : émission ouverte, comme avant")
         self.assertTrue(self.groupe._eguitra_can_issue_purchase_orders(self.acheteur))
         self.assertTrue(self.groupe._eguitra_can_issue_purchase_orders(self.achatvente), "Finance et achats : émet")
+        self.assertTrue(self.cabinet._eguitra_can_issue_purchase_orders(self.acheteur))
         for user in self.refused:
             self.assertFalse(self.groupe._eguitra_can_issue_purchase_orders(user), user.login)
-            self.assertTrue(self.cabinet._eguitra_can_issue_purchase_orders(user), user.login)
+            self.assertFalse(self.cabinet._eguitra_can_issue_purchase_orders(user), user.login)
+        self.cabinet.eguitra_po_issue_reserved = False
+        for user in self.refused:
+            self.assertTrue(self.cabinet._eguitra_can_issue_purchase_orders(user), f"{user.login} : société sans réserve")
 
     def test_creation_reservee_aux_achats(self):
         for user in self.refused:

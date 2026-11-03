@@ -28,8 +28,9 @@ class CommerceDataMixin(FinanceDataMixin):
         cls.groupe = cls.company
         cls.cabinet = env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
         (cls.groupe | cls.cabinet).sudo()._eguitra_commerce_setup()
-        # Comme en production : émission des bons de commande réservée au service Achats chez EGUITRA GROUP
-        # SARLU, ouverte chez MB AxisPro Consulting.
+        # Émission des bons de commande réservée au service Achats chez EGUITRA GROUP SARLU ; laissée ouverte ici
+        # chez MB AxisPro Consulting pour éprouver une société sans réserve (réservée aussi en production depuis le
+        # 3 novembre 2026 : test_emission_achats).
         cls.groupe.sudo().eguitra_po_issue_reserved = True
         cls.cabinet.sudo().eguitra_po_issue_reserved = False
         cls.year = fields.Date.context_today(env.user).year

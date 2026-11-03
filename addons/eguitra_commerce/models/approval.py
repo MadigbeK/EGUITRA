@@ -6,15 +6,15 @@ refus le renvoie en brouillon.
 Circuit propre aux bons de commande, réglable par l'administration (Finance > À valider > Circuits, nature
 « Bons de commande fournisseur ») et créé par défaut pour chaque société. Réponse d'EGUITRA GROUP du
 2 novembre 2026 : le bon est émis par le responsable Achats et Contrats, contrôlé par le chef comptable ou le
-DAF (une seule étape, l'un ou l'autre), approuvé par la direction générale au-delà de 10 000 000 GNF HT ; le
-niveau d'autorisation des bons de 10 000 000 GNF HT ou moins reste à définir avec la direction générale.
-Circuit par défaut (carte blanche du gérant) :
+DAF (une seule étape, l'un ou l'autre), approuvé par la direction générale au-delà de 10 000 000 GNF HT ;
+réponse du 3 novembre : la direction générale est aussi l'approbateur final des bons de 10 000 000 GNF HT ou
+moins.
+Circuit par défaut :
 1. Contrôle : chef comptable ou DAF (profil finance), dès le premier franc ;
 2. Approbation : direction générale, en deux règles de même niveau et de plages disjointes, dont une seule
-   s'applique à un montant donné :
-   - jusqu'à 10 000 000 GNF HT inclus (« niveau à définir avec la direction générale ») : en attendant sa
-     décision, la direction générale approuve aussi les petits bons ; le jour venu, l'administration change
-     le profil ou le plafond de cette règle dans Circuits, sans développement ;
+   s'applique à un montant donné, pour que l'administration puisse changer le profil ou le plafond de l'une
+   sans toucher l'autre (Circuits, sans développement) :
+   - jusqu'à 10 000 000 GNF HT inclus ;
    - plus de 10 000 000 GNF HT (strictement au-delà).
 Une société sans aucune règle de cette nature garde le circuit des engagements de dépense (comportement
 antérieur).
@@ -37,7 +37,7 @@ PURCHASE_ORDER_RULES = [
      "name": "Contrôle : chef comptable ou DAF"},
     {"document": PO_DOCUMENT, "sequence": 2, "min_amount": 0, "max_amount": PO_DIRECTION_THRESHOLD,
      "approver_profile": "direction",
-     "name": "Approbation : direction générale (jusqu'à 10 M GNF HT, niveau à définir avec la direction générale)"},
+     "name": "Approbation : direction générale (jusqu'à 10 M GNF HT)"},
     {"document": PO_DOCUMENT, "sequence": 2, "min_amount": PO_DIRECTION_THRESHOLD, "max_amount": 0,
      "approver_profile": "direction", "name": "Approbation : direction générale (plus de 10 M GNF HT)"},
 ]
@@ -52,6 +52,9 @@ PURCHASE_ORDER_RULES_V1 = [
      "name": "Approbation : direction générale (plus de 10 M GNF HT)"},
 ]
 REPLACED_PREFIX = "Ancien circuit, remplacé le 2 novembre 2026 : "
+# Libellé de la règle « jusqu'à 10 M » de la version 19.0.1.1.1, quand son niveau restait à définir.
+PO_SMALL_RULE_NAME_V2 = ("Approbation : direction générale (jusqu'à 10 M GNF HT, niveau à définir avec la direction "
+                         "générale)")
 
 
 def ensure_purchase_order_rules(env, companies=None):
@@ -96,6 +99,17 @@ def upgrade_purchase_order_rules(env, companies=None):
             Rule.create(dict(values, company_id=company.id))
         replaced |= company
     return replaced, kept
+
+
+def rename_small_purchase_order_rule(env):
+    """La direction générale est l'approbateur final des bons de 10 M GNF HT ou moins (réponse d'EGUITRA GROUP du
+    3 novembre 2026) : la règle « jusqu'à 10 M » perd sa mention « niveau à définir », là où son libellé est resté
+    celui de la version 19.0.1.1.1. Les étapes des demandes déjà ouvertes gardent leur libellé. Idempotent ; rend
+    les règles renommées."""
+    rules = env["eguitra.approval.rule"].sudo().search([("document", "=", PO_DOCUMENT),
+                                                         ("name", "=", PO_SMALL_RULE_NAME_V2)])
+    rules.write({"name": PURCHASE_ORDER_RULES[1]["name"]})
+    return rules
 
 
 class EguitraApprovalRule(models.Model):
