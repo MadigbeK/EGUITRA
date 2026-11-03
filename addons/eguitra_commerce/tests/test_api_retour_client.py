@@ -175,6 +175,9 @@ class TestApiRetourClient(RefusParProfil, CommerceDataMixin, ApiCase):
         self.assertTrue(self.env["eguitra.commerce.purchase.document"].browse(document["id"]).exists(), "Rien n'a changé")
 
     def test_pieces_des_metiers_cloisonnees(self):
+        # Société sans réserve de l'émission (comme MB AxisPro Consulting) : les métiers y émettent leurs bons.
+        self.groupe.eguitra_po_issue_reserved = False
+        self.env.flush_all()
         btp = self.open_session("btp.retour")["access_token"]
         btp2 = self.open_session("btp2.retour")["access_token"]
         po = self._ok("POST", "/commerce/purchase-orders", self._po_payload(), token=btp)

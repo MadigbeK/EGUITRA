@@ -61,13 +61,13 @@ class TestAchats(CommerceDataMixin, TransactionCase):
 
     def test_bon_de_commande_couvert_par_son_engagement(self):
         commitment = self._approve_commitment(self._commitment(10_000_000))
-        po = self.make_po(user=self.chef_chantier, eguitra_commitment_id=commitment.id,
+        po = self.make_po(user=self.acheteur, eguitra_commitment_id=commitment.id,
                           lines=[self.po_line("Gasoil (litres)", 800, 12_500)])
         self.assertTrue(po._eguitra_commitment_covers(), "10 M commandés pour 10 M engagés")
         po.action_eguitra_submit()
         self.assertEqual((po.state, po.eguitra_status), ("purchase", "approved"), "Approuvé d'office : l'engagement l'est")
         self.assertFalse(self.request_of(po), "Pas de nouveau circuit")
-        over = self.make_po(user=self.chef_chantier, eguitra_commitment_id=commitment.id,
+        over = self.make_po(user=self.acheteur, eguitra_commitment_id=commitment.id,
                             lines=[self.po_line("Gasoil supplémentaire", 100, 12_500)])
         self.assertFalse(over._eguitra_commitment_covers(), "Au-delà de l'engagement et de sa tolérance")
         over.action_eguitra_submit()
@@ -111,6 +111,8 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         self.assertEqual(request.state, "approved")
 
     def test_auteur_du_bon_ecarte_meme_s_il_ne_le_soumet_pas(self):
+        # Société sans réserve de l'émission (comme MB AxisPro Consulting) : la finance peut y saisir un bon.
+        self.groupe.eguitra_po_issue_reserved = False
         po = self.make_po(user=self.chef_comptable, lines=[self.po_line("Climatiseurs", 2, 3_000_000)])
         po.with_user(self.acheteur).sudo().action_eguitra_submit()
         request = self.request_of(po)
@@ -230,7 +232,7 @@ class TestAchats(CommerceDataMixin, TransactionCase):
 
     def test_bon_de_commande_imprime(self):
         commitment = self._approve_commitment(self._commitment(10_000_000))
-        po = self.make_po(user=self.chef_chantier, eguitra_commitment_id=commitment.id,
+        po = self.make_po(user=self.acheteur, eguitra_commitment_id=commitment.id,
                           lines=[self.po_line("Gasoil (litres)", 800, 12_500)],
                           eguitra_conditions="Livraison au parc de démonstration.")
         text = self.html_of("eguitra_commerce.action_report_purchase_order", po)

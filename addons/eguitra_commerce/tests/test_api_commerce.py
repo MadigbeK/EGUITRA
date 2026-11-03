@@ -220,6 +220,9 @@ class TestApiCommerce(RefusParProfil, CommerceDataMixin, ApiCase):
         self.assertEqual(self.env["purchase.order"].browse(po["id"]).order_line.qty_received, 4, "Rien n'a changé")
 
     def test_les_metiers_ne_voient_que_leurs_demandes(self):
+        # Société sans réserve de l'émission (comme MB AxisPro Consulting) : les métiers y émettent leurs bons.
+        self.groupe.eguitra_po_issue_reserved = False
+        self.env.flush_all()
         btp = self.open_session("btp.commerce")["access_token"]
         btp2 = self.open_session("btp2.commerce")["access_token"]
         po = self._ok("POST", "/commerce/purchase-orders", self._po_payload(), token=btp)
