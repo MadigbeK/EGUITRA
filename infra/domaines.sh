@@ -56,7 +56,8 @@ case "$ACTION" in
       echo "Des enregistrements manquent ou pointent ailleurs : rien n'est changé." >&2
       exit 1
     fi
-    cp -p .env ".env.avant-domaines-$(date +%Y%m%d-%H%M)"
+    # Copie des secrets rangée dans secrets/ (exclu des exports et du dépôt).
+    install -d -m 700 secrets && cp -p .env "secrets/env.avant-domaines-$(date +%Y%m%d-%H%M)"
     for key in "${ORDER[@]}"; do set_env "$key" "${NAMES[$key]}"; done
     docker compose --profile proxy up -d --force-recreate caddy
     echo "Proxy recréé ; certificats en cours d'obtention (une à deux minutes)."
@@ -71,7 +72,7 @@ case "$ACTION" in
       expected="200, 307 ou 308"; [ "$key" = CORE_DOMAIN ] && expected="403 hors des adresses ADMIN_IPS"
       printf "  %-28s HTTPS %s (attendu : %s)\n" "$name" "$code" "$expected"
     done
-    echo "Noms inscrits dans infra/.env (copie de l'ancien fichier : .env.avant-domaines-*)."
+    echo "Noms inscrits dans infra/.env (copie de l'ancien fichier : secrets/env.avant-domaines-*)."
     ;;
   *)
     echo "Action inconnue : $ACTION (verifier ou appliquer)." >&2

@@ -169,3 +169,8 @@ find "$RELEASES" -mindepth 1 -maxdepth 1 -type d -name '2*' -printf '%f\n' | sor
     rm -rf "${RELEASES:?}/$old"
     docker rmi "eguitra/odoo:release-$old" "eguitra/web:release-$old" >/dev/null 2>&1 || true
   done
+
+# 4. Cache de construction de plus de 7 jours et images sans étiquette (audit du 04/11 : 30 Go accumulés).
+# Les images des versions gardées ont leur étiquette : elles restent.
+docker builder prune -f --filter until=168h >/dev/null 2>&1 || true
+docker image prune -f >/dev/null 2>&1 || true

@@ -42,10 +42,13 @@ if [ ! -d "releases/$release/web" ]; then
 fi
 
 echo "Configuration de déploiement."
-tar -czf "$out/deploiement.tar.gz" -C .. \
-  --exclude=.env --exclude='.env.bak*' --exclude=backup.env --exclude=secrets --exclude=releases \
+# Aucun fichier .env* (secrets et leurs copies) sauf l'exemple, ajouté ensuite.
+tar -cf "$out/deploiement.tar" -C .. \
+  --exclude='.env*' --exclude=backup.env --exclude=secrets --exclude=releases \
   --exclude=oca-src --exclude=production.conf --exclude=recette.conf --exclude=__pycache__ \
   infra scripts
+tar -rf "$out/deploiement.tar" -C .. infra/.env.example
+gzip -f "$out/deploiement.tar"
 
 modules=$(sql "select name || ' ' || coalesce(latest_version, '') from ir_module_module
                where state = 'installed' and name like 'eguitra%' order by name" | sed 's/^/- /')
