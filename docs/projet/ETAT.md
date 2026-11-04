@@ -149,7 +149,7 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Accès : tunnel SSH `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 eguitra-vps`, puis http://localhost:3000 (production) et http://localhost:3100 (recette), chemins /finance, /axispro, /portail, /mobile.
 
 ### Production
-- Version en service : 20261022-1935 (commit c5df60b), mise en production le 22 octobre à 19 h 37 à la
+- Version en service : 20261104-1552 (commit 47e978f), voir chapitre 7. Historique : 20261022-1935 (commit c5df60b), mise en production le 22 octobre à 19 h 37 à la
   demande du gérant, sauvegarde prise avant : application web seule, modules identiques à la 20261022-1445.
   **Sécurité : Next.js 16.4.2** (la 16.4.0 avait trois failles publiées, dont deux exécutions de code à
   distance sans authentification : GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, GHSA-p3m5-59mp-jv5r ;
@@ -201,6 +201,18 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - 22 octobre : corrections de droits issues de l'audit (`docs/projet/audit-roles-2026-10-22.md`), décidées par le gérant (carte blanche), en recette avec le renommage « MB AxisPro Consulting », la lettre de relance en PDF et le logo d'EGUITRA GROUP (commit 8fc70a7). Tests : 380 sur les onze modules (deux échecs corrigés puis finance, approbations et RH 170/170). Règles : un compte ne tranche qu'une étape d'une même demande ; personne ne modifie son propre dossier, ses éléments de paie ni ses avances ; la paie n'est validée que par la direction, jamais par un compte qui l'a préparée ou qui a modifié pendant sa préparation une donnée qui y entre (dossier, éléments, avances, absences non rémunérées), champs protégés dans le modèle ; aucune auto-approbation d'absence, direction comprise ; AxisPro : évaluation réservée au consultant du compartiment (compartiment libre ouvert, responsable du dossier sur tout), affectation par le responsable (un consultant peut prendre un compartiment libre), décision du comité et passage forcé à deux personnes au moins, réouverture par un autre que le verrouilleur, facture d'honoraires au seul cabinet, rattachement d'un porteur d'un autre promoteur refusé ; écrans alignés sur ces droits (accueil de Finance par profil, commandes masquées). Comptes de test ajoutés : test.rh, test.salarie (Mon espace seul), test.achats. Production : en attente du feu vert du gérant. Restent de l'audit : tests de refus BTP et immobilier, modèles RH enfants sans règle de société, droits de suppression de l'exploitation sur les tarifs, dossiers visibles de tout le cabinet (à trancher), archivage du compte `m.kouyate` en production (refusé par le contrôle de sécurité de la session, à faire par le gérant).
 
 ## 7. Prochaines étapes
+
+### 4 novembre 2026, 15 h 52 : correctifs de l'audit complet du système en production (version 20261104-1552)
+
+- Audit complet du 4 novembre : `docs/projet/audit-systeme-2026-11-04.md` (infrastructure, finance, sécurité du noyau, application web ; chaque constat « corrigé », « à faire » ou « décision »).
+- En production : version 20261104-1552 (commit 47e978f), sauvegarde prise avant ; seize modules, dont approval 19.0.1.3.1, axispro 19.0.1.6.2, commerce 19.0.1.1.4, finance 19.0.1.11.1, rh 19.0.1.3.1, transport 19.0.1.8.1. Contrôlé : noyau et web sains (200), aucune erreur au noyau, versions des modules à jour, disque du serveur à 25 % après la purge automatique du cache Docker. Mise en production non annoncée 48 heures à l'avance.
+- Corrigé :
+  - noyau : un engagement n'est plus consommé deux fois (bon de commande et facture) ; facturation bornée à la quantité commandée ; trésorerie par journal séparée par société ; écart au barème officiel sans division par zéro ; lecture du business plan limitée à 20 par jour et à une à la fois, comptée sur toute tentative envoyée ; accès au portail refusé à un compte externe sans profil porteur ; photos RH lues en taille réduite ;
+  - web : redirection après connexion fermée aux adresses externes et à l'API ; déconnexion qui dit quand elle échoue ; poids et nombres saisis avec virgule ; contrôles des réglages de numérotation et du courriel des relances ;
+  - exploitation : purge du cache Docker après chaque mise en production ; export de réversibilité sans secrets.
+- Vérifications : série complète 1 120 tests, puis tests ciblés (axispro, commerce, approval) 199/199 ; recette à jour sans erreur ; santé de la recette 200/200 ; redirection vers un site externe refusée ; répétition sur une copie de la production réussie.
+- Reste de l'audit, à faire par le gérant : redémarrer le serveur (noyau Linux mis à jour) ; stockage hors site et alertes ; T0 et comité de pilotage ; avenant ; double authentification ; accord écrit du client pour l'IA et WhatsApp ; libérer le disque C: du poste local.
+- Audit d'ergonomie demandé ensuite par le gérant, après le retour du client (« on veut que le système soit le plus simple possible dans son utilisation ») : `docs/projet/audit-ux-2026-11-04.md`.
 
 ### 3 novembre 2026, 22 h 38 : souhaits du cabinet MB AxisPro Consulting en production, relances du porteur et lecture du business plan (version 20261103-2238)
 
