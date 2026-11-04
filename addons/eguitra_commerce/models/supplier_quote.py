@@ -73,6 +73,16 @@ class EguitraCommitment(models.Model):
     eguitra_quote_ids = fields.One2many("eguitra.commerce.supplier.quote", "commitment_id", "Devis fournisseurs")
     eguitra_purchase_order_ids = fields.One2many("purchase.order", "eguitra_commitment_id", "Bons de commande")
 
+    def _eguitra_engaged(self, move=None, order=None):
+        """Bons de commande non annulés (`order` excepté) et pièces comptabilisées hors bon (`move` excepté) :
+        la pièce d'un bon est comptée par son bon. Un bon de 100 M puis une pièce directe de 100 M ne passent
+        donc plus tous deux dans un engagement de 100 M."""
+        self.ensure_one()
+        orders = self.sudo().eguitra_purchase_order_ids.filtered(lambda o: o.state != "cancel" and o != order)
+        moves = self.sudo().move_ids.filtered(
+            lambda m: m.state == "posted" and m != move and not m.eguitra_purchase_order_id)
+        return sum(orders.mapped("amount_untaxed")) + sum(-m.amount_untaxed_signed for m in moves)
+
     def _eguitra_check_quotes_editable(self):
         for commitment in self:
             if commitment.state not in ("draft", "rejected"):

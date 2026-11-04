@@ -3,6 +3,8 @@
 Rapports, exports et imports d'évaluation : rapports.py.
 """
 
+from datetime import UTC, datetime, timedelta
+
 from odoo import http
 from odoo.http import request
 
@@ -38,6 +40,19 @@ GATE = ("cabinet", "direction")
 THRESHOLDS = ("threshold_hold", "conditional_threshold", "go_threshold", "threshold_bankable")
 POLICY_FLAGS = ("ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check")
 MIN_FORCE_REASON = 10
+# Lecture des business plans par l'IA : lectures par compte sur 24 heures, verrous des lectures simultanées.
+READINGS_PER_DAY = 20
+READING_LOCKS = (7_310_401, 7_310_402)
+
+
+def _try_lock(key):
+    """Verrou de session PostgreSQL, rendu par _unlock (ou à la fermeture de la connexion)."""
+    request.env.cr.execute("SELECT pg_try_advisory_lock(%s)", (key,))
+    return request.env.cr.fetchone()[0]
+
+
+def _unlock(key):
+    request.env.cr.execute("SELECT pg_advisory_unlock(%s)", (key,))
 MIN_PORTAL_PASSWORD = 10
 
 
@@ -453,10 +468,25 @@ class EguitraAxispro(http.Controller):
         content = upload.read(MAX_FILE + 1)
         if len(content) > MAX_FILE:
             raise ApiError(413, "too_large", "Fichier trop volumineux (20 Mo maximum).")
+        # Chaque lecture est facturée et occupe un processus du noyau jusqu'à la réponse : quota par compte
+        # et par jour (journal des accès), et deux lectures à la fois au plus pour que les autres écrans
+        # restent servis (verrou rendu après la lecture).
+        since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
+        done = request.env["eguitra.api.access.log"].sudo().search_count([
+            ("user_id", "=", request.env.uid), ("method", "=", "POST"), ("status", "=", 200),
+            ("path", "=like", "%/axispro/business-plan"), ("date", ">=", since)])
+        if done >= READINGS_PER_DAY:
+            raise ApiError(429, "quota_exceeded", f"{READINGS_PER_DAY} lectures de business plan par jour au plus : "
+                                                  "remplissez la fiche à la main ou réessayez demain.")
+        lock = next((key for key in READING_LOCKS if _try_lock(key)), None)
+        if lock is None:
+            raise ApiError(429, "busy", "Deux business plans sont déjà en cours de lecture : réessayez dans une minute.")
         try:
             fields = lecture_ia.read_business_plan(content, upload.filename)
         except lecture_ia.ReadingError as e:
             raise ApiError(e.status, e.code, e.message) from e
+        finally:
+            _unlock(lock)
         currency = None
         if fields["currency"]:
             found = request.env["res.currency"].search([("name", "=", fields["currency"]), ("active", "=", True)], limit=1)
@@ -464,7 +494,9 @@ class EguitraAxispro(http.Controller):
         promoter = None
         if fields["promoter"]:
             company = request.env.company
-            partners = request.env["res.partner"].search([("name", "=ilike", fields["promoter"]),
+            # Nom lu dans le document : ses « % » et « _ » ne sont pas des jokers.
+            name = fields["promoter"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            partners = request.env["res.partner"].search([("name", "=ilike", name),
                                                           ("company_id", "in", (False, company.id))], limit=2)
             if len(partners) == 1:
                 promoter = {"id": partners.id, "name": partners.name}
@@ -513,6 +545,10 @@ class EguitraAxispro(http.Controller):
         user = Users.with_context(active_test=False).search([("login", "=", str(login).strip().lower())], limit=1)
         if user and not user.share:
             raise ApiError(409, "conflict", "Cet identifiant appartient à un utilisateur interne.")
+        if user and "porteur" not in user._eguitra_profiles():
+            # Compte de l'espace client (ou autre compte externe) : ni rattaché ni réactivé depuis le cabinet.
+            raise ApiError(409, "conflict", "Cet identifiant appartient à un compte externe qui n'est pas un compte "
+                                            "porteur (espace client) : choisissez un autre identifiant.")
         if not user and len(str(password)) < MIN_PORTAL_PASSWORD:
             raise ApiError(400, "missing_fields", f"Mot de passe provisoire de {MIN_PORTAL_PASSWORD} caractères au "
                                                   "moins pour un nouveau compte porteur.", fields=["password"])

@@ -32,7 +32,7 @@ except ImportError:  # image du noyau construite avant l'ajout de la bibliothèq
 _logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-opus-5-5"
-TIMEOUT = 180.0
+TIMEOUT = 120.0
 MAX_TEXT = 400_000
 MAX_AMOUNT = 1e15
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -186,7 +186,7 @@ def read_business_plan(content, filename):
         raise ReadingError(503, "ai_unavailable", "Lecture automatique non configurée sur ce serveur : "
                                                   "remplissez la fiche à la main.")
     block = _document_block(content, filename)
-    client = anthropic.Anthropic(timeout=TIMEOUT, max_retries=1)
+    client = anthropic.Anthropic(timeout=TIMEOUT, max_retries=0)
     try:
         response = client.messages.create(
             model=model(),

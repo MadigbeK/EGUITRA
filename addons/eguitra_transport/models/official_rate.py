@@ -114,7 +114,11 @@ def gap_pct(rate_per_m3, official):
     """Écart d'un tarif en GNF par m³ au tarif officiel (ligne de barème), en % ; None sans l'un des deux."""
     if not rate_per_m3 or not official:
         return None
-    return (rate_per_m3 / official._rate_per_m3() - 1) * 100
+    reference = official._rate_per_m3()
+    if not reference:
+        # Ligne de barème à 0 GNF : pas d'écart calculable (la division échouait, erreur sur l'écran du barème).
+        return None
+    return (rate_per_m3 / reference - 1) * 100
 
 
 class EguitraTransportRoute(models.Model):

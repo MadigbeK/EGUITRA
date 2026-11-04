@@ -154,6 +154,12 @@ class EguitraCommitment(models.Model):
             return False
         if move.company_id != self.company_id:
             return False
-        already = sum(-m.amount_untaxed_signed for m in self.sudo().move_ids.filtered(lambda m: m.state == "posted" and m != move))
         allowed = self.amount * (1 + self.tolerance_pct() / 100)
-        return already + abs(move.amount_untaxed_signed) <= allowed + 0.5
+        return self._eguitra_engaged(move=move) + abs(move.amount_untaxed_signed) <= allowed + 0.5
+
+    def _eguitra_engaged(self, move=None):
+        """Montant hors taxes déjà engagé sur l'engagement, `move` excepté : pièces d'achat comptabilisées.
+        Une seule mesure pour tous les contrôles de couverture (les achats y ajoutent leurs bons de commande),
+        sans quoi un même engagement se consommerait une fois par famille de pièces."""
+        self.ensure_one()
+        return sum(-m.amount_untaxed_signed for m in self.sudo().move_ids.filtered(lambda m: m.state == "posted" and m != move))

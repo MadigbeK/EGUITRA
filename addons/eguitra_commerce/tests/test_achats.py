@@ -3,6 +3,7 @@ de la plateforme et règle des quatre yeux, empreinte, refus, réception partiel
 rapprochement à trois voies (écarts de prix et de quantité, tolérances, écart bloquant ou soumis au circuit),
 pièce d'achat sans commande inchangée, comparaison des devis fournisseurs, bon de commande imprimé."""
 
+from odoo import Command, fields
 from odoo.exceptions import AccessError, UserError
 from odoo.tests import TransactionCase, tagged
 
@@ -72,6 +73,25 @@ class TestAchats(CommerceDataMixin, TransactionCase):
         self.assertFalse(over._eguitra_commitment_covers(), "Au-delà de l'engagement et de sa tolérance")
         over.action_eguitra_submit()
         self.assertEqual(over.eguitra_status, "to_approve", "Circuit habituel au-delà de l'engagement")
+
+    def test_engagement_consomme_une_seule_fois(self):
+        """Audit du 04/11 : un bon couvert par l'engagement, puis une pièce directe du même montant sur le même
+        engagement ; la pièce n'est plus couverte (bons et pièces hors bon forment une seule consommation)."""
+        commitment = self._approve_commitment(self._commitment(10_000_000))
+        po = self.make_po(user=self.acheteur, eguitra_commitment_id=commitment.id,
+                          lines=[self.po_line("Gasoil (litres)", 800, 12_500)])
+        po.action_eguitra_submit()
+        self.assertEqual(po.eguitra_status, "approved")
+
+        def direct(amount):
+            return self.env["account.move"].with_company(self.groupe).create({
+                "move_type": "in_invoice", "partner_id": self.supplier.id, "company_id": self.groupe.id,
+                "invoice_date": fields.Date.today(), "eguitra_commitment_id": commitment.id,
+                "invoice_line_ids": [Command.create({"name": "Gasoil hors bon", "quantity": 1, "price_unit": amount,
+                                                     "account_id": self.acc_purchase.id, "tax_ids": [Command.clear()]})],
+            })
+        self.assertFalse(commitment.covers(direct(10_000_000)), "Le bon a déjà consommé l'engagement")
+        self.assertTrue(commitment.covers(direct(400_000)), "Reste la tolérance de 5 %")
 
     def test_demandeur_de_l_engagement_ecarte_du_circuit_du_bon(self):
         commitment = self._approve_commitment(self._commitment(5_000_000, user=self.comptable))

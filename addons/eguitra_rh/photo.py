@@ -62,6 +62,10 @@ def normalize(content):
             raise unreadable
         if image.width * image.height > MAX_PIXELS:
             raise PhotoError(422, "too_large", "Image trop grande en pixels : réduisez-la avant de l'envoyer.")
+        if image.format == "JPEG":
+            # Décodée directement à l'échelle utile (1/2 à 1/8) : une photo de 40 millions de pixels ne
+            # mobilise plus 120 Mo de mémoire du noyau.
+            image.draft("RGB", (SIDE * 2, SIDE * 2))
         image.load()
         image = ImageOps.exif_transpose(image)
     except PhotoError:

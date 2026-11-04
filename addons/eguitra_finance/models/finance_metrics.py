@@ -202,16 +202,18 @@ class EguitraFinanceMetrics(models.AbstractModel):
             return []
         self.env.flush_all()
         self.env.cr.execute(
-            """SELECT aml.account_id, COALESCE(SUM(aml.balance), 0), COALESCE(SUM(aml.amount_currency), 0)
+            # Par société : en Odoo 19 un compte peut être partagé entre sociétés.
+            """SELECT aml.company_id, aml.account_id, COALESCE(SUM(aml.balance), 0), COALESCE(SUM(aml.amount_currency), 0)
                  FROM account_move_line aml
                 WHERE aml.parent_state = 'posted' AND aml.date <= %s AND aml.account_id = ANY(%s)
-             GROUP BY aml.account_id""",
-            (date_to, journals.default_account_id.ids),
+                  AND aml.company_id = ANY(%s)
+             GROUP BY aml.company_id, aml.account_id""",
+            (date_to, journals.default_account_id.ids, companies.ids),
         )
-        by_account = {acc: (float(bal), float(cur)) for acc, bal, cur in self.env.cr.fetchall()}
+        by_account = {(co, acc): (float(bal), float(cur)) for co, acc, bal, cur in self.env.cr.fetchall()}
         rows = []
         for journal in journals:
-            balance, in_currency = by_account.get(journal.default_account_id.id, (0.0, 0.0))
+            balance, in_currency = by_account.get((journal.company_id.id, journal.default_account_id.id), (0.0, 0.0))
             foreign = journal.currency_id and journal.currency_id != journal.company_id.currency_id
             rows.append({
                 "journal_id": journal.id,

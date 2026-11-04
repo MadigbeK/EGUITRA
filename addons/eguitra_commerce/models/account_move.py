@@ -64,7 +64,8 @@ class AccountMove(models.Model):
             received = pol.qty_received
             ordered_price = pol.price_unit * (1 - (pol.discount or 0.0) / 100)
             status = []
-            if already + billed > received * (1 + qty_tolerance) + EPSILON:
+            # La tolérance ne se cumule pas : la réception en a déjà profité (jusqu'à commandé × (1 + t)).
+            if already + billed > min(received, pol.product_qty) * (1 + qty_tolerance) + EPSILON:
                 status.append("qty")
                 issues.append(f"« {pol.name} » : {_qty(already + billed)} facturés pour {_qty(received)} reçus"
                               + (f" ({_qty(already)} déjà sur d'autres pièces)." if already else "."))

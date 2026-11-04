@@ -273,9 +273,8 @@ class PurchaseOrder(models.Model):
             return False
         if commitment.partner_id.commercial_partner_id != self.partner_id.commercial_partner_id:
             return False
-        others = commitment.eguitra_purchase_order_ids.filtered(lambda o: o != self and o.state != "cancel")
         allowed = commitment.amount * (1 + commitment.tolerance_pct() / 100)
-        return sum(others.mapped("amount_untaxed")) + self.amount_untaxed <= allowed + 0.5
+        return commitment._eguitra_engaged(order=self) + self.amount_untaxed <= allowed + 0.5
 
     def _eguitra_required_rules(self):
         self.ensure_one()
