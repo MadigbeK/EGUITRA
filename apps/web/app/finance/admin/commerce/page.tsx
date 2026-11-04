@@ -44,7 +44,9 @@ export default function ReglagesCommercePage() {
     setNum(Object.fromEntries(data.numbering.map((n) => [n.code, { prefix: n.prefix, next_number: String(n.next_number) }])));
   }, [data]);
   const nombres = ["validity_days", "reminder_days", "match_qty_tolerance", "match_price_tolerance", "three_quotes_threshold"];
-  const illisible = nombres.some((k) => nombreIllisible(f[k])) || Object.values(num).some((n) => nombreIllisible(n.next_number));
+  // Un champ vidé ne vaut pas 0 (la règle des trois devis serait désactivée) ; numéro suivant : entier positif.
+  const entierPositif = (v: string | undefined) => { const n = lireNombre(v); return n !== null && Number.isInteger(n) && n > 0; };
+  const illisible = nombres.some((k) => lireNombre(f[k]) === null) || Object.values(num).some((n) => !entierPositif(n.next_number));
 
   async function enregistrer() {
     if (!data) return;

@@ -116,10 +116,18 @@ function Repondre({ d, ctx, onFait }: { d: FicheDossier; ctx: ContexteSC; onFait
   const modeles = ctx.templates.filter((t) => t.active && (!t.category || t.category.id === d.category?.id));
 
   async function choisirModele(id: string) {
-    setModele(id);
-    if (!id) return;
+    if (!id) {
+      setModele("");
+      return;
+    }
+    // Le modèle n'est retenu (et la réponse marquée de lui) qu'une fois son texte chargé.
     const r = await apiGet<{ body: string }>(`/service-client/tickets/${d.id}/templates/${id}`).catch(() => null);
-    if (r) setTexte(r.body);
+    if (!r) {
+      window.alert("La réponse type n'a pas pu être chargée : réessayez.");
+      return;
+    }
+    setModele(id);
+    setTexte(r.body);
   }
 
   async function envoyer() {

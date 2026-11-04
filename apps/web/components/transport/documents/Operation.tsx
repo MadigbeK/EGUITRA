@@ -472,8 +472,8 @@ function CarteLettreVoiture({ op, onChanged }: { op: Operation; onChanged: () =>
           <div key={i} className="mb-2 grid grid-cols-2 gap-2 md:grid-cols-8">
             <Input aria-label="Nature" disabled={!modifiable} placeholder="Nature" value={c.nature} onChange={(e) => majColis(i, { nature: e.target.value })} />
             <Input aria-label="Description" disabled={!modifiable} placeholder="Description" value={c.description ?? ""} onChange={(e) => majColis(i, { description: e.target.value })} />
-            <Input aria-label="Poids brut" disabled={!modifiable} inputMode="decimal" placeholder="Poids brut" value={String(c.weight_gross || "")} onChange={(e) => majColis(i, { weight_gross: lireNombre(e.target.value) ?? 0 })} />
-            <Input aria-label="Poids net" disabled={!modifiable} inputMode="decimal" placeholder="Poids net" value={String(c.weight_net || "")} onChange={(e) => majColis(i, { weight_net: lireNombre(e.target.value) ?? 0 })} />
+            <PoidsColis label="Poids brut" disabled={!modifiable} value={c.weight_gross} onChange={(n) => majColis(i, { weight_gross: n })} />
+            <PoidsColis label="Poids net" disabled={!modifiable} value={c.weight_net} onChange={(n) => majColis(i, { weight_net: n })} />
             <Input aria-label="Conditionnement" disabled={!modifiable} placeholder="Conditionnement" value={c.packaging ?? ""} onChange={(e) => majColis(i, { packaging: e.target.value })} />
             <Input aria-label="Emballage" disabled={!modifiable} placeholder="Emballage" value={c.wrapping ?? ""} onChange={(e) => majColis(i, { wrapping: e.target.value })} />
             <Input aria-label="Dimensions et volumes" disabled={!modifiable} placeholder="Dimensions" value={c.dimensions ?? ""} onChange={(e) => majColis(i, { dimensions: e.target.value })} />
@@ -511,5 +511,22 @@ function CarteLettreVoiture({ op, onChanged }: { op: Operation; onChanged: () =>
         </div>
       </div>
     </Card>
+  );
+}
+
+/**
+ * Poids d'un colis : la saisie reste telle que tapée (« 12, » avant « 12,5 ») et se lit à la française ;
+ * reconstruire le champ depuis le nombre effaçait la virgule (12,5 devenait 125).
+ */
+function PoidsColis({ label, value, disabled, onChange }: { label: string; value: number; disabled: boolean; onChange: (n: number) => void }) {
+  const [texte, setTexte] = useState(value ? String(value).replace(".", ",") : "");
+  useEffect(() => {
+    // Colis retiré ou rechargé : le champ reprend la valeur reçue.
+    if ((lireNombre(texte) ?? 0) !== value) setTexte(value ? String(value).replace(".", ",") : "");
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  const illisible = nombreIllisible(texte);
+  return (
+    <Input aria-label={label} aria-invalid={illisible || undefined} title={illisible ? "Nombre illisible" : undefined} disabled={disabled} inputMode="decimal" placeholder={label} value={texte}
+      onChange={(e) => { setTexte(e.target.value); onChange(lireNombre(e.target.value) ?? 0); }} />
   );
 }

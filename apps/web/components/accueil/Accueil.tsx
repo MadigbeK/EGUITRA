@@ -12,6 +12,7 @@ import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
 import { MESSAGE_RESEAU } from "@/lib/erreurs";
 import type { Me } from "@/lib/types";
+import { ECHEC_DECONNEXION, fermerSession } from "@/lib/deconnexion";
 
 // Chaque application mémorise sa société de travail : le module ouvert depuis l'accueil reçoit d'abord
 // la société affichée sur l'accueil, quand elle s'y choisit et qu'il l'accepte ; un module réservé à
@@ -549,7 +550,10 @@ function Compte({ me, app }: { me: Me; app: AppCode }) {
   const [open, setOpen] = useState(false);
   const box = useFermeture(open, setOpen);
   async function sortir() {
-    await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    if (!(await fermerSession())) {
+      window.alert(ECHEC_DECONNEXION);
+      return;
+    }
     // Les autres onglets du navigateur rejoignent aussi la page de connexion.
     annoncerDeconnexion("volontaire");
     window.location.href = `/login?app=${app}`;

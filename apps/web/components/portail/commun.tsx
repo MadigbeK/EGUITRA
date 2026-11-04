@@ -59,7 +59,8 @@ export function iconeRubrique(nom: string | null | undefined): Icon {
  * celui qu'il avait choisi en dernier.
  */
 export function lienNotification(n: { link: string | null; dossier: { id: number } | null }): string | null {
-  if (!n.link) return null;
+  // Chemin interne seulement (« //hôte » mènerait sur un autre site).
+  if (!n.link || !/^\/(?![\/\\])/.test(n.link)) return null;
   if (!n.dossier || !n.link.startsWith("/portail") || /[?&]dossier=/.test(n.link)) return n.link;
   const [avant, ancre] = n.link.split("#", 2);
   const lien = `${avant}${avant!.includes("?") ? "&" : "?"}dossier=${n.dossier.id}`;

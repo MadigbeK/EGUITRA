@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { ApiError, apiDownload } from "./api-client";
+import { apiDownload } from "./api-client";
+import { messageErreur as messageCommun } from "./erreurs";
 
 /** Message rendu à l'utilisateur après une écriture : réussite ou refus du noyau. */
 export type MessageEnvoi = { tone: "ok" | "danger"; text: string } | null;
 
-/** Message d'erreur destiné à l'utilisateur : celui du noyau, sinon `defaut` (coupure du réseau). */
+/** Message d'erreur destiné à l'utilisateur : celui du noyau, du délai dépassé ou de la coupure du
+ * réseau (lib/erreurs.ts) ; sinon `defaut`. */
 export function messageErreur(e: unknown, defaut = "Action impossible."): string {
-  return e instanceof ApiError ? e.message : defaut;
+  return messageCommun(e, defaut);
 }
 
 /**

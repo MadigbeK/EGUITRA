@@ -535,7 +535,9 @@ function DossierForm({ onClose, onDone }: { onClose: () => void; onDone: (id: nu
       const form = new FormData();
       form.append("file", plan);
       form.append("name", "Business plan du promoteur (lu à l'ouverture)");
-      await apiUpload(`/axispro/dossiers/${d.id}/documents`, form).catch(() => undefined);
+      const depose = await apiUpload(`/axispro/dossiers/${d.id}/documents`, form).then(() => true, () => false);
+      // Dit avant de quitter la fenêtre : sinon le consultant croit la pièce archivée.
+      if (!depose) window.alert("Le dossier est ouvert, mais le business plan n'a pas pu être déposé : déposez-le depuis la data room du dossier.");
     }
     onDone(d.id);
   }

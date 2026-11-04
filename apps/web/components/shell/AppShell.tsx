@@ -19,6 +19,7 @@ import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/fin
 import { Discussions } from "@/components/discussions/Discussions";
 import { AgendaEnTete } from "@/components/agenda/AgendaEnTete";
 import { AvatarCompte } from "@/components/AvatarCompte";
+import { ECHEC_DECONNEXION, fermerSession } from "@/lib/deconnexion";
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -113,7 +114,10 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
   }, [open]);
 
   const logout = useCallback(async () => {
-    await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    if (!(await fermerSession())) {
+      window.alert(ECHEC_DECONNEXION);
+      return;
+    }
     // Les autres onglets du navigateur rejoignent aussi la page de connexion.
     annoncerDeconnexion("volontaire");
     window.location.href = `/login?app=${app}`;

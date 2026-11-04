@@ -17,13 +17,16 @@ type Params = Record<string, string | undefined>;
 
 /**
  * Page de retour après connexion : uniquement un chemin de ce site. Les formes que les navigateurs
- * interprètent comme une autre origine (« //hôte », « /\hôte », caractères de contrôle) sont refusées.
+ * interprètent comme une autre origine (« //hôte », « /\hôte », caractères de contrôle) sont refusées,
+ * avant comme après normalisation (« /.//hôte » devient « //hôte »), ainsi que la passerelle `/api/`.
  */
 function safeNext(value: string | undefined): string | null {
   if (!value || !/^\/(?![\/\\])/.test(value) || /[\\\u0000-\u001f\u007f]/.test(value)) return null;
   try {
     const url = new URL(value, "http://interne.invalid");
-    return url.origin === "http://interne.invalid" ? url.pathname + url.search + url.hash : null;
+    if (url.origin !== "http://interne.invalid" || !/^\/(?![\/\\])/.test(url.pathname)) return null;
+    if (/^\/api(\/|$)/i.test(url.pathname)) return null;
+    return url.pathname + url.search + url.hash;
   } catch {
     return null;
   }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { PageErreur } from "@/components/PageErreur";
 import { Button } from "@/components/ui";
 import { appFromPath } from "@/lib/config";
+import { ECHEC_DECONNEXION, fermerSession } from "@/lib/deconnexion";
 
 /**
  * Écran qui n'a pas pu s'afficher. « Réessayer » redemande l'écran au serveur (retry : reset seul
@@ -16,7 +17,11 @@ export default function Erreur({ retry }: { error: Error & { digest?: string }; 
   async function deconnecter() {
     setSortie(true);
     const app = appFromPath(window.location.pathname) ?? "finance";
-    await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    if (!(await fermerSession())) {
+      setSortie(false);
+      window.alert(ECHEC_DECONNEXION);
+      return;
+    }
     window.location.href = `/login?app=${app}`;
   }
 

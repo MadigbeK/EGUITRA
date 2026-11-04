@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button, Modal } from "@/components/ui";
 import type { AppCode } from "@/lib/config";
 import { pluriel } from "@/lib/format";
+import { fermerSession } from "@/lib/deconnexion";
 
 /**
  * Déconnexion automatique après inactivité (demande du gérant, 26 octobre 2026). Après
@@ -108,7 +109,11 @@ export function VeilleInactivite({ app }: { app: AppCode }) {
       if (fini.current) return;
       fini.current = true;
       annoncerDeconnexion(motif);
-      await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+      // Personne devant l'écran : nouvel essai en cas de coupure, pour ne pas laisser derrière la page
+      // de connexion une session encore valide.
+      for (let essai = 0; essai < 3 && !(await fermerSession()); essai++) {
+        await new Promise((r) => window.setTimeout(r, 5000));
+      }
       window.location.href = pageDeConnexion(app, motif);
     },
     [app],

@@ -93,7 +93,8 @@ function Contenu({ d, r, relire }: { d: DossierDetail; r: Donnees; relire: () =>
 
   const suivi = SUIVI[r.followup.state];
   const { objet, corps } = decouper(message);
-  const email = r.contact.email;
+  // Adresse simple seulement : « a@b.c?bcc=… » ajouterait un destinataire caché dans la messagerie.
+  const email = /^[^\s@?&#,;]+@[^\s@?&#,;]+$/.test(r.contact.email ?? "") ? r.contact.email : null;
   const whatsapp = numeroWhatsApp(r.contact.phone);
   const contactModifie = contact.name !== (d.contact?.name ?? "") || contact.email !== (d.contact?.email ?? "") || contact.phone !== (d.contact?.phone ?? "");
   const aujourdhui = AUJOURDHUI();

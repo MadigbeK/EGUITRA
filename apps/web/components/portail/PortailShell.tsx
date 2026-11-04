@@ -16,6 +16,7 @@ import type { DossierRef, Espace, Notifications } from "@/lib/portail-types";
 import type { Me } from "@/lib/types";
 import { KIND_ICON, dateHeure, lienNotification } from "./commun";
 import { erreurLisible } from "./projet/outils";
+import { ECHEC_DECONNEXION, fermerSession } from "@/lib/deconnexion";
 
 /* ─── Contexte du portail : l'espace du porteur et le dossier choisi ─────── */
 
@@ -475,7 +476,10 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
   useEffect(() => setTiroir(false), [pathname]);
 
   async function deconnexion() {
-    await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    if (!(await fermerSession())) {
+      window.alert(ECHEC_DECONNEXION);
+      return;
+    }
     window.location.href = "/login?app=portail";
   }
 

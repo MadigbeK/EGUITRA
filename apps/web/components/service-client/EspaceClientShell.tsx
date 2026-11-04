@@ -7,6 +7,7 @@ import { LogOut } from "@/components/icons";
 import { VeilleInactivite } from "@/components/shell/VeilleInactivite";
 import { cx } from "@/components/ui";
 import type { Me } from "@/lib/types";
+import { ECHEC_DECONNEXION, fermerSession } from "@/lib/deconnexion";
 
 /**
  * Cadre de l'espace client : sobre, sans la marque interne ni les outils des comptes internes (discussion,
@@ -17,7 +18,10 @@ export function EspaceClientShell({ me, children }: { me: Me; children: ReactNod
   const pathname = usePathname();
   const societes = me.companies.map((c) => c.name).join(" · ");
   async function deconnecter() {
-    await fetch("/api/session/logout", { method: "POST" }).catch(() => undefined);
+    if (!(await fermerSession())) {
+      window.alert(ECHEC_DECONNEXION);
+      return;
+    }
     window.location.href = "/login?app=espace-client";
   }
   const liens = [

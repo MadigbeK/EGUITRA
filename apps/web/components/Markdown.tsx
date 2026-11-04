@@ -38,7 +38,7 @@ function inline(text: string): ReactNode[] {
       const lien = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(t);
       const cible = lien?.[2] ?? "";
       // Seuls les liens internes à l'application deviennent cliquables.
-      out.push(cible.startsWith("/") ? <a key={k++} href={cible} className="font-medium text-accent underline-offset-2 hover:underline">{lien?.[1]}</a> : <Fragment key={k++}>{lien?.[1]}</Fragment>);
+      out.push(/^\/(?![\/\\])/.test(cible) ? <a key={k++} href={cible} className="font-medium text-accent underline-offset-2 hover:underline">{lien?.[1]}</a> : <Fragment key={k++}>{lien?.[1]}</Fragment>);
     }
     last = i + t.length;
   }

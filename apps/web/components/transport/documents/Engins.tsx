@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus } from "@/components/icons";
 import { Button, Card, DataTable, Etat, Field, Input, Notice, Select } from "@/components/ui";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
-import { fmtInt } from "@/lib/format";
+import { fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
 import { NombreSurPlace, TexteSurPlace } from "../commun";
 import type { Engin } from "./types";
 
@@ -78,8 +78,8 @@ export function Engins() {
             <Field label="Engin"><Select value={f.kind ?? "trailer"} onChange={(e) => setF({ ...f, kind: e.target.value })} options={[{ value: "tractor", label: "Tracteur" }, { value: "trailer", label: "Remorque" }]} /></Field>
             <Field label="N° de parc"><Input value={f.fleet_number ?? ""} onChange={(e) => setF({ ...f, fleet_number: e.target.value })} /></Field>
             <Field label="Immatriculation"><Input value={f.plate ?? ""} onChange={(e) => setF({ ...f, plate: e.target.value })} /></Field>
-            <Field label="Capacité (L)"><Input inputMode="numeric" value={f.capacity_liters ?? ""} onChange={(e) => setF({ ...f, capacity_liters: e.target.value })} /></Field>
-            <div className="flex items-end"><Button size="sm" disabled={!f.fleet_number?.trim()} onClick={() => void envoyer("POST", "/transport/units", { ...f, capacity_liters: Number(f.capacity_liters) || 0 }).then(() => setF({ kind: f.kind ?? "trailer" }))}><Plus className="h-4 w-4" /> Ajouter</Button></div>
+            <Field label="Capacité (L)" error={nombreIllisible(f.capacity_liters) ? "Nombre illisible (exemple : 33 000)" : undefined}><Input inputMode="numeric" value={f.capacity_liters ?? ""} onChange={(e) => setF({ ...f, capacity_liters: e.target.value })} /></Field>
+            <div className="flex items-end"><Button size="sm" disabled={!f.fleet_number?.trim() || nombreIllisible(f.capacity_liters)} onClick={() => void envoyer("POST", "/transport/units", { ...f, capacity_liters: lireNombre(f.capacity_liters) ?? 0 }).then(() => setF({ kind: f.kind ?? "trailer" }))}><Plus className="h-4 w-4" /> Ajouter</Button></div>
           </div>
         )}
         <p className="p-3 text-[12.5px] text-muted">Total : {fmtInt(tracteurs.length)} tracteur(s), {fmtInt(remorques.length)} remorque(s) en service.</p>

@@ -32,7 +32,11 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type !== "precache" || !Array.isArray(data.urls)) return;
-  const urls = data.urls.filter((u) => typeof u === "string" && u.startsWith("/_next/static/"));
+  // Chemin normalisé avant le contrôle : « /_next/static/../../api/… » n'est pas une ressource statique.
+  const urls = data.urls
+    .filter((u) => typeof u === "string")
+    .map((u) => { try { return new URL(u, self.location.origin).pathname; } catch { return ""; } })
+    .filter((p) => p.startsWith("/_next/static/"));
   event.waitUntil(
     caches.open(VERSION).then(async (cache) => {
       for (const req of await cache.keys()) {
