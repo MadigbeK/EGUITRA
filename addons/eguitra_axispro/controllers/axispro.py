@@ -43,6 +43,8 @@ MIN_FORCE_REASON = 10
 # Lecture des business plans par l'IA : lectures par compte sur 24 heures, verrous des lectures simultanées.
 READINGS_PER_DAY = 20
 READING_LOCKS = (7_310_401, 7_310_402)
+# Refus rendus avant tout envoi au service (fichier absent, trop gros, format, quota ou lectures en cours).
+NOT_SENT = (400, 413, 415, 429)
 
 
 def _try_lock(key):
@@ -470,10 +472,11 @@ class EguitraAxispro(http.Controller):
             raise ApiError(413, "too_large", "Fichier trop volumineux (20 Mo maximum).")
         # Chaque lecture est facturée et occupe un processus du noyau jusqu'à la réponse : quota par compte
         # et par jour (journal des accès), et deux lectures à la fois au plus pour que les autres écrans
-        # restent servis (verrou rendu après la lecture).
+        # restent servis (verrou rendu après la lecture). Le quota compte toute tentative qui a pu atteindre le
+        # service de lecture (un échec y est facturé aussi), pas seulement les réussites.
         since = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
         done = request.env["eguitra.api.access.log"].sudo().search_count([
-            ("user_id", "=", request.env.uid), ("method", "=", "POST"), ("status", "=", 200),
+            ("user_id", "=", request.env.uid), ("method", "=", "POST"), ("status", "not in", NOT_SENT),
             ("path", "=like", "%/axispro/business-plan"), ("date", ">=", since)])
         if done >= READINGS_PER_DAY:
             raise ApiError(429, "quota_exceeded", f"{READINGS_PER_DAY} lectures de business plan par jour au plus : "
