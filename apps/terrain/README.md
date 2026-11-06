@@ -154,7 +154,8 @@ Seul `apps/terrain` est envoyé à Expo (`.easignore` à la racine du dépôt).
   `apps/web/lib/natif.ts`, `npm test` dans `apps/web`). Jeton porté par l'application
   (`Authorization: Bearer`), sans cookie ; routes de session rendues avec leurs jetons ; seuls
   passent les codes `terrain` et `mobile` et les routes du compte, de `/transport/` et de `/hsseq/`.
-  `EXPO_PUBLIC_API_URL` = `https://<adresse de l'application web>/api/natif`.
+  `EXPO_PUBLIC_API_URL` = `https://<adresse de l'application web>/api/natif` : en production
+  `https://finance.nimova.cloud/api/natif`, en recette `https://recette.nimova.cloud/api/natif`.
 - Noyau : l'application `terrain` est déclarée par le module HSSEQ (`organisation.APPS`, branche
   `hsseq`) ; ses sessions sont bornées à leurs routes (`organisation.SESSION_ROUTES["terrain"]`),
   et sur une rotation à la seule action `depart`.
