@@ -95,6 +95,10 @@ Les relances des clients partent par courriel dès qu'un serveur d'envoi est par
 les variables `SMTP_*` de `.env`, puis `infra/mail-server.sh production` (et `recette` si besoin) ;
 le script teste la connexion. Sans serveur, les relances s'impriment.
 
+`infra/poser-secrets.sh courriel adresse@domaine` fait tout cela, mot de passe masqué. Le même script
+pose les clés de l'IA (`ia`), la copie hors site (`hors-site`), le canal d'alerte (`alerte`) et la sonde
+externe (`sonde`), sans que le secret passe par la ligne de commande ni par une session de travail.
+
 ## Lecture des business plans par l'IA (AxisPro Suite)
 
 À l'ouverture d'un dossier, le cabinet peut faire lire le business plan du promoteur par Claude
