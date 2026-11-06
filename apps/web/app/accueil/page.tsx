@@ -11,7 +11,9 @@ export const metadata: Metadata = { title: { absolute: "Accueil · NIMOVA" } };
 /** Accueil NIMOVA : l'écran de départ des deux espaces de gestion (Finance, AxisPro). */
 export default async function Page() {
   const memo = (await cookies()).get(COOKIES.app)?.value;
+  // Un compte extérieur n'a pas d'accueil NIMOVA : il va droit à son espace.
   if (memo === "portail") redirect("/portail");
+  if (memo === "espace-client") redirect("/espace-client");
   const h = await headers();
   const app = accueilApp(memo, h.get("x-forwarded-host") ?? h.get("host"));
   const me = await requireUser(app);

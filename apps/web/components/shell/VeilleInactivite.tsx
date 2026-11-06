@@ -17,6 +17,9 @@ import { fermerSession } from "@/lib/deconnexion";
  * déconnecté pendant qu'il travaille dans un autre onglet, et la déconnexion ferme tous les onglets.
  * Posée par la coque des applications, l'accueil et le portail ; jamais dans Rotations (/mobile), dont
  * la session longue et les saisies hors réseau doivent rester.
+ *
+ * Une connexion est annoncée de la même façon (annoncerConnexion) : un onglet resté ouvert sous un
+ * autre compte se recharge, pour ne pas afficher l'écran d'un compte avec la session d'un autre.
  */
 
 /** Délai sans activité avant la question (décision du gérant : 1 minute). */
@@ -28,6 +31,8 @@ export const DELAI_REPONSE_MS = 30_000;
 const CLE_ACTIVITE = "nimova-derniere-activite";
 /** Déconnexion annoncée aux autres onglets quand BroadcastChannel manque (stockage local). */
 const CLE_DECONNEXION = "nimova-deconnexion";
+/** Connexion annoncée aux autres onglets quand BroadcastChannel manque (stockage local). */
+const CLE_CONNEXION = "nimova-connexion";
 const CANAL = "nimova-session";
 /** L'activité n'est partagée qu'une fois toutes les deux secondes au plus. */
 const PARTAGE_MS = 2_000;
@@ -37,7 +42,7 @@ const EVENEMENTS = ["pointerdown", "pointermove", "keydown", "input", "wheel", "
 const ANNONCES = new Set([20, 10, 5]);
 
 type Motif = "inactivite" | "volontaire";
-type Message = { type: "activite"; t: number } | { type: "deconnexion"; motif: Motif };
+type Message = { type: "activite"; t: number } | { type: "deconnexion"; motif: Motif } | { type: "connexion"; compte: string };
 
 function ouvrirCanal(): BroadcastChannel | null {
   try {
@@ -80,6 +85,27 @@ export function annoncerDeconnexion(motif: Motif) {
   } catch {
     // Stockage refusé : le canal suffit.
   }
+}
+
+/** Annonce aux autres onglets qu'un compte vient de se connecter dans ce navigateur. */
+export function annoncerConnexion(compte: string) {
+  const canal = ouvrirCanal();
+  canal?.postMessage({ type: "connexion", compte } satisfies Message);
+  canal?.close();
+  try {
+    window.localStorage.setItem(CLE_CONNEXION, `${Date.now()}:${compte}`);
+  } catch {
+    // Stockage refusé : le canal suffit.
+  }
+}
+
+/**
+ * Le compte annoncé est-il un autre que celui de la page (data-compte, posé par la coque et
+ * l'accueil) ? Une page qui ne déclare pas le sien est rechargée : c'est sans risque.
+ */
+function autreCompte(compte: string): boolean {
+  const page = document.querySelector<HTMLElement>("[data-compte]")?.dataset.compte;
+  return !page || page.trim().toLowerCase() !== compte.trim().toLowerCase();
 }
 
 function pageDeConnexion(app: AppCode, motif: Motif | null): string {
@@ -148,15 +174,24 @@ export function VeilleInactivite({ app }: { app: AppCode }) {
     };
     for (const type of EVENEMENTS) document.addEventListener(type, surActivite, { capture: true, passive: true });
 
+    // Connexion d'un autre compte dans un autre onglet : cette page rechargée suit la nouvelle session.
+    const recharger = (compte: string) => {
+      if (fini.current || !autreCompte(compte)) return;
+      fini.current = true;
+      window.location.reload();
+    };
+
     const surMessage = (e: MessageEvent<Message>) => {
       const m = e.data;
       if (m?.type === "activite" && typeof m.t === "number") marquer(m.t, false);
       else if (m?.type === "deconnexion" && !fini.current && !lanceeIci) quitter(m.motif);
+      else if (m?.type === "connexion" && typeof m.compte === "string") recharger(m.compte);
     };
     canal?.addEventListener("message", surMessage);
     const surStockage = (e: StorageEvent) => {
       if (e.key === CLE_ACTIVITE && e.newValue) marquer(Number(e.newValue) || 0, false);
       if (e.key === CLE_DECONNEXION && e.newValue && !fini.current) quitter(e.newValue.startsWith("inactivite") ? "inactivite" : "volontaire");
+      if (e.key === CLE_CONNEXION && e.newValue) recharger(e.newValue.slice(e.newValue.indexOf(":") + 1));
     };
     window.addEventListener("storage", surStockage);
 

@@ -7,15 +7,16 @@ import { isAppCode } from "@/lib/config";
 import { requireUser } from "@/lib/server-api";
 import { COOKIES } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Mes demandes" };
+export const metadata: Metadata = { title: "Assistance" };
 
 /**
- * « Mes demandes » : l'espace partagé de suivi des demandes adressées au support de la plateforme
+ * « Assistance » : l'espace partagé de suivi des demandes adressées au support de la plateforme
  * (offre, chapitres 6.4, 7.2 et 7.4), hors des applications métier, dans le cadre de l'application de
  * connexion comme le changement du mot de passe. Les appels de ces pages ne portent pas d'en-tête
  * d'application (lib/api-client.ts : « compte » n'en est pas une) : la passerelle prend l'application
  * de la connexion et sa société de travail ; les routes /support/... n'exigent aucune application.
- * Un porteur de projet n'y a pas accès : il s'adresse à son consultant.
+ * Un compte extérieur n'y a pas accès : le porteur de projet s'adresse à son consultant depuis le portail,
+ * le client suit ses demandes dans son espace ; chacun y est ramené.
  */
 export default async function Layout({ children }: { children: ReactNode }) {
   const fromCookie = (await cookies()).get(COOKIES.app)?.value;
@@ -23,7 +24,8 @@ export default async function Layout({ children }: { children: ReactNode }) {
   // Rotations n'a pas de cadre : celui de la finance sert, comme pour le mot de passe.
   const app = loginApp === "mobile" ? "finance" : loginApp;
   const me = await requireUser(app);
-  if (me.profiles.includes("porteur")) redirect("/acces-refuse");
+  if (me.profiles.includes("porteur")) redirect("/portail");
+  if (me.profiles.includes("client")) redirect("/espace-client");
   return (
     <AppShell app={app} me={me}>
       {children}

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact, type PointerEvent as PointeurReact } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact, type PointerEvent as PointeurReact } from "react";
 import { IconeModule } from "@/components/accueil/icones-modules";
 import { LogoSociete, Monogramme } from "@/components/brand";
 import { Check, ChevronDown, KeyRound, LogOut, Search, X } from "@/components/icons";
-import { alignerSociete, rayonsDe, sansAccents, voisine, type Rayon, type Tuile } from "@/components/accueil/tuiles";
+import { alignerSociete, enTete, principale, rayonsDe, sansAccents, useCompteurs, voisine, type Pastille, type Rayon, type Tuile } from "@/components/accueil/tuiles";
+import { PastilleTuile } from "@/components/shell/Lanceur";
 import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/VeilleInactivite";
 import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import { APPS, type AppCode } from "@/lib/config";
@@ -18,57 +19,18 @@ import { ECHEC_DECONNEXION, fermerSession } from "@/lib/deconnexion";
 // la société affichée sur l'accueil, quand elle s'y choisit et qu'il l'accepte ; un module réservé à
 // une société s'ouvre dans ses livres (tuiles.ts, societePour).
 
-/** Durée pendant laquelle les icônes jouent leur entrée (la vague des tuiles comprise). */
-const INTRO_MS = 3200;
-/** La même au retour sur l'accueil dans la session : la vague passe alors en raccourci. */
-const INTRO_RETOUR_MS = 2000;
+/**
+ * Entrée de l'accueil, quel que soit le nombre de tuiles : la vague se répartit sur VAGUE_MS, chaque
+ * tuile entre en ENTREE_MS ; tout est en place en 600 ms environ (demande du client, 4 novembre 2026 :
+ * un outil simple et rapide). Les icônes ne jouent plus à l'entrée, seulement au survol.
+ */
+const VAGUE_MS = 260;
+const ENTREE_MS = 340;
 /** Au-delà, l'ouverture d'un module est lente : le voile se retire et l'accueil propose de réessayer. */
 const OUVERTURE_LENTE_MS = 8000;
 
-/** L'accueil a-t-il déjà joué sa vague complète dans cet onglet ? (Mémoire de la page, puis de l'onglet.) */
-const CLE_VU = "nimova-accueil-vu";
-let vuIci = false;
-
-function dejaVu(): boolean {
-  if (vuIci) return true;
-  try {
-    return window.sessionStorage.getItem(CLE_VU) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function marquerVu() {
-  vuIci = true;
-  try {
-    window.sessionStorage.setItem(CLE_VU, "1");
-  } catch {
-    // Stockage refusé (navigation privée, réglage du navigateur) : la mémoire de la page suffit.
-  }
-}
-
-const sansAbonnement = () => () => {};
-
-/**
- * Retard d'une tuile dans la vague d'entrée. Les valeurs par défaut sont celles de la première
- * ouverture ; au retour, l'accueil pose des variables plus courtes sur la page (rien ne change dans
- * le rendu, donc rien ne diffère entre le serveur et le navigateur).
- */
-const retard = (i: number, depart: number, variable = "--vague-depart") => `calc(var(${variable}, ${depart}ms) + ${i} * var(--vague-pas, 45ms))`;
-
-/**
- * Application principale du compte, d'après ce que l'accueil en sait déjà : l'Analyse pour la
- * direction, sinon l'application retenue à la connexion.
- */
-function principale(me: Me, app: AppCode): string {
-  return me.profiles.includes("direction") && me.apps.includes("analyse") ? "analyse" : app;
-}
-
-/** Familles de l'accueil : l'application principale en tête, puis l'ordre habituel, les outils en fin. */
-function familles(rayons: Rayon[], tete: string): Rayon[] {
-  const premiere = rayons.find((r) => r.cle === tete);
-  return premiere ? [premiere, ...rayons.filter((r) => r !== premiere)] : rayons;
-}
+/** Retard d'une tuile (ou d'un titre de famille) de rang i dans la vague de n tuiles. */
+const retard = (i: number, n: number) => `${n > 1 ? Math.round((i * VAGUE_MS) / (n - 1)) : 0}ms`;
 
 type Voile = { el: HTMLDivElement; entree: Animation };
 
@@ -76,12 +38,12 @@ type Voile = { el: HTMLDivElement; entree: Animation };
 function retirerVoile(v: Voile | null) {
   if (!v) return;
   const effacer = () => {
-    const sortie = v.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: "ease-out", fill: "forwards" });
+    const sortie = v.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" });
     void sortie.finished.catch(() => undefined).then(() => v.el.remove());
   };
   void v.entree.finished.then(effacer, effacer);
   // Filet : un voile n'attend jamais plus que son entrée et son effacement.
-  window.setTimeout(() => v.el.remove(), 1500);
+  window.setTimeout(() => v.el.remove(), 1000);
 }
 
 function initials(name: string) {
@@ -95,10 +57,11 @@ function initials(name: string) {
  * Accueil NIMOVA, à la manière de l'accueil d'Odoo : un fond clair, une grille d'applications sans
  * titre ni bandeau. Les tuiles sont rangées par application, l'application principale du compte en
  * tête ; un écart et un petit repère à la couleur de l'application séparent les familles.
- * Le mouvement porte l'écran : les tuiles arrivent en vague et leurs icônes s'animent (en raccourci
- * quand on revient sur l'accueil), chaque tuile s'incline sous le curseur, la grille glisse quand on
- * cherche, la tuile choisie s'ouvre en plein écran. Il suffit de taper pour chercher ; les flèches
- * déplacent le focus d'une tuile à l'autre, d'une famille à la suivante.
+ * Le mouvement reste bref : les tuiles arrivent en une courte vague (600 ms au plus), chaque tuile
+ * s'incline sous le curseur et son icône s'anime au survol, la grille glisse quand on cherche, la tuile
+ * choisie s'ouvre en plein écran. Une pastille dit ce qui attend (demandes à approuver, messages non
+ * lus…). Il suffit de taper pour chercher ; les flèches déplacent le focus d'une tuile à l'autre, d'une
+ * famille à la suivante.
  */
 export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   const router = useRouter();
@@ -112,11 +75,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   const positions = useRef(new Map<string, DOMRect>());
   const voile = useRef<Voile | null>(null);
   const minuteurLent = useRef<number | undefined>(undefined);
-
-  // Retour sur l'accueil : décidé une fois, à l'arrivée. Une page rendue par le serveur a déjà
-  // commencé sa vague complète (elle est peinte avant l'hydratation) : on ne la raccourcit pas.
-  const hydratation = useSyncExternalStore(sansAbonnement, () => false, () => true);
-  const [retour] = useState(() => !hydratation && dejaVu());
+  const compteurs = useCompteurs(me);
 
   // Société mémorisée que l'administrateur a retirée au compte : l'accueil s'est ouvert dans la société
   // par défaut (requireUser). La mémoire périmée est oubliée et l'accueil le dit.
@@ -125,7 +84,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
     void fetch("/api/session/company", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ company_id: null, app }) }).catch(() => undefined);
   }, [me.societe_retiree, app]);
 
-  const rayons = useMemo(() => familles(rayonsDe(me, app, true), principale(me, app)), [me, app]);
+  const rayons = useMemo(() => enTete(rayonsDe(me, app, true), principale(me, app)), [me, app]);
   const total = useMemo(() => rayons.reduce((n, r) => n + r.tuiles.length, 0), [rayons]);
 
   const mots = sansAccents(q).split(/\s+/).filter(Boolean);
@@ -140,23 +99,11 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   const visibles = groupes.flatMap((g) => g.tuiles);
   const signature = visibles.map((t) => t.cle).join("|");
 
-  // Au retour, la vague garde son ordre mais passe en moins d'une seconde.
-  useLayoutEffect(() => {
-    marquerVu();
-    const el = page.current;
-    if (!retour || !el) return;
-    el.style.setProperty("--vague-pas", `${Math.min(14, Math.round(380 / Math.max(1, total - 1)))}ms`);
-    el.style.setProperty("--vague-depart", "0ms");
-    el.style.setProperty("--vague-depart-ic", "180ms");
-    el.style.setProperty("--vague-duree", "480ms");
-  }, [retour, total]);
-
-  // Fin de l'entrée : les icônes cessent de jouer, les tuiles quittent la vague (une tuile rendue par
-  // la recherche ne la rejoue pas). Une longue grille garde sa vague jusqu'à la dernière icône.
+  // Fin de l'entrée : les tuiles quittent la vague (une tuile rendue par la recherche ne la rejoue pas).
   useEffect(() => {
-    const t = window.setTimeout(() => setIntro(false), retour ? INTRO_RETOUR_MS : Math.max(INTRO_MS, 420 + total * 45 + 1600));
+    const t = window.setTimeout(() => setIntro(false), VAGUE_MS + ENTREE_MS + 100);
     return () => window.clearTimeout(t);
-  }, [retour, total]);
+  }, []);
 
   // Le voile d'ouverture part avec l'accueil, quand le module s'affiche : il achève de couvrir
   // l'écran, puis s'efface sur le module.
@@ -249,14 +196,13 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
     contenu.className = "flex flex-col items-center gap-4 text-center";
     const icone = boite.querySelector("svg")?.cloneNode(true) as SVGElement | undefined;
     if (icone) {
-      // Dans une « tuile qui joue », les pièces de l'icône rejouent leur entrée.
       const cadre = document.createElement("span");
-      cadre.className = "tuile joue grid place-items-center";
+      cadre.className = "grid place-items-center";
       icone.style.width = "42px";
       icone.style.height = "42px";
       cadre.appendChild(icone);
       contenu.appendChild(cadre);
-      icone.animate([{ transform: "scale(1)" }, { transform: "scale(1.5)" }], { duration: 520, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" });
+      icone.animate([{ transform: "scale(1)" }, { transform: "scale(1.5)" }], { duration: 320, easing: "cubic-bezier(0.22,1,0.36,1)", fill: "forwards" });
     }
     const etiquette = document.createElement("div");
     etiquette.className = "flex flex-col items-center gap-1.5";
@@ -282,13 +228,14 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
         { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: "15px", background: "#ffffff" },
         { left: "0px", top: "0px", width: "100vw", height: "100vh", borderRadius: "0px", background: "#eef2ef" },
       ],
-      { duration: 520, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
+      { duration: 320, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
     );
     voile.current = { el: v, entree };
     // Le nom ne paraît que si le module tarde : une ouverture rapide reste un simple geste.
-    etiquette.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 260, delay: 420, easing: "ease-out", fill: "backwards" });
-    fil.animate([{ transform: "translateX(-100%)" }, { transform: "translateX(300%)" }], { duration: 1100, delay: 420, iterations: Infinity, easing: "cubic-bezier(0.45,0,0.55,1)" });
-    void Promise.all([aligne, new Promise((fin) => window.setTimeout(fin, 180))]).then(() => router.push(t.href));
+    etiquette.animate([{ opacity: 0, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { duration: 220, delay: 400, easing: "ease-out", fill: "backwards" });
+    fil.animate([{ transform: "translateX(-100%)" }, { transform: "translateX(300%)" }], { duration: 1100, delay: 400, iterations: Infinity, easing: "cubic-bezier(0.45,0,0.55,1)" });
+    // Le module est demandé sans attendre la fin du voile : il s'ouvre dès qu'il est prêt.
+    void aligne.then(() => router.push(t.href));
   }
 
   // Flèches : le focus passe d'une tuile à sa voisine, en ligne comme en colonne, et d'une famille à l'autre.
@@ -303,7 +250,8 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   }
 
   return (
-    <div ref={page} onPointerMove={suivre} className="relative min-h-screen overflow-hidden bg-bg text-ink">
+    // data-compte : compte de la page ; la connexion d'un autre compte dans un autre onglet la recharge (VeilleInactivite).
+    <div ref={page} onPointerMove={suivre} data-compte={me.login} className="relative min-h-screen overflow-hidden bg-bg text-ink">
       {/* Déconnexion après inactivité, comme dans les applications (jamais pour une session de Rotations). */}
       {me.session_app !== "mobile" && <VeilleInactivite app={app} />}
       {/* Rubans de lumière en diagonale, comme le fond de l'accueil d'Odoo ; ils dérivent et suivent le curseur. */}
@@ -366,7 +314,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
         <div role="status" className="mx-auto max-w-md">
           {me.societe_retiree && (
             <p className="n-surgir mb-8 rounded-xl border border-warn/15 bg-warn-doux px-4 py-3 text-[13px] leading-snug text-ink">
-              La société choisie précédemment n&apos;est plus ouverte à votre compte : vous travaillez dans les livres de{" "}
+              La société choisie précédemment n&apos;est plus ouverte à votre compte : vous travaillez pour{" "}
               <strong className="font-semibold">{me.companies.find((c) => c.id === me.company_id)?.name ?? "votre société par défaut"}</strong>.
             </p>
           )}
@@ -392,7 +340,7 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
                     "mb-3 flex items-center gap-2 pl-[calc((100%_-_16px)/6_-_33px)] text-[12px] font-semibold leading-4 sm:pl-[calc((100%_-_24px)/8_-_33px)] md:pl-[calc((100%_-_40px)/12_-_33px)]",
                     famille ? "text-accent-strong" : "text-muted",
                   )}
-                  style={intro ? { animationName: "n-apparaitre", animationDuration: "var(--vague-duree, 760ms)", animationTimingFunction: "ease-out", animationFillMode: "backwards", animationDelay: retard(g.debut, 120) } : undefined}
+                  style={intro && !reduit ? { animationName: "n-apparaitre", animationDuration: `${ENTREE_MS}ms`, animationTimingFunction: "ease-out", animationFillMode: "backwards", animationDelay: retard(g.debut, total) } : undefined}
                 >
                   <span aria-hidden className={cx("h-[7px] w-[7px] flex-none rounded-full", famille ? "bg-accent-vif" : "bg-line-strong")} />
                   {g.titre}
@@ -401,8 +349,8 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
                   {g.tuiles.map((t, n) => {
                     const i = g.debut + n;
                     return (
-                      <li key={t.cle} data-cle={t.cle} className={intro ? "tuile-entree" : undefined} style={intro ? ({ "--d": retard(i, 120), animationDuration: "var(--vague-duree, 760ms)" } as CSSProperties) : undefined}>
-                        <TuileModule t={t} premiere={Boolean(q) && i === 0} joue={intro && !q} delaiIntro={retard(i, 420, "--vague-depart-ic")} reduit={reduit} onOuvrir={ouvrir} />
+                      <li key={t.cle} data-cle={t.cle} className={intro && !reduit ? "tuile-entree" : undefined} style={intro && !reduit ? ({ "--d": retard(i, total) } as CSSProperties) : undefined}>
+                        <TuileModule t={t} premiere={Boolean(q) && i === 0} pastille={compteurs[t.href]} reduit={reduit} onOuvrir={ouvrir} />
                       </li>
                     );
                   })}
@@ -417,8 +365,8 @@ export function Accueil({ me, app }: { me: Me; app: AppCode }) {
   );
 }
 
-/** Tuile : boîte blanche qui s'incline sous le curseur, reflet, icône vivante, libellé. */
-function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: Tuile; premiere: boolean; joue: boolean; delaiIntro: string; reduit: boolean; onOuvrir: (e: SourisReact<HTMLAnchorElement>, t: Tuile) => void }) {
+/** Tuile : boîte blanche qui s'incline sous le curseur, reflet, icône vivante, libellé, pastille de ce qui attend. */
+function TuileModule({ t, premiere, pastille, reduit, onOuvrir }: { t: Tuile; premiere: boolean; pastille?: Pastille; reduit: boolean; onOuvrir: (e: SourisReact<HTMLAnchorElement>, t: Tuile) => void }) {
   const boite = useRef<HTMLSpanElement>(null);
 
   function incliner(e: PointeurReact<HTMLAnchorElement>) {
@@ -446,8 +394,7 @@ function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: T
       onClick={(e) => onOuvrir(e, t)}
       onPointerMove={incliner}
       onPointerLeave={relacher}
-      className={cx("tuile group flex flex-col items-center rounded-xl px-1 py-1 text-center outline-none", joue && "joue")}
-      style={{ "--d-intro": delaiIntro } as CSSProperties}
+      className="tuile group flex flex-col items-center rounded-xl px-1 py-1 text-center outline-none"
     >
       <span
         ref={boite}
@@ -458,6 +405,7 @@ function TuileModule({ t, premiere, joue, delaiIntro, reduit, onOuvrir }: { t: T
       >
         <span aria-hidden className="tuile-reflet pointer-events-none absolute inset-0 rounded-[15px]" />
         <IconeModule cle={t.cle} className="relative h-[42px] w-[42px]" />
+        {pastille && <PastilleTuile p={pastille} className="absolute -right-2 -top-2" />}
       </span>
       <span className="mt-2 line-clamp-2 text-[13px] leading-tight text-ink-2 transition-colors group-hover:text-ink">{t.libelle}</span>
     </Link>

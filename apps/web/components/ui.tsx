@@ -20,6 +20,8 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AlertTriangle, ArrowDown, ArrowUp, Baisse, Check, CheckCircle2, Eye, EyeOff, FileUp as FileUpIcon, Hausse, Info, Loader2, X, type Icon } from "@/components/icons";
 import { cx } from "@/lib/cx";
 import { Ondes } from "@/components/guilloche";
@@ -549,10 +551,10 @@ const BUTTON: Record<ButtonVariant, string> = {
 
 export type ButtonSize = "sm" | "md" | "lg";
 
-/** Tailles : 32 px dans une ligne de tableau ou une barre d'outils, 36 px par défaut, 44 px au toucher. */
+/** Tailles : 32 px dans une ligne de tableau ou une barre d'outils, 36 px par défaut ; 44 px au doigt (téléphone), quelle que soit la taille. */
 const TAILLE: Record<ButtonSize, string> = {
-  sm: "min-h-8 gap-1.5 px-2.5 py-1 text-[13px]",
-  md: "min-h-9 gap-2 px-3.5 py-1.5 text-sm",
+  sm: "min-h-8 pointer-coarse:min-h-11 gap-1.5 px-2.5 py-1 text-[13px]",
+  md: "min-h-9 pointer-coarse:min-h-11 gap-2 px-3.5 py-1.5 text-sm",
   lg: "min-h-11 gap-2 px-4 py-2 text-[15px]",
 };
 
@@ -581,7 +583,7 @@ const FIELD =
   "w-full rounded-[10px] border border-line-champ bg-panel px-3 py-2 text-sm text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow] duration-200 hover:border-ink-2 focus:border-accent focus:ring-4 focus:ring-accent/15 disabled:cursor-not-allowed disabled:bg-panel-2 disabled:text-muted";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={ajuste(cx(FIELD, "min-h-9"), props.className)} />;
+  return <input {...props} className={ajuste(cx(FIELD, "min-h-9 pointer-coarse:min-h-11"), props.className)} />;
 }
 
 /** Mot de passe avec l'œil : un clic l'affiche en clair pour vérifier la saisie, un second le masque. */
@@ -612,7 +614,7 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
 
 export function Select({ options, placeholder, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { options: Array<{ value: string | number; label: string }>; placeholder?: string }) {
   return (
-    <select {...props} className={ajuste(cx(FIELD, "champ-liste min-h-9"), props.className)}>
+    <select {...props} className={ajuste(cx(FIELD, "champ-liste min-h-9 pointer-coarse:min-h-11"), props.className)}>
       {placeholder !== undefined && <option value="">{placeholder}</option>}
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -623,10 +625,14 @@ export function Select({ options, placeholder, ...props }: SelectHTMLAttributes<
   );
 }
 
-export function Field({ label, hint, error, children, className }: { label: string; hint?: string; error?: string; children: ReactNode; className?: string }) {
+/** Champ avec son libellé. `requis` l'annonce en clair, « (obligatoire) », avant la saisie plutôt qu'après l'échec. */
+export function Field({ label, hint, error, children, className, requis }: { label: string; hint?: string; error?: string; children: ReactNode; className?: string; requis?: boolean }) {
   return (
     <label className={cx("block", className)}>
-      <span className="mb-1.5 block text-[13px] font-medium text-ink-2">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-ink-2">
+        {label}
+        {requis && <span className="font-normal text-muted"> (obligatoire)</span>}
+      </span>
       {children}
       {hint && !error && <span className="mt-1.5 block text-[12px] leading-snug text-muted">{hint}</span>}
       {error && <span className="mt-1.5 block text-[12px] font-medium leading-snug text-danger">{error}</span>}
@@ -706,12 +712,21 @@ export function ErrorBox({ error, onRetry, titre }: { error: unknown; onRetry?: 
   // Refus de droits (403) : le motif du serveur, sous un titre qui le dit ; réessayer n'y changerait rien.
   const refus = error instanceof ApiError && error.status === 403;
   const entete = titre ?? (refus ? "Non ouvert à votre profil" : null);
+  // Après un refus, une seule issue claire : revenir à son accueil (sauf Rotations, qui n'en a pas).
+  const accueil = accueilDuChemin(usePathname() ?? "");
   return (
     <div role="alert" className="n-surgir flex items-start gap-3 rounded-xl border border-danger/15 bg-danger-doux px-4 py-3 text-sm text-danger">
       <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
       <div className="flex-1">
         {entete && <div className="font-semibold">{entete}</div>}
         {message}
+        {refus && accueil && (
+          <div className="mt-2.5">
+            <Link href={accueil} className={classesBouton("secondary", "sm")}>
+              Revenir à mon accueil
+            </Link>
+          </div>
+        )}
       </div>
       {onRetry && !refus && (
         <button type="button" onClick={() => onRetry()} className="font-semibold underline underline-offset-2">
@@ -720,6 +735,14 @@ export function ErrorBox({ error, onRetry, titre }: { error: unknown; onRetry?: 
       )}
     </div>
   );
+}
+
+/** Accueil de l'espace où se trouve la page : le portail et l'espace client ont le leur ; Rotations n'en a pas. */
+function accueilDuChemin(chemin: string): string | null {
+  const espace = chemin.split("/")[1] ?? "";
+  if (espace === "mobile") return null;
+  if (espace === "portail" || espace === "espace-client") return `/${espace}`;
+  return "/accueil";
 }
 
 /**
@@ -746,8 +769,11 @@ export function Etat<T>({ data, error, onRetry, label, vide, children }: { data?
   );
 }
 
-/** État vide : trois cartes empilées aux couleurs de l'application, et ce qu'il faut faire. */
-export function Empty({ title, hint }: { title: string; hint?: string }) {
+/**
+ * État vide : trois cartes empilées aux couleurs de l'application, et ce qu'il faut faire. `action`
+ * (un bouton, un lien) place le premier geste sous la phrase : « Créer la première demande ».
+ */
+export function Empty({ title, hint, action }: { title: string; hint?: string; action?: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center">
       <svg viewBox="0 0 64 48" className="mb-2 h-12 w-16" aria-hidden focusable="false">
@@ -758,6 +784,7 @@ export function Empty({ title, hint }: { title: string; hint?: string }) {
       </svg>
       <div className="text-sm font-semibold text-ink-2">{title}</div>
       {hint && <div className="max-w-md text-[13px] leading-snug text-muted">{hint}</div>}
+      {action && <div className="mt-3 flex flex-wrap items-center justify-center gap-2">{action}</div>}
     </div>
   );
 }

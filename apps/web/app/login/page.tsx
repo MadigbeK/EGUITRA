@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import type { CSSProperties } from "react";
+import { preload } from "react-dom";
 import { LogoSociete, MarqueCabinet, Monogramme, SIGNATURE, moduleOf } from "@/components/brand";
 import { FileText, FolderOpen, Mail } from "@/components/icons";
 import { APPS, appFromHost, isAppCode, isEspaceCode, type AppCode } from "@/lib/config";
@@ -82,7 +83,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </div>
         <div className="flex flex-1 items-center py-10">
           <div className="n-entree w-full max-w-[400px]" style={{ "--i": 1 } as CSSProperties}>
-            <LoginForm app={app} next={next} message={message} />
+            <LoginForm app={app} next={next} message={message} refusApp={params.error === "app_forbidden"} />
           </div>
         </div>
         <div className="n-entree space-y-4" style={{ "--i": 3 } as CSSProperties}>
@@ -105,16 +106,19 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
  * Photo de fond d'une scène, servie en WebP à la taille de l'écran (`public/scenes/`, cache d'un
  * an : une autre photo change de nom). Son aperçu flou, inscrit dans la page, s'affiche dès le
  * premier rendu, avant toute requête. Deux voiles dans la teinte de la scène (`voile`, triplet RGB)
- * gardent les textes lisibles sur toute la photo.
+ * gardent les textes lisibles sur toute la photo. Sur grand écran, la photo est chargée en priorité ;
+ * sur téléphone, où elle n'est qu'un bandeau au-dessus du formulaire, elle passe après lui.
  */
 function PhotoScene({ photo, apercu, voile }: { photo: string; apercu: string; voile: string }) {
+  const grandEcran = `/scenes/${photo}-1000.webp 1000w, /scenes/${photo}-1400.webp 1400w, /scenes/${photo}-2200.webp 2200w`;
+  preload(`/scenes/${photo}-1400.webp`, { as: "image", type: "image/webp", imageSrcSet: grandEcran, imageSizes: "58vw", media: "(min-width: 1024px)", fetchPriority: "high" });
   return (
     <>
       <picture aria-hidden className="scene-photo pointer-events-none absolute inset-0 bg-cover bg-[50%_40%]" style={{ backgroundImage: `url(${apercu})` }}>
-        <source type="image/webp" media="(min-width: 1024px)" srcSet={`/scenes/${photo}-1000.webp 1000w, /scenes/${photo}-1400.webp 1400w, /scenes/${photo}-2200.webp 2200w`} sizes="58vw" />
+        <source type="image/webp" media="(min-width: 1024px)" srcSet={grandEcran} sizes="58vw" />
         <source type="image/webp" srcSet={`/scenes/${photo}-mobile-900.webp 900w, /scenes/${photo}-mobile-1600.webp 1600w`} sizes="100vw" />
         {/* eslint-disable-next-line @next/next/no-img-element -- image décorative déjà optimisée, servie telle quelle */}
-        <img src={`/scenes/${photo}-1400.jpg`} alt="" fetchPriority="high" className="h-full w-full object-cover object-[50%_40%]" />
+        <img src={`/scenes/${photo}-1400.jpg`} alt="" decoding="async" className="h-full w-full object-cover object-[50%_40%]" />
       </picture>
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(var(--voile)/0.82)_0%,rgb(var(--voile)/0.5)_42%,rgb(var(--voile)/0.6)_70%,rgb(var(--voile)/0.9)_100%)]" style={{ "--voile": voile } as CSSProperties} />
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(var(--voile)/0.78)_0%,rgb(var(--voile)/0.5)_60%,transparent_100%)] max-lg:bg-[rgb(var(--voile)/0.35)]" style={{ "--voile": voile } as CSSProperties} />

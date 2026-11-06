@@ -31,6 +31,10 @@ APPS = tuple(APP_REGISTRY)
 # Ni le portail (porteurs) ni l'espace client (comptes externes), ni les applications de téléphone (sessions
 # longues, routes bornées).
 FALLBACK_APPS = ("finance", "transport", "axispro", "analyse", "rh", "hsseq", "service-client")
+# Espaces des comptes externes : un porteur de projet ou un client qui se connecte à l'adresse commune y
+# entre par le repli. Ces espaces sont seulement des arrivées : le repli ne part jamais de leur adresse, et
+# un profil externe n'ouvre aucune application interne.
+EXTERNAL_APPS = ("portail", "espace-client")
 
 
 def _mfa_required(env):
@@ -109,10 +113,10 @@ class EguitraAuthController(http.Controller):
         apps = user._eguitra_apps()
         if app not in apps:
             # Page de connexion de l'adresse commune (application par défaut : Finance) : un compte qui ne
-            # l'ouvre pas, RH seule par exemple, entre dans sa première application web interne ; la
-            # réponse porte l'application retenue (« app »).
+            # l'ouvre pas, RH seule par exemple, entre dans sa première application web interne, un porteur
+            # de projet ou un client dans son espace ; la réponse porte l'application retenue (« app »).
             fallback = data.get("fallback") is True and app in FALLBACK_APPS
-            app = next((a for a in FALLBACK_APPS if a in apps), None) if fallback else None
+            app = next((a for a in FALLBACK_APPS + EXTERNAL_APPS if a in apps), None) if fallback else None
             if not app:
                 raise ApiError(403, "app_forbidden", "Votre profil ne donne pas accès à cette application.")
 

@@ -33,7 +33,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "/finance/admin/commerce": "Validité des offres, tolérances, numérotation",
   "/finance/tresorerie": "Banques, caisses et rapprochements",
   "/finance/relances": "Créances échues et relances",
-  "/finance/tiers": "Clients, fournisseurs et leurs soldes",
+  "/finance/tiers": "Fiches, soldes et encours",
   "/finance/immobilisations": "Biens, amortissements et cessions",
   "/finance/dette": "Emprunts et échéanciers",
   "/finance/ecritures": "Journaux et opérations diverses",
@@ -56,7 +56,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "/finance/admin/utilisateurs": "Comptes, profils et accès",
   "/finance/admin/societes": "Les sociétés et leurs réglages",
   "/finance/admin/axes": "Activités, chantiers et autres axes",
-  "/finance/admin/imputations": "Règles d'imputation analytique",
+  "/finance/admin/imputations": "Imputation analytique automatique des pièces",
   "/finance/admin/parametres": "Seuils d'alerte et taux",
   "/finance/admin/factures": "Signataires, numérotation, comptes bancaires",
   "/finance/admin/audit": "Qui a fait quoi, et quand",
@@ -108,7 +108,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "/service-client/reglages": "Heures, délais, catégories, équipes, réponses types, canaux",
 };
 
-const SENS_PASTILLE: Record<NavBadge, [string, string]> = { approvals: [" en attente", " en attente"], controls: [" contrôle en anomalie", " contrôles en anomalie"], alerts: [" alerte", " alertes"] };
+const SENS_PASTILLE: Record<NavBadge, [string, string]> = { approvals: [" à approuver", " à approuver"], controls: [" contrôle en anomalie", " contrôles en anomalie"], alerts: [" alerte", " alertes"] };
 
 function Compte({ n, severe, sens }: { n: number; severe: boolean; sens: string }) {
   return (

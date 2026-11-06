@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Button, Field, Input, Notice, PasswordInput, cx } from "@/components/ui";
-import { APPS, isAppCode, type AppCode } from "@/lib/config";
+import { annoncerConnexion } from "@/components/shell/VeilleInactivite";
+import { APPS, isAppCode, isEspaceCode, type AppCode } from "@/lib/config";
 import { MESSAGE_RESEAU } from "@/lib/erreurs";
 
 type Step = { kind: "credentials" } | { kind: "mfa" } | { kind: "setup"; secret: string; qr: string };
@@ -39,23 +41,28 @@ const TITRES: Record<Step["kind"], string> = {
  * Connexion en trois étapes (identifiant, code, activation de la double authentification). Sur la
  * page de connexion, elle mène ensuite à `next`. Dans la fenêtre de reconnexion (`enFenetre`, session
  * expirée sur une page ouverte), elle appelle `onConnecte` sans quitter la page, l'identifiant du
- * compte déjà saisi (`identifiant`) ; la fenêtre porte alors le titre.
+ * compte déjà saisi (`identifiant`) ; la fenêtre porte alors le titre. Un refus de l'application
+ * (`refusApp`, ou réponse « app_forbidden ») propose les deux entrées des comptes extérieurs.
  */
-export function LoginForm({ app, next, message, enFenetre = false, identifiant = "", onConnecte }: { app: AppCode; next: string; message: string | null; enFenetre?: boolean; identifiant?: string; onConnecte?: () => void | Promise<void> }) {
+export function LoginForm({ app, next, message, enFenetre = false, identifiant = "", onConnecte, refusApp = false }: { app: AppCode; next: string; message: string | null; enFenetre?: boolean; identifiant?: string; onConnecte?: () => void | Promise<void>; refusApp?: boolean }) {
   const [step, setStep] = useState<Step>({ kind: "credentials" });
   const [login, setLogin] = useState(identifiant);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refuse, setRefuse] = useState(refusApp);
   // Application retenue par le noyau : celle demandée, ou la première application web interne du profil
   // quand il n'ouvre pas celle-ci (connexion depuis l'adresse commune, compte RH seule par exemple).
   const [entree, setEntree] = useState<AppCode>(app);
 
   function done(retenue: AppCode = entree) {
+    // Les autres onglets ouverts sous un autre compte se rechargent (VeilleInactivite).
+    annoncerConnexion(login);
     if (onConnecte) return void onConnecte();
-    // Autre application que celle demandée : sa page d'accueil, sauf l'accueil commun, qui les montre toutes.
-    window.location.href = retenue === app || next === "/accueil" ? next : APPS[retenue].home;
+    // Autre application que celle demandée : sa page d'accueil, sauf l'accueil commun, qui montre toutes
+    // les applications internes ; un porteur de projet ou un client va droit à son espace.
+    window.location.href = retenue === app || (next === "/accueil" && isEspaceCode(retenue)) ? next : APPS[retenue].home;
   }
 
   // Le bouton reste en chargement jusqu'à l'écran suivant quand la connexion aboutit ; sinon il est
@@ -67,7 +74,10 @@ export function LoginForm({ app, next, message, enFenetre = false, identifiant =
     let connecte = false;
     try {
       const { ok, data } = await post("/api/session/login", { login, password, app, fallback: !enFenetre });
-      if (!ok) return setError(data.message ?? "Connexion impossible.");
+      if (!ok) {
+        setRefuse(data.error === "app_forbidden");
+        return setError(data.message ?? "Connexion impossible.");
+      }
       setPassword("");
       const retenue = isAppCode(data.app) ? data.app : app;
       setEntree(retenue);
@@ -136,6 +146,7 @@ export function LoginForm({ app, next, message, enFenetre = false, identifiant =
             <Button type="submit" variant="primary" size="lg" className="mt-2 w-full" loading={busy}>
               Se connecter
             </Button>
+            {refuse && !enFenetre && <EntreesExterieures app={app} />}
           </form>
         )}
 
@@ -179,6 +190,31 @@ export function LoginForm({ app, next, message, enFenetre = false, identifiant =
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Après un refus : un porteur de projet ou un client qui s'est trompé d'adresse trouve la sienne.
+ * L'entrée de l'application déjà ouverte n'est pas proposée.
+ */
+function EntreesExterieures({ app }: { app: AppCode }) {
+  const entrees = [
+    { app: "portail", question: "Porteur de projet ?", lien: "Ouvrir le portail" },
+    { app: "espace-client", question: "Client ?", lien: "Ouvrir l'espace client" },
+  ].filter((e) => e.app !== app);
+  if (!entrees.length) return null;
+  return (
+    <div className="space-y-1.5 rounded-xl border border-line bg-panel-2 px-4 py-3 text-[13px] text-ink-2">
+      {entrees.map((e) => (
+        <p key={e.app}>
+          {e.question}{" "}
+          {/* Lien ordinaire : la page de connexion se recharge aux couleurs de l'autre espace. */}
+          <Link href={`/login?app=${e.app}`} prefetch={false} className="font-semibold text-accent underline-offset-2 hover:underline">
+            {e.lien}
+          </Link>
+        </p>
+      ))}
     </div>
   );
 }

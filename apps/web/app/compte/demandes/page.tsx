@@ -14,7 +14,7 @@ type Vue = "demandes" | "synthese";
 type Portee = "toutes" | "miennes";
 
 /**
- * Mes demandes : chaque compte interne y dépose et suit ses demandes au support (anomalies, remarques
+ * Assistance : chaque compte interne y dépose et suit ses demandes au support (anomalies, remarques
  * de recette, évolutions, questions) ; la direction y lit aussi celles de ses sociétés ;
  * l'administration (E-VOLUTION XP) les voit toutes, les traite et lit la synthèse.
  */
@@ -40,7 +40,7 @@ export default function MesDemandesPage() {
   return (
     <div>
       <PageHeader
-        title="Mes demandes"
+        title="Assistance"
         subtitle={
           admin
             ? "Toutes les demandes des deux sociétés : prise en charge avec accusé de réception, réponse écrite, résolution, qualification et crédit des évolutions."

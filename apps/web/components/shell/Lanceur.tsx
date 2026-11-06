@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ClavierReact, type MouseEvent as SourisReact } from "react";
 import { IconeModule } from "@/components/accueil/icones-modules";
-import { alignerSociete, rayonsDe, societePour, voisine, type Tuile } from "@/components/accueil/tuiles";
+import { alignerSociete, enTete, principale, rayonsDe, societePour, useCompteurs, voisine, type Pastille, type Tuile } from "@/components/accueil/tuiles";
 import { ChevronRight } from "@/components/icons";
 import { PANNEAU, cx, useMouvementReduit } from "@/components/ui";
 import { APPS, ESPACES, type AppCode } from "@/lib/config";
@@ -13,7 +13,19 @@ import type { Me } from "@/lib/types";
 /** Durée de la fermeture du panneau (son animation de sortie). */
 const SORTIE_MS = 170;
 /** Durée pendant laquelle les icônes jouent leur entrée à l'ouverture. */
-const JEU_MS = 1500;
+const JEU_MS = 900;
+/** Rang au-delà duquel les modules n'attendent plus dans la vague d'ouverture : elle reste courte. */
+const RANG_MAX = 10;
+
+/** Pastille d'une tuile (accueil, lanceur) : le nombre, rouge s'il est grave ; ce qu'il compte est lu à voix haute. */
+export function PastilleTuile({ p, className }: { p: Pastille; className?: string }) {
+  return (
+    <span className={cx("grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold leading-none text-white tabular shadow-[0_0_0_2px_#fff]", p.severe ? "bg-danger" : "bg-warn", className)}>
+      {p.n > 99 ? "99+" : p.n}
+      <span className="sr-only">{` ${p.sens}`}</span>
+    </span>
+  );
+}
 
 type Etat = "ferme" | "ouvert" | "sortie";
 
@@ -56,9 +68,12 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
   const panneau = useRef<HTMLDivElement>(null);
   const voile = useRef<{ el: HTMLDivElement; entree: Animation } | null>(null);
   const panneauId = useId();
-  const rayons = useMemo(() => rayonsDe(me, app), [me, app]);
-  const rang = useMemo(() => new Map(rayons.flatMap((r) => r.tuiles).map((t, i) => [t.cle, i])), [rayons]);
+  // Familles dans l'ordre de l'accueil : l'application du métier en tête.
+  const rayons = useMemo(() => enTete(rayonsDe(me, app), principale(me, app)), [me, app]);
+  const rang = useMemo(() => new Map(rayons.flatMap((r) => r.tuiles).map((t, i) => [t.cle, Math.min(i, RANG_MAX)])), [rayons]);
   const ouvert = etat === "ouvert";
+  // Compteurs lus à l'ouverture seulement ; ceux que la coque a déjà en mémoire ne sont pas relus.
+  const compteurs = useCompteurs(me, etat !== "ferme", false);
 
   const fermer = useCallback(
     (rendreFocus: boolean) => {
@@ -119,9 +134,9 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
       const v = voile.current;
       voile.current = null;
       if (!v) return;
-      const effacer = () => void v.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined).then(() => v.el.remove());
+      const effacer = () => void v.el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: "ease-out", fill: "forwards" }).finished.catch(() => undefined).then(() => v.el.remove());
       void v.entree.finished.then(effacer, effacer);
-      window.setTimeout(() => v.el.remove(), 1500);
+      window.setTimeout(() => v.el.remove(), 1000);
     },
     [],
   );
@@ -160,11 +175,12 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
         { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`, borderRadius: "16px", background: "#ffffff" },
         { left: "0px", top: "0px", width: "100vw", height: "100vh", borderRadius: "0px", background: "#f1f5f0" },
       ],
-      { duration: 480, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
+      { duration: 320, easing: "cubic-bezier(0.7,0,0.2,1)", fill: "forwards" },
     );
     voile.current = { el: v, entree };
     setEtat("ferme");
-    window.setTimeout(() => router.push("/accueil"), 160);
+    // L'accueil est demandé sans attendre le voile : il s'affiche dès qu'il est prêt.
+    router.push("/accueil");
     // Filet : si l'accueil tarde, le voile ne reste pas sur la coque.
     window.setTimeout(() => v.remove(), 6000);
   }
@@ -233,9 +249,12 @@ export function Lanceur({ me, app }: { me: Me; app: AppCode }) {
                             actif ? "bg-accent-doux" : "hover:bg-panel-2 focus-visible:bg-panel-2",
                             joue && "joue",
                           )}
-                          style={{ "--d-intro": `${140 + n * 26}ms` } as CSSProperties}
+                          style={{ "--d-intro": `${80 + n * 20}ms` } as CSSProperties}
                         >
-                          <IconeModule cle={t.cle} className="h-9 w-9 transition-transform duration-300 ease-[var(--ease-ressort)] group-hover:-translate-y-0.5 group-hover:scale-110" />
+                          <span className="relative">
+                            <IconeModule cle={t.cle} className="h-9 w-9 transition-transform duration-300 ease-[var(--ease-ressort)] group-hover:-translate-y-0.5 group-hover:scale-110" />
+                            {compteurs[t.href] && <PastilleTuile p={compteurs[t.href]!} className="absolute -right-3 -top-1.5" />}
+                          </span>
                           <span className={cx("line-clamp-2 text-[12px] leading-tight", actif ? "font-semibold text-ink" : "text-ink-2 group-hover:text-ink")}>{t.libelle}</span>
                           {actif && <span aria-hidden className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-accent-vif" />}
                         </Link>

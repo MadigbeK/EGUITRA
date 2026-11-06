@@ -4,15 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { LogoSociete, MarqueCabinet, Monogramme, moduleOf, type Entite } from "@/components/brand";
-import { AlertTriangle, Check, ChevronDown, Grid, ICONES, KeyRound, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
-import { IconeModule } from "@/components/accueil/icones-modules";
+import { AlertTriangle, Check, ChevronDown, Grid, ICONES, KeyRound, Lock, LogOut, Menu, Search, X, type Icon } from "@/components/icons";
 import { Rosace } from "@/components/guilloche";
 import { BarreMenus, ListeMenus } from "@/components/shell/Menus";
 import { APPS, ESPACES, appFromPath, type AppCode } from "@/lib/config";
-import { NAV, accueilFinance, accueilRh, navFor, type NavSection } from "@/lib/nav";
+import { NAV, accueilFinance, accueilRh, ecranOuvert, navFor, type NavSection } from "@/lib/nav";
 import { MESSAGE_RESEAU } from "@/lib/erreurs";
 import type { Company, Me } from "@/lib/types";
-import { PANNEAU, Squelette, cx } from "@/components/ui";
+import { PANNEAU, Squelette, classesBouton, cx } from "@/components/ui";
 import { Lanceur } from "@/components/shell/Lanceur";
 import { VeilleInactivite, annoncerDeconnexion } from "@/components/shell/VeilleInactivite";
 import { EquilibreExercice, pastilles, useEnTeteFinance } from "@/components/finance/EnTete";
@@ -33,8 +32,6 @@ function entityOf(company: Company | undefined, app: AppCode): Entite {
   if (company?.entity) return company.entity;
   return app === "axispro" || app === "portail" ? "cabinet" : "groupe";
 }
-
-const TEINTE_APP: Record<AppCode, string> = { finance: "#12956a", transport: "#d9831f", axispro: "#2d82dc", portail: "#2d82dc", mobile: "#e25f35", analyse: "#b8872e", rh: "#c4417a", hsseq: "#14a3c2", agenda: "#6d6af0", "service-client": "#e0573b", "espace-client": "#e0573b" };
 
 /**
  * Accueil d'une application pour ce compte. Finance s'ouvre sur le premier écran que ses profils
@@ -70,6 +67,10 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
   // Engagements) ; RH sur « Mon espace » pour un compte en libre-service (sans profil de gestion).
   const home = accueilDe(app, me, app);
   const entity = entityOf(company, app);
+  // Écran que le profil n'ouvre pas (d'après les entrées de navigation) : la page n'est pas rendue, aucun
+  // appel ne part ; une carte le dit et ramène à l'accueil du compte.
+  const ouvert = ecranOuvert(pathname, me.profiles);
+  const contenu = ouvert ? children : <EcranNonOuvert accueil={app === "portail" ? "/portail" : "/accueil"} />;
   // Finance : équilibre de l'exercice dans la barre du haut, pastilles dans la navigation.
   const enTete = useEnTeteFinance(app, me);
   const badges = useMemo(() => pastilles(enTete), [enTete]);
@@ -172,7 +173,7 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
         <div role="status" className="no-print flex items-center gap-2.5 border-b border-warn/15 bg-warn-doux px-5 py-2.5 text-sm text-ink md:px-8">
           <AlertTriangle className="h-4 w-4 flex-none text-warn" />
           <span className="min-w-0 flex-1">
-            La société choisie précédemment n&apos;est plus ouverte à votre compte : vous travaillez dans les livres de <strong className="font-semibold">{company?.name ?? "votre société par défaut"}</strong>.
+            La société choisie précédemment n&apos;est plus ouverte à votre compte : vous travaillez pour <strong className="font-semibold">{company?.name ?? "votre société par défaut"}</strong>.
           </span>
           <button type="button" onClick={() => setSocieteRetiree(false)} className="grid h-7 w-7 flex-none place-items-center rounded-lg text-muted transition-colors hover:bg-panel/70 hover:text-ink" aria-label="Fermer ce message">
             <X className="h-4 w-4" />
@@ -200,7 +201,7 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
         </header>
         {passwordBanner}
         <main id="contenu" tabIndex={-1} key={pathname} className="outline-none n-page mx-auto min-w-0 max-w-6xl px-5 py-8 md:px-8 md:py-10">
-          {children}
+          {contenu}
         </main>
       </div>
     );
@@ -230,7 +231,6 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <Bascule app={app} me={me} onNavigate={() => setOpen(false)} />
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6 pt-1">
               <ListeMenus sections={sections} pathname={pathname} home={home} badges={badges} onNavigate={() => setOpen(false)} />
             </div>
@@ -272,7 +272,7 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
       <div className="relative overflow-x-clip">
         <Rosace key={`filigrane-${pathname}`} className="filigrane no-print pointer-events-none absolute -right-40 -top-48 h-[560px] w-[560px] text-accent-vif" />
         <main id="contenu" tabIndex={-1} key={pathname} className="outline-none n-page relative min-w-0 px-4 py-6 sm:px-6 md:py-8 lg:px-8 xl:px-10">
-          {children}
+          {contenu}
         </main>
       </div>
 
@@ -281,105 +281,37 @@ export function AppShell({ app, me, children, actions }: { app: AppCode; me: Me;
   );
 }
 
-/** Marque et espace de travail ; si le compte en a plusieurs, on en change ici (et l'on rejoint l'accueil). */
+/**
+ * Marque et application ouverte : un lien vers l'accueil de l'application. On change d'application par
+ * le lanceur (neuf points) ou l'accueil NIMOVA, seuls chemins depuis le 4 novembre 2026 (la liste de ce
+ * menu, la bascule du tiroir et les « Ouvrir … » du compte en faisaient trois de plus).
+ */
 function EspaceMenu({ app, me }: { app: AppCode; me: Me }) {
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  const panelId = useId();
-  const espaces = ESPACES.filter((a) => me.apps.includes(a));
-  const plusieurs = espaces.length > 1;
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    const onClick = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("mousedown", onClick);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("mousedown", onClick);
-    };
-  }, [open]);
-
-  const marque = (
-    <>
+  return (
+    <Link href={accueilDe(app, me, app)} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2">
       <Monogramme tuile={false} className="h-9 w-9 flex-none" />
       {/* Téléphone étroit : le monogramme seul (le nom reste lu), la barre du haut garde ses commandes. */}
       <span className="min-w-0 text-left leading-none max-[429px]:sr-only">
         <span className="block font-display text-[15px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
-        <span className="mt-1 flex items-center gap-1 text-[12.5px] font-semibold text-accent">
-          <span className="truncate">{moduleOf(app)}</span>
-          {plusieurs && <ChevronDown className={cx("h-3.5 w-3.5 flex-none transition-transform duration-300 ease-[var(--ease-ressort)]", open && "rotate-180")} />}
-        </span>
+        <span className="mt-1 block truncate text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>
       </span>
-    </>
-  );
-
-  if (!plusieurs) {
-    return (
-      <Link href={accueilDe(app, me, app)} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2">
-        {marque}
-      </Link>
-    );
-  }
-  return (
-    <div ref={box} className="relative min-w-0">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls={panelId} className="flex min-w-0 items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 transition-colors hover:bg-panel/80">
-        {marque}
-        <span className="sr-only">Changer d&apos;espace</span>
-      </button>
-      {open && (
-        <div id={panelId} className={cx(PANNEAU, "n-surgir absolute left-0 top-full z-50 mt-2 w-[310px] p-1.5")}>
-          {espaces.map((a) => (
-            <Link
-              key={a}
-              href={accueilDe(a, me, app)}
-              onClick={() => setOpen(false)}
-              aria-current={a === app ? "true" : undefined}
-              className={cx("tuile group flex items-center gap-3 rounded-xl p-2.5 transition-colors", a === app ? "bg-accent-doux" : "hover:bg-panel-2")}
-            >
-              <IconeModule cle={a} className="h-9 w-9 flex-none" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-semibold text-ink">{moduleOf(a)}</span>
-                <span className="block truncate text-[12.5px] text-muted">{APPS[a].tagline}</span>
-              </span>
-              {a === app && <Check className="h-4 w-4 flex-none text-accent" strokeWidth={2.2} />}
-            </Link>
-          ))}
-          <Link href="/accueil" onClick={() => setOpen(false)} className="mt-1 flex items-center gap-3 border-t border-line px-2.5 pb-1.5 pt-3 text-[13.5px] font-semibold text-ink-2 hover:text-ink">
-            <Grid className="h-4 w-4 text-muted" /> Accueil NIMOVA
-          </Link>
-        </div>
-      )}
-    </div>
+    </Link>
   );
 }
 
-/**
- * Bascule entre les espaces de gestion (Finance, AxisPro, Analyse) : visible d'emblée, chaque
- * espace à sa couleur. Elle n'apparaît que si le compte est ouvert à plusieurs d'entre eux.
- */
-function Bascule({ app, me, onNavigate }: { app: AppCode; me: Me; onNavigate?: () => void }) {
-  const espaces = ESPACES.filter((a) => me.apps.includes(a));
-  if (espaces.length < 2) return null;
+/** Écran que le profil du compte n'ouvre pas : la page n'est pas rendue (aucun appel), un chemin de retour. */
+function EcranNonOuvert({ accueil }: { accueil: string }) {
   return (
-    <div className="px-4 pb-3">
-      <div role="group" aria-label="Espace de gestion" className={cx("grid gap-1 rounded-xl border border-line bg-panel-2 p-1", espaces.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
-        {espaces.map((a) => {
-          const actif = a === app;
-          return (
-            <Link
-              key={a}
-              href={accueilDe(a, me, app)}
-              onClick={onNavigate}
-              aria-current={actif ? "true" : undefined}
-              className={cx("flex min-w-0 items-center justify-center gap-1.5 rounded-[9px] px-1.5 py-1.5 text-[13px] font-semibold transition-all duration-200", actif ? "bg-panel text-ink shadow-[0_1px_3px_rgb(16_36_31/0.12),0_0_0_1px_rgb(16_36_31/0.04)]" : "text-muted hover:text-ink")}
-            >
-              <span aria-hidden className={cx("h-2 w-2 flex-none rounded-full", actif && "n-pouls")} style={{ background: TEINTE_APP[a], ["--pouls" as string]: `color-mix(in oklab, ${TEINTE_APP[a]} 55%, transparent)` } as CSSProperties} />
-              <span className="truncate">{moduleOf(a)}</span>
-            </Link>
-          );
-        })}
+    <div className="flex min-h-[50vh] items-center justify-center">
+      <div role="status" className={cx(PANNEAU, "w-full max-w-md px-6 py-8 text-center")}>
+        <span aria-hidden className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent-doux text-accent">
+          <Lock className="h-5 w-5" />
+        </span>
+        <h1 className="mt-4 text-[17px] font-semibold text-ink">Cet écran n&apos;est pas ouvert à votre profil.</h1>
+        <p className="mx-auto mt-2 max-w-[36ch] text-sm leading-relaxed text-muted">Si votre travail le demande, l&apos;administrateur de la plateforme peut vous ouvrir ce profil.</p>
+        <Link href={accueil} className={classesBouton("primary", "md", "mt-6")}>
+          Revenir à mon accueil
+        </Link>
       </div>
     </div>
   );
@@ -455,7 +387,7 @@ function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany
       </button>
       {open && (
         <div id={panelId} role="group" aria-label="Société" className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-50 mt-2 w-[284px] p-1.5")}>
-          <div className="px-3 pb-1.5 pt-1.5 text-[12.5px] font-semibold text-muted">Livres ouverts</div>
+          <div className="px-3 pb-1.5 pt-1.5 text-[12.5px] font-semibold text-muted">Société</div>
           {ouvertes.map((c) => {
             const actif = c.id === me.company_id;
             return (
@@ -488,7 +420,10 @@ function SocieteEnTete({ app, me, onCompany }: { app: AppCode; me: Me; onCompany
   );
 }
 
-/** Menu du compte : mot de passe, autres applications, déconnexion. */
+/**
+ * Menu du compte : mot de passe, assistance, déconnexion. On change d'application par le lanceur
+ * ou par l'accueil, pas par ce menu : un seul chemin, plus simple à retenir.
+ */
 function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: AppCode; me: Me; onLogout: () => void; placement?: "haut" | "bas"; replie?: boolean }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -506,7 +441,6 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
     };
   }, [open]);
 
-  const others = me.apps.filter((a) => a !== app && a !== "mobile");
   const avatar = (
     <AvatarCompte
       id={me.id}
@@ -563,18 +497,12 @@ function CompteMenu({ app, me, onLogout, placement = "bas", replie }: { app: App
             <Link href="/compte/mot-de-passe" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
               <KeyRound className="h-4 w-4 text-muted" /> Changer le mot de passe
             </Link>
-            {/* Espace partagé de suivi des demandes au support : comptes internes seulement (pas le portail). */}
-            {app !== "portail" && (
+            {/* Demandes au support de la plateforme : comptes internes seulement (ni le portail ni l'espace client). */}
+            {app !== "portail" && app !== "espace-client" && (
               <Link href="/compte/demandes" className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
-                {ICONES.ListChecks && <ICONES.ListChecks className="h-4 w-4 text-muted" />} Mes demandes
+                {ICONES.ListChecks && <ICONES.ListChecks className="h-4 w-4 text-muted" />} Assistance
               </Link>
             )}
-            {others.map((a) => (
-              <Link key={a} href={accueilDe(a, me, app)} className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-2 hover:bg-panel-2 hover:text-ink">
-                <span aria-hidden className="h-2.5 w-2.5 rounded-full" style={{ background: TEINTE_APP[a] }} />
-                Ouvrir {APPS[a].name}
-              </Link>
-            ))}
             <button type="button" onClick={onLogout} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-danger hover:bg-danger-doux">
               <LogOut className="h-4 w-4" /> Se déconnecter
             </button>

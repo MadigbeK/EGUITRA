@@ -905,15 +905,15 @@ input::-ms-clear {
 
 /* ─── Accueil : tuiles et icônes vivantes ──────────────────────────────── */
 
-/* Entrée des tuiles : une vague, avec un léger rebond. */
+/* Entrée des tuiles : une vague courte, avec un léger rebond ; tout est en place en 600 ms au plus. */
 @keyframes tuile-entree {
   from {
     opacity: 0;
-    transform: translateY(22px) scale(0.72) rotate(-5deg);
+    transform: translateY(12px) scale(0.9);
   }
 }
 .tuile-entree {
-  animation: tuile-entree 760ms var(--ease-ressort) backwards;
+  animation: tuile-entree 340ms var(--ease-ressort) backwards;
   animation-delay: var(--d, 0ms);
 }
 
@@ -1408,7 +1408,7 @@ input::-ms-clear {
 /* Le panneau se déploie depuis le bouton (cercle qui s'ouvre), puis les modules arrivent en vague. */
 .lanceur {
   transform-origin: calc(100% - 20px) -28px;
-  animation: lanceur-ouvre 480ms var(--ease-sortie) backwards;
+  animation: lanceur-ouvre 300ms var(--ease-sortie) backwards;
 }
 @keyframes lanceur-ouvre {
   from {
@@ -1431,8 +1431,8 @@ input::-ms-clear {
   }
 }
 .lanceur-item {
-  animation: lanceur-item 460ms var(--ease-ressort) backwards;
-  animation-delay: calc(70ms + var(--i, 0) * 22ms);
+  animation: lanceur-item 300ms var(--ease-ressort) backwards;
+  animation-delay: calc(40ms + var(--i, 0) * 16ms);
 }
 @keyframes lanceur-item {
   from {
@@ -1441,12 +1441,12 @@ input::-ms-clear {
   }
 }
 .lanceur-titre {
-  animation: n-monter 380ms var(--ease-sortie) backwards;
-  animation-delay: calc(40ms + var(--i, 0) * 22ms);
+  animation: n-monter 280ms var(--ease-sortie) backwards;
+  animation-delay: calc(20ms + var(--i, 0) * 16ms);
 }
 .lanceur-pied {
-  animation: n-monter 420ms var(--ease-sortie) backwards;
-  animation-delay: 220ms;
+  animation: n-monter 280ms var(--ease-sortie) backwards;
+  animation-delay: 140ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1461,6 +1461,18 @@ input::-ms-clear {
   }
   .n-tracer {
     stroke-dashoffset: 0;
+  }
+}
+
+/*
+ * Au doigt (téléphone, tablette) : un texte de champ à 16 px, sans quoi Safari zoome la page à
+ * chaque saisie. La hauteur de 44 px des champs et des boutons est portée par leurs composants.
+ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]),
+  select,
+  textarea {
+    font-size: 16px;
   }
 }
 

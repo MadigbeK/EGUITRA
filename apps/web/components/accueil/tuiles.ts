@@ -1,6 +1,9 @@
+import useSWR from "swr";
+import { CLE_NON_LUS_AGENDA } from "@/lib/agenda";
 import { APPS, ESPACES, appFromPath, type AppCode, type EntiteSociete, type EspaceCode } from "@/lib/config";
+import { CLE_NON_LUS, discussionOuverte, lireDiscret } from "@/lib/discussions";
 import { navFor } from "@/lib/nav";
-import type { Company, Me } from "@/lib/types";
+import type { Company, Me, Profile } from "@/lib/types";
 
 /**
  * Module ouvert au compte : une tuile de l'accueil, une entrée du lanceur. entite : module réservé à
@@ -8,61 +11,23 @@ import type { Company, Me } from "@/lib/types";
  */
 export type Tuile = { cle: string; libelle: string; href: string; motsCles: string; entite?: EntiteSociete };
 
-/** Modules d'un espace (Finance, AxisPro, Analyse) ou outils communs (Rotations, Réglages). */
+/** Modules d'un espace (Finance, AxisPro, Analyse) ou outils communs (Rotations, Discussion, Réglages). */
 export type Rayon = { cle: EspaceCode | "outils"; titre: string; tuiles: Tuile[] };
 
-/** Libellés courts des tuiles, comme sur l'accueil d'Odoo (le menu de l'espace garde les longs). */
-const COURT: Record<string, string> = {
-  "/finance/pilotage": "Budget",
-  "/finance/rapport": "Rapport mensuel",
-  "/finance/approbations": "À valider",
-  "/finance/achats": "Achats",
-  "/finance/demandes": "Mes demandes",
-  "/finance/fournisseurs": "Fournisseurs",
-  "/finance/guide-achats": "Guide des achats",
-  "/finance/relances": "Relances",
-  "/finance/dette": "Dette",
-  "/finance/ecritures": "Journaux",
-  "/finance/etats": "États financiers",
-  "/finance/clotures": "Clôtures",
-  "/axispro": "Dossiers",
-  "/axispro/actions": "Plan d'actions",
-  "/axispro/temps": "Temps",
-  "/axispro/grille": "Grille",
-  "/axispro/pieces": "Pièces",
-  "/transport": "Transport",
-  "/transport/rotations": "Suivi des rotations",
-  "/transport/proprietaires": "Propriétaires",
-  "/transport/flotte": "Flotte",
-  "/transport/routes": "Routes et tarifs",
-  "/analyse": "Analyse",
-  "/analyse/tresorerie": "Prévision de trésorerie",
-  "/analyse/clients": "Clients",
-  "/analyse/transport": "Flotte et routes",
-  "/analyse/depenses": "Dépenses",
-  "/analyse/previsions": "Atterrissage",
-  "/analyse/fiabilite": "Fiabilité",
-  "/analyse/portefeuille": "Pipeline",
-  "/analyse/diagnostic": "Diagnostic",
-  "/analyse/comites": "Décisions",
-  "/analyse/activite": "Honoraires",
-  "/rh": "Tableau RH",
-  "/rh/guide": "Guide RH",
-  "/rh/salaries": "Salariés",
-  "/rh/conges": "Congés",
-  "/rh/avances": "Avances",
-  "/rh/habilitations": "Habilitations",
-  "/rh/paie": "Paie",
-  "/rh/simulateur": "Simulateur",
-  "/rh/moi": "Mon espace",
-  "/hsseq": "Cockpit HSSEQ",
-  "/agenda": "Agenda",
-  "/agenda/planning": "Planning d'équipe",
-  "/agenda/reglages": "Réglages de l'agenda",
-  "/service-client": "Service client",
-  "/service-client/nouveau": "Nouveau dossier",
-  "/service-client/tableau": "Tableau du service client",
-  "/service-client/clients": "Comptes clients",
+// Une tuile porte le nom de son entrée de menu (lib/nav.ts) : un écran, un seul nom, sur l'accueil, dans
+// le lanceur, dans les menus et dans la recherche (le dictionnaire des libellés courts a été retiré le
+// 4 novembre 2026 ; la famille, au-dessus des tuiles, dit l'application).
+
+/** Anciens noms des écrans renommés le 4 novembre 2026 : la recherche de l'accueil les retrouve encore. */
+const ANCIENS_NOMS: Record<string, string> = {
+  "/finance/approbations": "valider corbeille validation",
+  "/finance/tiers": "tiers",
+  "/finance/ecritures": "journaux od operations diverses",
+  "/finance/admin/imputations": "imputations automatiques",
+  "/transport/rotations": "rotations",
+  "/analyse": "cockpit analyse",
+  "/hsseq": "cockpit",
+  "/hsseq/immobilisations": "immobilisations",
 };
 
 /**
@@ -76,8 +41,8 @@ function societeTransmise(me: Me, app: AppCode): Company | undefined {
 }
 
 /**
- * Modules ouverts au compte, rangés par espace : Finance, puis AxisPro, puis Analyse, puis Rotations
- * et Réglages. L'administration des espaces tient en une seule tuile, Réglages. `accueil` : la grille
+ * Modules ouverts au compte, rangés par espace : Finance, puis AxisPro, puis Analyse, puis Rotations,
+ * la discussion et Réglages. L'administration des espaces tient en une seule tuile, Réglages. `accueil` : la grille
  * de l'accueil, qui transmet sa société aux modules qu'il ouvre (societeTransmise) ; le lanceur ne le
  * fait pas.
  */
@@ -105,16 +70,89 @@ export function rayonsDe(me: Me, app: AppCode, accueil = false): Rayon[] {
         // depuis AxisPro) : proposé si le compte est ouvert à cette société, et ouvert dans ses livres
         // (societePour) ; jamais proposé pour répondre « ne concerne qu'EGUITRA GROUP ».
         if (i.entity && !entite && !me.companies.some((c) => c.entity === i.entity)) continue;
-        tuiles.push({ cle: i.href, libelle: COURT[i.href] ?? i.label, href: i.href, motsCles: `${i.label} ${s.label} ${APPS[a].name}`, entite: i.entity });
+        tuiles.push({ cle: i.href, libelle: i.label, href: i.href, motsCles: `${s.label} ${APPS[a].name} ${ANCIENS_NOMS[i.href] ?? ""}`, entite: i.entity });
       }
     }
     if (tuiles.length) rayons.push({ cle: a, titre: APPS[a].name.replace("NIMOVA · ", ""), tuiles });
   }
   const outils: Tuile[] = [];
   if (me.apps.includes("mobile")) outils.push({ cle: "/mobile", libelle: "Rotations", href: "/mobile", motsCles: "Rotations téléphone parc camion" });
+  // Discussion interne en pleine page : la tuile porte le nombre de messages non lus (useCompteurs).
+  if (discussionOuverte(me)) outils.push({ cle: "/discussions", libelle: "Discussion", href: "/discussions", motsCles: "Discussion messages conversations collègues" });
   if (reglages) outils.push({ cle: "reglages", libelle: "Réglages", href: reglages, motsCles: "Réglages administration utilisateurs sociétés seuils audit" });
   if (outils.length) rayons.push({ cle: "outils", titre: "Outils", tuiles: outils });
   return rayons;
+}
+
+/** Application du métier de chaque profil : sa famille passe en tête de l'accueil et du lanceur. */
+const METIER: Array<[Profile, EspaceCode]> = [
+  ["exploitation", "transport"],
+  ["cabinet", "axispro"],
+  ["associe", "axispro"],
+  ["rh", "rh"],
+  ["hsseq", "hsseq"],
+  ["service_client", "service-client"],
+  ["achats", "finance"],
+];
+
+/**
+ * Application principale du compte, dont la famille ouvre l'accueil : l'Analyse pour la direction ;
+ * l'application ouverte pour l'administration et la finance ; sinon celle du métier du profil (Transport
+ * pour l'exploitation, AxisPro pour le cabinet, RH, HSSEQ, Service client, Finance pour les achats) ;
+ * à défaut, l'application retenue à la connexion.
+ */
+export function principale(me: Me, app: AppCode): string {
+  if (me.profiles.includes("direction") && me.apps.includes("analyse")) return "analyse";
+  if (me.profiles.some((p) => p === "admin" || p === "finance")) return app;
+  return METIER.find(([p, a]) => me.profiles.includes(p) && me.apps.includes(a))?.[1] ?? app;
+}
+
+/** Familles dans l'ordre de l'accueil : l'application principale en tête, puis l'ordre habituel, les outils en fin. */
+export function enTete(rayons: Rayon[], tete: string): Rayon[] {
+  const premiere = rayons.find((r) => r.cle === tete);
+  return premiere ? [premiere, ...rayons.filter((r) => r !== premiere)] : rayons;
+}
+
+/** Pastille d'une tuile : un nombre, sa gravité (rouge) et ce qu'il compte, pour les lecteurs d'écran. */
+export type Pastille = { n: number; severe: boolean; sens: string };
+
+type EnTeteFinance = { badges: { alerts: number; alerts_severe: number; approvals: number; controls: number; controls_blocking: number } };
+type NonLus = { unread: number };
+type NonLusAgenda = { unread: number; invitations: number };
+
+const PROFILS_FINANCE: readonly Profile[] = ["admin", "direction", "finance"];
+
+const lire = <T>(cle: string) => lireDiscret<T>(cle);
+
+function pastille(n: number | undefined, severe: boolean, un: string, plusieurs: string): Pastille | null {
+  return n && n > 0 ? { n, severe, sens: n > 1 ? plusieurs : un } : null;
+}
+
+/**
+ * Compteurs des tuiles, lus aux routes que la coque appelle déjà : l'en-tête de Finance (/finance/shell :
+ * demandes à approuver, alertes, contrôles en anomalie ; profils de la finance seuls, sinon le noyau
+ * répond 403), les messages non lus de la discussion et les notifications de l'agenda. Chaque route
+ * n'est appelée que si le compte y a droit et hors d'une session au mot de passe provisoire ou de
+ * Rotations ; mêmes clés que la coque (une seule lecture, partagée). Lectures discrètes (lireDiscret) :
+ * ni fenêtre de reconnexion ni effet sur la déconnexion après inactivité. `actif` : faux, rien n'est lu
+ * (lanceur fermé). `relire` : faux, une valeur déjà en mémoire (lue par la coque) n'est pas relue.
+ */
+export function useCompteurs(me: Me, actif = true, relire = true): Record<string, Pastille> {
+  const session = actif && !me.password_change_required && me.session_app !== "mobile";
+  const options = { revalidateOnFocus: false, revalidateIfStale: relire, shouldRetryOnError: false, dedupingInterval: 30_000 };
+  const finance = session && me.apps.includes("finance") && me.profiles.some((p) => PROFILS_FINANCE.includes(p));
+  const { data: shell } = useSWR<EnTeteFinance>(finance ? "/finance/shell" : null, lire, options);
+  const { data: chat } = useSWR<NonLus>(session && discussionOuverte(me) ? CLE_NON_LUS : null, lire, options);
+  const { data: agenda } = useSWR<NonLusAgenda>(session && me.apps.includes("agenda") ? CLE_NON_LUS_AGENDA : null, lire, options);
+  const b = shell?.badges;
+  const compteurs: Record<string, Pastille | null> = {
+    "/finance/approbations": pastille(b?.approvals, false, "demande à approuver", "demandes à approuver"),
+    "/finance/alertes": pastille(b?.alerts, (b?.alerts_severe ?? 0) > 0, "alerte active", "alertes actives"),
+    "/finance/clotures": pastille(b?.controls, (b?.controls_blocking ?? 0) > 0, "contrôle en anomalie", "contrôles en anomalie"),
+    "/discussions": pastille(chat?.unread, false, "message non lu", "messages non lus"),
+    "/agenda": pastille(agenda ? agenda.unread + agenda.invitations : 0, false, "notification ou invitation", "notifications ou invitations"),
+  };
+  return Object.fromEntries(Object.entries(compteurs).filter((e): e is [string, Pastille] => e[1] !== null));
 }
 
 /**

@@ -28,7 +28,7 @@ function Fiche({ id }: { id: string }) {
   return (
     <div>
       <Link href={CHEMIN_DEMANDES} className="mb-4 inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
-        <ChevronLeft className="h-4 w-4" /> Mes demandes
+        <ChevronLeft className="h-4 w-4" /> Assistance
       </Link>
       <Etat data={d} error={error} onRetry={() => void mutate()} label="Chargement de la demande…">
         {(fiche) => (

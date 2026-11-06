@@ -117,7 +117,7 @@ class TestAuth(ApiCase):
     def test_connexion_de_repli_vers_l_application_du_profil(self):
         """Adresse commune (application par défaut : Finance) : un compte qui ne l'ouvre pas (consultant du
         cabinet ici ; RH seule en recette) entre dans sa première application web interne par le repli, jamais
-        sans le demander, ni vers le portail ou une application de téléphone."""
+        sans le demander, ni depuis le portail."""
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
         self._create_user("consultant.repli", "cabinet", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
         credentials = {"login": "consultant.repli", "password": PASSWORD, "app": "finance"}
@@ -133,12 +133,34 @@ class TestAuth(ApiCase):
         self.assertEqual((status, me["session_app"]), (200, "axispro"), me)
         status, body = self.call("POST", "/auth/login", dict(credentials, fallback="oui"))
         self.assertEqual(status, 403, "Repli seulement sur true")
-        self._create_user("porteur.repli", "porteur", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
-        status, body = self.call("POST", "/auth/login", {"login": "porteur.repli", "password": PASSWORD,
-                                                         "app": "finance", "fallback": True})
-        self.assertEqual((status, body["error"]), (403, "app_forbidden"), "Le porteur n'entre que par le portail")
         status, body = self.call("POST", "/auth/login", dict(credentials, app="portail", fallback=True))
         self.assertEqual(status, 403, "Pas de repli depuis le portail")
+
+    def test_connexion_des_comptes_externes_a_l_adresse_commune(self):
+        """Un porteur de projet ou un client qui se connecte à l'adresse commune va à son espace par le repli,
+        jamais à une application interne ; sans repli, ou depuis une adresse externe, le refus reste."""
+        cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)
+        self._create_user("porteur.repli", "porteur", company_id=cabinet.id, company_ids=[(6, 0, cabinet.ids)])
+        credentials = {"login": "porteur.repli", "password": PASSWORD, "app": "finance"}
+        status, body = self.call("POST", "/auth/login", credentials)
+        self.assertEqual((status, body["error"]), (403, "app_forbidden"), "Sans repli demandé : refus inchangé")
+        status, body = self.call("POST", "/auth/login", dict(credentials, app="espace-client", fallback=True))
+        self.assertEqual((status, body["error"]), (403, "app_forbidden"), "Pas de repli depuis une adresse externe")
+        status, body = self.call("POST", "/auth/login", dict(credentials, fallback=True))
+        self.assertEqual((status, body.get("app")), (200, "portail"), body)
+        if body["status"] == "mfa_setup_required":
+            status, body = self.call("POST", "/auth/mfa/setup", {"setup_token": body["setup_token"],
+                                                                 "code": self.totp_code(body["secret"])})
+            self.assertEqual((status, body.get("app")), (200, "portail"), body)
+        status, me = self.call("GET", "/auth/me", token=body["access_token"])
+        self.assertEqual((status, me["session_app"]), (200, "portail"), me)
+        # L'espace client n'existe qu'avec le service client (module eguitra_service_client).
+        if "eguitra.sc.ticket" in self.env:
+            groupe = self.env["res.company"].search([("eguitra_entity", "=", "groupe")], limit=1)
+            self._create_user("client.repli", "client", company_id=groupe.id, company_ids=[(6, 0, groupe.ids)])
+            status, body = self.call("POST", "/auth/login", {"login": "client.repli", "password": PASSWORD,
+                                                             "app": "finance", "fallback": True})
+            self.assertEqual((status, body.get("app")), (200, "espace-client"), body)
 
     def test_porteur_limite_au_portail(self):
         cabinet = self.env["res.company"].search([("eguitra_entity", "=", "cabinet")], limit=1)

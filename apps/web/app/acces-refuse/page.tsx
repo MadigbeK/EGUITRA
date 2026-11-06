@@ -7,7 +7,7 @@ import type { Me } from "@/lib/types";
 export const metadata: Metadata = { title: { absolute: "Accès refusé · NIMOVA" } };
 
 /** Ordre de préférence de l'application vers laquelle on renvoie un compte refusé ailleurs. */
-const PREFERENCE: AppCode[] = [...ESPACES, "portail", "mobile"];
+const PREFERENCE: AppCode[] = [...ESPACES, "portail", "espace-client", "mobile"];
 
 /**
  * Application ou écran que le profil du compte n'ouvre pas : on dit lequel, on ramène à une
