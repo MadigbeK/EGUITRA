@@ -47,7 +47,7 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 |---|---|---|---|
 | test.dg | Direction | les deux | toutes les sections des deux sociétés |
 | test.daf | Finance | les deux | sections du groupe, honoraires du cabinet |
-| test.consultant | Cabinet | MB AxisPro Consulting | sections du cabinet |
+| test.consultant | Cabinet | MB AxisPro Consulting | sections du cabinet, sur ses projets |
 | test.exploitation | Exploitation | EGUITRA GROUP SARLU | refus |
 
 ## A. Direction générale
@@ -301,7 +301,8 @@ Données : aucune.
 
 Résultat attendu : chaque section répond à sa question (par exemple « Le comité décide-t-il comme la
 méthode le recommande ? »). Le diagnostic montre les faiblesses qui reviennent d'un dossier à
-l'autre, par domaine et par compartiment.
+l'autre, par domaine et par compartiment. Un encadré rappelle que les chiffres portent sur les projets
+du consultant ; test.dg voit tout le portefeuille, sans cet encadré.
 
 | Résultat {22} | Remarques {78} |
 |---|---|

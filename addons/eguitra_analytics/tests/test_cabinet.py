@@ -174,7 +174,7 @@ class TestAnalyseCabinet(ApiCase):
         cls.policy.action_activate()
         cls.gates = {g.code: g for g in cls.policy.gate_ids}
         cabinet = {"company_id": cls.cabinet.id, "company_ids": [(6, 0, cls.cabinet.ids)]}
-        cls._create_user("analyste.cabinet", "cabinet", **cabinet)
+        cls._create_user("analyste.cabinet", "associe", **cabinet)
         cls.awa = cls._create_user("awa.conseil", "cabinet", name="Awa Camara", **cabinet)
         cls.moussa = cls._create_user("moussa.conseil", "cabinet", name="Moussa Diallo", **cabinet)
         cls._create_user("finance.cabinet", "finance", **cabinet)
@@ -622,6 +622,19 @@ class TestAnalyseCabinet(ApiCase):
         ids = [i["id"] for i in body["insights"]]
         self.assertIn("cabinet.risques_critiques", ids, "Risque critique de A sans action")
         self.assertIn("cabinet.actions_en_retard", ids)
+
+    def test_evaluateur_limite_a_ses_projets(self):
+        """Référence V2.0 : l'évaluateur ne lit dans l'analyse que ses projets, et l'écran le lui dit."""
+        token = self.open_session("awa.conseil", app="analyse")["access_token"]
+        status, body = self._get("synthese", token)
+        self.assertEqual(status, 200, body)
+        kpis = {k["key"]: k for k in body["kpis"]}
+        self.assertEqual(kpis["active_dossiers"]["value"], 3, "A, C et E sont à Awa ; B et D à Moussa")
+        status, contexte = self.call("GET", "/analyse/contexte", token=token)
+        self.assertEqual((status, contexte["own_projects_only"]), (200, True), contexte)
+        token = self.open_session("analyste.cabinet", app="analyse")["access_token"]
+        status, contexte = self.call("GET", "/analyse/contexte", token=token)
+        self.assertEqual((status, contexte["own_projects_only"]), (200, False), contexte)
 
     # ─── Droits ───────────────────────────────────────────────────────────
 

@@ -309,7 +309,20 @@ export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; ch
     };
   }, [cible]);
   if (!contexte) return error ? <ErreurLecture error={error} onRetry={() => void mutate()} titre="L'analyse n'a pas pu lire la société de travail." /> : <AttenteSection />;
-  if (contexte.entity === attendu) return <>{children}</>;
+  if (contexte.entity === attendu) {
+    return (
+      <>
+        {contexte.own_projects_only && (
+          <div className="mb-4">
+            <Notice tone="accent">
+              Ces chiffres portent sur vos projets seulement : ceux dont vous êtes responsable, ceux dont un compartiment vous est confié et ceux sans responsable. Le portefeuille complet est ouvert aux associés et à la direction.
+            </Notice>
+          </div>
+        )}
+        {children}
+      </>
+    );
+  }
   if (cible && !echec) {
     return (
       <div className="space-y-4">

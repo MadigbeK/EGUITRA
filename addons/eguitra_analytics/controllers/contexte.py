@@ -63,6 +63,8 @@ class EguitraAnalyseContexte(http.Controller):
             "last_entry_date": last_entry,
             "today": today,
             "can_switch": {"groupe", "cabinet"} <= set(companies.mapped("eguitra_entity")),
+            # Évaluateur du cabinet : l'analyse suit les règles d'accès, elle ne porte que sur ses projets.
+            "own_projects_only": entity == "cabinet" and user.axispro_own_projects_only(),
             "companies": [{"id": c.id, "name": c.name, "entity": c.eguitra_entity or None} for c in companies],
             "periods": [{"code": code, "label": label} for code, label in PERIODS.items()],
         }

@@ -1165,6 +1165,8 @@ export interface Contexte {
   last_entry_date: string | null;
   today?: string;
   can_switch: boolean;
+  /** Évaluateur du cabinet : les chiffres ne portent que sur ses projets. */
+  own_projects_only?: boolean;
   companies?: Array<{ id: number; name: string; entity: EntiteSociete | null }>;
   periods?: Array<{ code: PeriodCode; label: string }>;
 }

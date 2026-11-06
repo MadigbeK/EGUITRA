@@ -10,7 +10,9 @@ faiblesses, la qualité des décisions de comité, les financements, l'activité
 cabinet. Un compte ouvert aux deux sociétés passe de l'une à l'autre par le sélecteur de société.
 
 Analyse s'ouvre aux profils direction, finance et administration (groupe) et direction, cabinet et
-administration (cabinet) ; la finance voit aussi l'activité et les honoraires du cabinet.
+administration (cabinet) ; la finance voit aussi l'activité et les honoraires du cabinet. Un évaluateur
+(profil cabinet seul) ne lit que ses projets, et l'écran le rappelle ; associés et direction lisent tout
+le portefeuille.
 
 ## Lire un écran
 
