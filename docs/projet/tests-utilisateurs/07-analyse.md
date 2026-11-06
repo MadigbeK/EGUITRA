@@ -373,7 +373,7 @@ l'étape 3, le bouton tourne pendant la préparation et un seul classeur est té
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### ANA-16. Déconnexion après une minute sans activité
+### ANA-16. Déconnexion après 15 minutes sans activité
 
 Objectif : vérifier que l'Analyse, souvent laissée ouverte en réunion, applique la déconnexion après
 inactivité.
@@ -382,11 +382,11 @@ Compte : test.dg.
 
 Données : aucune.
 
-1. Ouvrez le cockpit et laissez l'écran sans y toucher pendant une minute.
+1. Ouvrez le cockpit et laissez l'écran sans y toucher pendant 15 minutes.
 2. Répondez « Je suis là ».
 3. Recommencez et laissez passer les 30 secondes.
 
-Résultat attendu : après une minute, la question « Êtes-vous toujours là ? » s'affiche ; « Je suis là »
+Résultat attendu : après 15 minutes, la question « Êtes-vous toujours là ? » s'affiche ; « Je suis là »
 garde l'écran ouvert. Sans réponse, la page de connexion s'affiche avec « Vous avez été déconnecté
 après une période d'inactivité. ».
 

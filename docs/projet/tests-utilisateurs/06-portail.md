@@ -521,7 +521,7 @@ l'annulation.
 
 ### POR-23. Coupure du réseau et inactivité
 
-Objectif : vérifier le message en cas de coupure et la déconnexion après une minute sans activité.
+Objectif : vérifier le message en cas de coupure et la déconnexion après 15 minutes sans activité.
 
 Compte : test.porteur.
 
@@ -530,7 +530,7 @@ Données : un message à envoyer.
 1. « Messages » : écrivez un message, coupez le réseau (mode avion du téléphone ou Wi-Fi du poste),
    puis envoyez.
 2. Rétablissez le réseau et renvoyez.
-3. Laissez le portail ouvert sans y toucher pendant une minute, puis pendant 30 secondes de plus.
+3. Laissez le portail ouvert sans y toucher pendant 15 minutes, puis pendant 30 secondes de plus.
 
 Résultat attendu : à l'étape 1, un message en français signale que l'envoi n'a pas abouti ; le texte
 saisi reste dans le champ. À l'étape 2, le message part une seule fois. À l'étape 3, la question

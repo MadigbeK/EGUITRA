@@ -7,8 +7,9 @@ import { pluriel } from "@/lib/format";
 import { fermerSession } from "@/lib/deconnexion";
 
 /**
- * Déconnexion automatique après inactivité (demande du gérant, 26 octobre 2026). Après
- * DELAI_INACTIVITE_MS sans activité, une fenêtre demande « Êtes-vous toujours là ? » ; sans réponse au
+ * Déconnexion automatique après inactivité (demande du gérant, 26 octobre 2026 ; délai porté de 1 à 15
+ * minutes le 6 novembre, audit de simplicité D1 : un comptable qui recopie une facture ou un directeur
+ * qui lit un rapport perdait sa saisie). Après DELAI_INACTIVITE_MS sans activité, une fenêtre demande « Êtes-vous toujours là ? » ; sans réponse au
  * bout de DELAI_REPONSE_MS, la session est fermée (route de déconnexion : jetons révoqués, cookies
  * effacés) et la page de connexion le dit.
  *
@@ -22,8 +23,8 @@ import { fermerSession } from "@/lib/deconnexion";
  * autre compte se recharge, pour ne pas afficher l'écran d'un compte avec la session d'un autre.
  */
 
-/** Délai sans activité avant la question (décision du gérant : 1 minute). */
-export const DELAI_INACTIVITE_MS = 60_000;
+/** Délai sans activité avant la question : 15 minutes. */
+export const DELAI_INACTIVITE_MS = 15 * 60_000;
 /** Temps laissé pour répondre, compte à rebours affiché, avant la déconnexion. */
 export const DELAI_REPONSE_MS = 30_000;
 

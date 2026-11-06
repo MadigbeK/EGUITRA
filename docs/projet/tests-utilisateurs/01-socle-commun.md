@@ -270,17 +270,17 @@ ne s'ouvre sans nouvelle connexion.
 
 ### SOC-09. Répondre à la question « Êtes-vous toujours là ? »
 
-Objectif : vérifier qu'après une minute sans activité, la plateforme demande si vous êtes là.
+Objectif : vérifier qu'après 15 minutes sans activité, la plateforme demande si vous êtes là.
 
 Compte : test.comptable.
 
 Données : aucune.
 
 1. Ouvrez Finance, Tableau de bord.
-2. Ne touchez plus ni la souris, ni le clavier, ni l'écran pendant une minute.
+2. Ne touchez plus ni la souris, ni le clavier, ni l'écran pendant 15 minutes.
 3. Lisez la fenêtre qui s'ouvre, puis cliquez sur « Je suis là ».
 
-Résultat attendu : après une minute, la fenêtre « Êtes-vous toujours là ? » s'ouvre : « Aucune
+Résultat attendu : après 15 minutes, la fenêtre « Êtes-vous toujours là ? » s'ouvre : « Aucune
 activité depuis un moment. Sans réponse, vous serez déconnecté dans 30 secondes, pour protéger vos
 données. ». Le nombre de secondes diminue. « Je suis là » ferme la fenêtre ; vous restez sur
 l'écran, connecté.
@@ -717,7 +717,7 @@ Données : une conversation existante.
 
 1. Ouvrez le panneau de discussion, puis « Pleine page ».
 2. Recherchez une conversation dans le champ « Collègue, groupe, fiche… ».
-3. Laissez la page ouverte, sans toucher à rien, pendant une minute, alors que test.daf vous envoie un
+3. Laissez la page ouverte, sans toucher à rien, pendant 15 minutes, alors que test.daf vous envoie un
    message.
 
 Résultat attendu : la page « Discussion » rappelle que seuls les membres d'une conversation la

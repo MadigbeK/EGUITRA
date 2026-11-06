@@ -639,7 +639,7 @@ que le volume n'est pas corrigé ; corrigée, elle se valide.
 
 ### TRA-26. Rester connecté au parc
 
-Objectif : vérifier que Rotations ne déconnecte pas après une minute sans activité, contrairement aux
+Objectif : vérifier que Rotations ne déconnecte pas après 15 minutes sans activité, contrairement aux
 applications du bureau.
 
 Compte : test.parc.
