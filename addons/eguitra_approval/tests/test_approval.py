@@ -72,6 +72,60 @@ class TestApproval(FinanceDataMixin, ApiCase):
         self.assertEqual(request.state, "approved")
         self.assertEqual(bill.state, "posted", "La dernière approbation comptabilise la pièce")
 
+    def _seul_comptable(self):
+        """Le compte « comptable » devient le seul titulaire du profil finance de la société."""
+        others = self.env["res.users"].sudo().search([("share", "=", False), ("id", "!=", self.comptable.id)]).filtered(
+            lambda u: "finance" in u._eguitra_profiles() and "admin" not in u._eguitra_profiles())
+        others.write({"active": False})
+
+    def test_suppleance_du_seul_comptable(self):
+        self._seul_comptable()
+        bill = self._bill(10_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        request = self._request(bill)
+        self.assertEqual(request.step_ids.mapped("profile"), ["direction"], "Le contrôle revient à la direction")
+        self.assertIn("suppléance", request.step_ids.label, "L'étape dit pourquoi")
+        self.assertEqual(request.pending_profile, "direction")
+        with self.assertRaises(AccessError):
+            request.with_user(self.comptable).action_approve()
+        request.with_user(self.dg).action_approve("Vu")
+        self.assertEqual(bill.state, "posted")
+
+    def test_suppleance_une_seule_etape_au_dela_du_seuil(self):
+        self._seul_comptable()
+        bill = self._bill(60_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        request = self._request(bill)
+        self.assertEqual(request.step_ids.mapped("profile"), ["direction"],
+                         "Un seul dirigeant suffit : pas deux étapes de la direction")
+        self.assertIn("suppléance", request.step_ids.label)
+        request.with_user(self.dg).action_approve()
+        self.assertEqual(bill.state, "posted")
+
+    def test_pas_de_suppleance_quand_un_autre_comptable_existe(self):
+        bill = self._bill(10_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        request = self._request(bill)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance"])
+        self.assertNotIn("suppléance", request.step_ids.label)
+
+    def test_pas_de_suppleance_si_le_seul_comptable_n_est_pas_auteur(self):
+        self._seul_comptable()
+        bill = self._bill(10_000_000, user=self.dg)
+        bill.with_user(self.dg)._eguitra_post_or_submit()
+        request = self._request(bill)
+        self.assertEqual(request.step_ids.mapped("profile"), ["finance"], "Le comptable contrôle la pièce d'un autre")
+        request.with_user(self.comptable).action_approve()
+        self.assertEqual(bill.state, "posted")
+
+    def test_pas_de_suppleance_sans_dirigeant(self):
+        self._seul_comptable()
+        self.dg.sudo().active = False
+        bill = self._bill(10_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        self.assertEqual(self._request(bill).step_ids.mapped("profile"), ["finance"],
+                         "Sans dirigeant, l'étape reste à la finance et à l'administration")
+
     def test_circuit_deux_niveaux(self):
         bill = self._bill(100_000_000)
         bill.with_user(self.comptable)._eguitra_post_or_submit()

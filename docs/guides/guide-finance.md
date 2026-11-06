@@ -145,7 +145,9 @@ rapports. Solder un engagement libère son reste.
 ## Achats et dépenses (Comptabilité > Achats et dépenses)
 
 Saisir la pièce du fournisseur avec sa pièce jointe numérisée, puis « Soumettre » : elle part au
-circuit d'approbation et se comptabilise une fois approuvée. Chaque ligne se saisit par catégorie de
+circuit d'approbation et se comptabilise une fois approuvée. Personne n'approuve ce qu'il a saisi : si
+vous êtes le seul comptable de la société, le contrôle de votre pièce passe à la direction. Chaque
+ligne se saisit par catégorie de
 dépense : la catégorie fixe le compte et la TVA (choisir un autre compte demande le droit « Saisie
 libre des comptes » ; sans lui, la catégorie est obligatoire). Une catégorie dont le compte de tiers
 n'est pas un compte fournisseur (salaires 422, cotisations 431, impôts 447) enregistre la dépense en

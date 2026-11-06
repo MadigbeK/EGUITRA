@@ -7,6 +7,10 @@ Les règles applicables, ordonnées par niveau, forment les étapes de la demand
 est tranchée par un utilisateur du profil désigné, qui ne peut pas être le demandeur ni avoir
 déjà tranché une autre étape de la même demande (quatre yeux : l'administration porte aussi les
 profils finance et direction).
+
+Suppléance (décision du 6 novembre 2026, audit de simplicité D2) : quand les seuls titulaires du profil
+finance de la société sont les auteurs de la pièce, le contrôle de la finance revient à la direction, plutôt
+qu'au compte de l'administration. Le libellé de l'étape le dit et la piste d'audit le garde.
 """
 
 from odoo import api, fields, models
@@ -46,6 +50,7 @@ DEFAULT_RULES = COMMITMENT_RULES + CASH_OUT_RULES + [
     {"document": "payment_out", "sequence": 1, "min_amount": 100_000_000, "approver_profile": "direction",
      "name": "Règlements de plus de 100 M GNF : accord de la direction"},
 ]
+SUBSTITUTION_NOTE = "(suppléance de la direction : pièce saisie par le seul comptable de la société)"
 
 
 class EguitraApprovalRule(models.Model):
@@ -143,6 +148,7 @@ class EguitraApprovalRequest(models.Model):
             ("res_model", "=", record._name), ("res_id", "=", record.id), ("state", "in", ("pending", "rejected")),
         ]).write({"state": "cancelled"})
         labels = dict(DOCUMENTS)
+        steps = self._step_values(record, rules)
         return self.sudo().create({
             "name": f"{labels[document]} : {record.display_name}",
             "company_id": record.company_id.id,
@@ -154,11 +160,45 @@ class EguitraApprovalRequest(models.Model):
             "partner_id": partner.id if partner else False,
             "fingerprint": record._eguitra_fingerprint(),
             "requested_by": self.env.user.id,
-            "step_ids": [
-                (0, 0, {"sequence": i, "rule_id": rule.id, "profile": rule.approver_profile, "label": rule.name})
-                for i, rule in enumerate(rules, start=1)
-            ],
+            "step_ids": [(0, 0, dict(step, sequence=i)) for i, step in enumerate(steps, start=1)],
         })
+
+    @api.model
+    def _step_values(self, record, rules):
+        """Étapes de la demande, suppléance comprise. Le contrôle de la finance passe à la direction, en une
+        seule étape : une étape de la direction déjà prévue (au-delà du seuil) le porte aussi, sans quoi les
+        quatre yeux exigeraient deux dirigeants."""
+        def step(rule, profile=None, note=""):
+            return {"rule_id": rule.id, "profile": profile or rule.approver_profile, "label": f"{rule.name}{note}"}
+
+        if not self._finance_step_replaced(record, rules):
+            return [step(rule) for rule in rules]
+        carrier = next((rule for rule in rules if rule.approver_profile == "direction"), None)             or next(rule for rule in rules if rule.approver_profile == "finance")
+        return [
+            step(rule, "direction", f" {SUBSTITUTION_NOTE}") if rule == carrier else step(rule)
+            for rule in rules if rule == carrier or rule.approver_profile != "finance"
+        ]
+
+    @api.model
+    def _finance_step_replaced(self, record, rules):
+        """Le contrôle de la finance revient-il à la direction ? Oui quand tous les titulaires du profil finance
+        de la société sont auteurs de la pièce et qu'un dirigeant, lui, ne l'est pas. Les comptes de
+        l'administration ne comptent pas comme titulaires : ils portent ce profil par héritage."""
+        if not any(rule.approver_profile == "finance" for rule in rules):
+            return False
+        authors = self.env.user | self._record_authors(record)
+        users = self.env["res.users"].sudo().search([("share", "=", False), ("company_ids", "in", record.company_id.id)])
+        finance = users.browse()
+        direction = users.browse()
+        for user in users:
+            profiles = user._eguitra_profiles()
+            if "admin" in profiles:
+                continue
+            if "finance" in profiles:
+                finance |= user
+            if "direction" in profiles:
+                direction |= user
+        return bool(finance) and not finance - authors and bool(direction - authors)
 
     def _document_detail(self):
         """Détail de la pièce pour la corbeille de validation, quand un module en soumet d'autres natures (budget
@@ -176,11 +216,12 @@ class EguitraApprovalRequest(models.Model):
         soumis par A pouvait être approuvé par F lui-même."""
         self.ensure_one()
         record = self._record()
-        authors = self.env["res.users"]
-        if not record:
-            return authors
-        authors |= record.sudo().create_uid
-        if self.res_model == "eguitra.commitment":
+        return self._record_authors(record) if record else self.env["res.users"]
+
+    @api.model
+    def _record_authors(self, record):
+        authors = record.sudo().create_uid
+        if record._name == "eguitra.commitment":
             authors |= record.sudo().requested_by
         return authors
 
