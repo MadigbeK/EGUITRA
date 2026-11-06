@@ -104,10 +104,15 @@ def _record(model, record_id, label):
     return record
 
 
+def _require_referential_admin():
+    if not request.env.user.has_group("eguitra_base.group_profile_associe"):
+        raise AccessError("Réservé à un administrateur : le référentiel de critères ne se modifie pas depuis ce compte.")
+
+
 def _check_referential(policy):
     """Le référentiel de la méthode SC-01 V2.0 appartient à l'administrateur (section 3) ; refus 403 sinon."""
-    if policy.method == METHOD_SC01 and not request.env.user.has_group("eguitra_base.group_profile_associe"):
-        raise AccessError("Réservé à un administrateur : le référentiel de critères ne se modifie pas depuis ce compte.")
+    if policy.method == METHOD_SC01:
+        _require_referential_admin()
 
 
 def _decimal(value, key):
@@ -290,6 +295,9 @@ class EguitraAxispro(http.Controller):
         policy = _record("axispro.policy", policy_id, "Politique")
         _draft(policy)
         data = read_json()
+        # La méthode et ses réglages aussi : un brouillon de l'ancienne méthode ne passe pas en V2.0 depuis un autre compte.
+        if {"method", *SC01_POINTS, *SC01_NUMBERS} & data.keys():
+            _require_referential_admin()
         values = {"notes": data["notes"] or False} if "notes" in data else {}
         if "name" in data:
             values["name"] = _label(data, "name", "Politique d'évaluation")

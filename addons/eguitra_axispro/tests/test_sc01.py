@@ -733,6 +733,12 @@ class TestDossierSc01(ApiCase):
         self.assertEqual((status, body["relance_days"], body["method"]), (200, 21, "sc01_v2"))
         status, _body = self.api("POST", f"{path}/activate")
         self.assertEqual(status, 403)
+        # Brouillon de l'ancienne méthode : un évaluateur ne le fait pas passer en V2.0 ni n'en règle les paramètres.
+        policy.write({"method": "platform"})
+        for payload in ({"method": "sc01_v2"}, {"points_partial": 1}, {"relance_days": 1}):
+            status, _body = self.api("PATCH", path, payload)
+            self.assertEqual(status, 403, payload)
+        self.assertEqual(policy.method, "platform")
 
     def test_ancienne_methode(self):
         legacy = self.env["axispro.policy"].import_grid(self.cabinet, "Ancienne", "grille.csv", LEGACY_GRID)
