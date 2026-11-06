@@ -37,7 +37,8 @@ policy = Policy.import_grid(company, os.environ.get("GRILLE_NOM") or "Grille d'�
 # Réglages d'une grille exportée (scripts/grille/exporter.py, ligne REGLAGES) : seuils, contrôles,
 # DSCR et principes, que le format d'import ne porte pas.
 REGLAGES = ("threshold_hold", "conditional_threshold", "go_threshold", "threshold_bankable", "dscr_target",
-            "weighting", "ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check", "notes")
+            "weighting", "ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check", "notes", "method",
+            "ko_partial_from_gate", "points_met", "points_partial", "points_not_met", "relance_days", "max_file_mb")
 if os.environ.get("GRILLE_REGLAGES"):
     import json
 

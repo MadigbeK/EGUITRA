@@ -1,43 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Cabinet et direction : sociétés autorisées. -->
+    <!-- Cabinet et direction : sociétés autorisées. L'évaluateur (profil cabinet seul) ne voit que ses projets (référence
+         V2.0, section 3) : ceux dont il est responsable, où un compartiment lui est confié, ou encore sans responsable
+         (consultant vide ou compte système). L'associé, la direction, l'administration et le lecteur voient tout. -->
     <record id="rule_dossier_company" model="ir.rule">
         <field name="name">Dossiers : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_dossier"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('consultant_id', 'in', [False, 1, user.id]), ('assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <!-- Une règle ne s'étend pas aux enregistrements liés : chaque modèle du dossier et de la grille
          porte la sienne, sans quoi un profil direction d'une autre société lirait pièces, revues et
          grilles du cabinet par leur identifiant. -->
+    <record id="rule_deposit_link_company" model="ir.rule">
+        <field name="name">Liens de dépôt : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_deposit_link"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+    <record id="rule_version_company" model="ir.rule">
+        <field name="name">Versions figées : sociétés autorisées</field>
+        <field name="model_id" ref="model_axispro_version"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
+        <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
     <record id="rule_evaluation_company" model="ir.rule">
         <field name="name">Évaluations : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_evaluation"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_document_company" model="ir.rule">
         <field name="name">Data room : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_document"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_message_company" model="ir.rule">
         <field name="name">Échanges : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_message"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_review_company" model="ir.rule">
         <field name="name">Comités : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_review"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_timesheet_company" model="ir.rule">
         <field name="name">Temps passés : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_timesheet"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_policy_company" model="ir.rule">
@@ -79,49 +93,49 @@
     <record id="rule_assignment_company" model="ir.rule">
         <field name="name">Équipe des dossiers : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_assignment"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_plan_company" model="ir.rule">
         <field name="name">Modèles financiers : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_plan"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_plan_line_company" model="ir.rule">
         <field name="name">Hypothèses financières : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_plan_line"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('plan_id.dossier_id.consultant_id', 'in', [False, 1, user.id]), ('plan_id.dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_risk_company" model="ir.rule">
         <field name="name">Risques : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_risk"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_action_company" model="ir.rule">
         <field name="name">Plan d'actions : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_action"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_funding_company" model="ir.rule">
         <field name="name">Financements recherchés : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_funding"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_relance_company" model="ir.rule">
         <field name="name">Relances du porteur : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_relance"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <record id="rule_journal_company" model="ir.rule">
         <field name="name">Journal des dossiers : sociétés autorisées</field>
         <field name="model_id" ref="model_axispro_journal"/>
-        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="domain_force">[('company_id', 'in', company_ids)] + ([] if not user.axispro_own_projects_only() else ['|', ('dossier_id.consultant_id', 'in', [False, 1, user.id]), ('dossier_id.assignment_ids.user_id', '=', user.id)])</field>
         <field name="groups" eval="[Command.link(ref('base.group_user'))]"/>
     </record>
     <!-- Porteur de projet : uniquement ses dossiers, ses pièces visibles et les échanges non internes. -->

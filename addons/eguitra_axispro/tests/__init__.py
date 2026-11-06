@@ -4,3 +4,4 @@ from . import test_methode
 from . import test_outil_cabinet
 from . import test_modules_cabinet
 from . import test_relances
+from . import test_sc01

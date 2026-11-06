@@ -10,6 +10,11 @@ Quatre yeux : une décision engage au moins deux personnes (auteurs de la révis
 Le sceau est réservé à un associé du cabinet ou à la direction (décision du gérant du 22 octobre 2026).
 Un HOLD ou un NO-GO se motive dès le brouillon ; une revue en brouillon reste modifiable (décision,
 motif, membres, compte rendu…) jusqu'à son verrouillage.
+
+Méthode SC-01 V2.0 : une décision se scelle comme les autres, mais c'est la décision contraire à la
+recommandation qui se motive (RG-10-01), celui qui a noté des critères du dossier ne vote pas (RG-00-01), et la
+décision ne fige pas le dossier : GO et CONDITIONAL GO font passer au gate suivant, HOLD maintient, NO-GO clôt
+(RG-10-02).
 """
 
 import hashlib
@@ -20,7 +25,7 @@ import math
 from odoo import api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
-from ..scoring import DECISIONS
+from ..scoring import DECISIONS, METHOD_SC01
 from .dossier import COMMITTEE_DECISIONS, HYPOTHESES, RECOMMENDATIONS
 from .plan import LINE_FIELDS, PLAN_PARAMS
 
@@ -28,6 +33,15 @@ from .plan import LINE_FIELDS, PLAN_PARAMS
 # en brouillon ne pourrait jamais être verrouillé.
 MOTIVATED_DECISIONS = ("hold", "no_go")
 MOTIVE_REQUIRED = "Motivez une décision HOLD ou NO-GO : le motif est obligatoire, dès le brouillon."
+
+
+CONTRARY_MOTIVE = "Décision contraire à la recommandation : saisissez le motif."
+
+
+def contrary_decision(decision, passage):
+    """RG-10-01 : GO ou CONDITIONAL GO quand la recommandation est le maintien, HOLD ou NO-GO quand le passage
+    est possible."""
+    return (decision in ("go", "conditional")) != bool(passage.get("favorable"))
 
 
 def motive_missing(decision, motive):
@@ -44,6 +58,7 @@ class AxisproReview(models.Model):
     company_id = fields.Many2one(related="dossier_id.company_id", store=True)
     date = fields.Date(required=True, default=fields.Date.context_today)
     gate_id = fields.Many2one("axispro.gate", "Gate examiné")
+    gate_to_id = fields.Many2one("axispro.gate", "Gate visé", readonly=True)
     members = fields.Text("Membres du comité")
     instance = fields.Char("Instance")
     snapshot = fields.Json("Instantané de l'évaluation", readonly=True)
@@ -63,7 +78,7 @@ class AxisproReview(models.Model):
     @api.constrains("decision", "motive")
     def _check_motive(self):
         for review in self:
-            if motive_missing(review.decision, review.motive):
+            if review.dossier_id.policy_id.method != METHOD_SC01 and motive_missing(review.decision, review.motive):
                 raise ValidationError(MOTIVE_REQUIRED)
 
     def write(self, vals):
@@ -81,17 +96,23 @@ class AxisproReview(models.Model):
             if review.state == "locked":
                 continue
             dossier = review.dossier_id
-            if motive_missing(review.decision, review.motive):
-                raise UserError("Motivez une décision HOLD ou NO-GO avant de la verrouiller : complétez le brouillon.")
-            dossier._check_open()
-            # Sceau réservé à un associé du cabinet ou à la direction (décision du gérant), puis quatre yeux.
-            dossier._check_decision_right("sceller la décision du comité")
-            if dossier.locked_review_id:
-                raise UserError(f"Une décision est déjà verrouillée pour la révision {dossier.revision} : ouvrez une "
-                                "nouvelle révision avant d'en verrouiller une autre.")
-            # Quatre yeux : jamais scellée par le seul auteur de la révision, ni sans autre contribution.
-            dossier._check_four_eyes("verrouiller la décision de son comité")
+            sc01 = dossier.policy_id.method == METHOD_SC01
+            if sc01:
+                dossier.check_committee(review.decision)
+            else:
+                if motive_missing(review.decision, review.motive):
+                    raise UserError("Motivez une décision HOLD ou NO-GO avant de la verrouiller : complétez le brouillon.")
+                dossier._check_open()
+                # Sceau réservé à un associé du cabinet ou à la direction (décision du gérant), puis quatre yeux.
+                dossier._check_decision_right("sceller la décision du comité")
+                if dossier.locked_review_id:
+                    raise UserError(f"Une décision est déjà verrouillée pour la révision {dossier.revision} : ouvrez une "
+                                    "nouvelle révision avant d'en verrouiller une autre.")
+                # Quatre yeux : jamais scellée par le seul auteur de la révision, ni sans autre contribution.
+                dossier._check_four_eyes("verrouiller la décision de son comité")
             result = dossier.evaluate()
+            if sc01 and contrary_decision(review.decision, result["passage"]) and not (review.motive or "").strip():
+                raise UserError(CONTRARY_MOTIVE)
             snapshot = dossier.scoring(result)
             snapshot["financial"] = {k: (result.get("financial") or {}).get(k) for k in SNAPSHOT_FINANCIAL} \
                 if result.get("financial") else None
@@ -99,17 +120,27 @@ class AxisproReview(models.Model):
             content = _normalized(_canonical(dossier, review, snapshot))
             fingerprint = _seal(self.env, content)
             # Contrôles faits : écriture du noyau (la direction n'écrit pas les revues du cabinet).
-            super(AxisproReview, review.sudo()).write({
+            sealed = {
                 "state": "locked", "locked_by": self.env.user.id, "locked_at": fields.Datetime.now(),
                 "snapshot": snapshot, "recommendation": snapshot["recommendation"], "revision": dossier.revision,
                 "policy_version": dossier.policy_id.version, "sealed_content": content, "fingerprint": fingerprint,
-            })
-            values = {"locked_review_id": review.id}
-            if review.decision != "postponed":
-                values["decision"] = review.decision
+            }
+            if sc01:
+                # Le gate visé reste celui du passage examiné, même si la décision maintient le dossier.
+                sealed["gate_to_id"] = dossier.next_gate().id or False
+                values = dossier._committee_outcome(review.decision)
+            else:
+                values = {"locked_review_id": review.id}
+                if review.decision != "postponed":
+                    values["decision"] = review.decision
+            super(AxisproReview, review.sudo()).write(sealed)
+            before = dossier.current_gate_id
             dossier.sudo().with_context(axispro_unlocked=True).write(values)
             dossier.log("decision", note=f"Décision {DECISIONS.get(review.decision, 'Ajourné')} verrouillée "
                                          f"(révision {dossier.revision}, empreinte {fingerprint[:16]}).")
+            if dossier.current_gate_id != before:
+                dossier.log("gate", note=f"Passage de {before.code} à {dossier.current_gate_id.code} par la décision du "
+                                         "comité.")
             # Les conditions du comité deviennent des actions suivies du porteur.
             self.env["axispro.action"].sudo().from_conditions(review)
         return True

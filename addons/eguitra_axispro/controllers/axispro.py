@@ -5,7 +5,10 @@ Rapports, exports et imports d'évaluation : rapports.py.
 
 from datetime import UTC, datetime, timedelta
 
+from markupsafe import Markup
+
 from odoo import http
+from odoo.exceptions import AccessError
 from odoo.http import request
 
 from odoo.addons.eguitra_api.controllers.auth import _password_shared
@@ -18,7 +21,15 @@ from ..models.dossier import COMMITTEE_DECISIONS, HYPOTHESES, STATUSES, YES_NO
 from ..models.policy import SCOPES, WEIGHTINGS, grid_template
 from ..models.relance import CHANNELS
 from ..models.review import MOTIVE_REQUIRED, SNAPSHOT_FINANCIAL, motive_missing
-from ..scoring import REQUIREMENTS, RULES
+from ..models.sc01 import (
+    ADMISSIBILITY_FIELDS,
+    OBSERVATION_STATUSES,
+    RG_ADMISSIBLE,
+    RG_IDENTITY,
+    RG_OBSERVATION,
+    SECTORS,
+)
+from ..scoring import METHOD_SC01, METHODS, REQUIREMENTS, RULES
 from .common import (
     MAX_FILE,
     document_row,
@@ -30,7 +41,10 @@ from .common import (
     store_upload,
 )
 
-READ = ("admin", "direction", "cabinet")
+# Le lecteur (référence V2.0, section 3) lit les dossiers, pas les temps passés. Ce n'est pas l'auditeur externe
+# HSSEQ (profil auditeur), borné à ses sites, qui n'a aucun droit ici.
+READ = ("admin", "direction", "cabinet", "lecteur")
+TIME_READ = ("admin", "direction", "cabinet")
 WRITE = ("cabinet",)
 # Sceller la décision du comité, forcer un gate, ouvrir une nouvelle révision : associé du cabinet ou
 # direction (décision du gérant du 22 octobre 2026), en plus des quatre yeux ; le modèle le vérifie aussi
@@ -39,6 +53,9 @@ SEAL = ("associe", "direction")
 GATE = ("cabinet", "direction")
 THRESHOLDS = ("threshold_hold", "conditional_threshold", "go_threshold", "threshold_bankable")
 POLICY_FLAGS = ("ko_partial_blocks", "evidence_check", "exclude_na", "expiry_check")
+# Réglages propres à la méthode SC-01 V2.0 : points, gate où un incomplet bloque un knock-out, relance, taille.
+SC01_POINTS = ("points_met", "points_partial", "points_not_met")
+SC01_NUMBERS = ("ko_partial_from_gate", "relance_days", "max_file_mb")
 MIN_FORCE_REASON = 10
 # Lecture des business plans par l'IA : lectures par compte sur 24 heures, verrous des lectures simultanées.
 READINGS_PER_DAY = 20
@@ -87,7 +104,21 @@ def _record(model, record_id, label):
     return record
 
 
+def _check_referential(policy):
+    """Le référentiel de la méthode SC-01 V2.0 appartient à l'administrateur (section 3) ; refus 403 sinon."""
+    if policy.method == METHOD_SC01 and not request.env.user.has_group("eguitra_base.group_profile_associe"):
+        raise AccessError("Réservé à un administrateur : le référentiel de critères ne se modifie pas depuis ce compte.")
+
+
+def _decimal(value, key):
+    """Nombre saisi, la virgule acceptée comme séparateur (RG-08-02). Vide : zéro."""
+    if value in (None, "", False):
+        return 0.0
+    return as_float(str(value).replace(" ", "").replace(",", "."), key)
+
+
 def _draft(policy):
+    _check_referential(policy)
     if policy.state != "draft":
         raise ApiError(422, "business_rule", "Seule une version en brouillon se modifie : créez une nouvelle version.")
 
@@ -137,6 +168,8 @@ def _policy_payload(policy):
         "go_threshold": policy.go_threshold, "conditional_threshold": policy.conditional_threshold,
         "threshold_bankable": policy.threshold_bankable, "threshold_hold": policy.threshold_hold,
         "dscr_target": policy.dscr_target, "weighting": policy.weighting,
+        "method": policy.method, "methods": dict(METHODS),
+        **{key: policy[key] for key in SC01_POINTS + SC01_NUMBERS},
         **{flag: policy[flag] for flag in POLICY_FLAGS},
         "capex_criterion_id": policy.capex_criterion_id.id or None,
         "weightings": dict(WEIGHTINGS), "rules": RULES, "scopes": dict(SCOPES), "requirements": REQUIREMENTS,
@@ -177,6 +210,34 @@ def _policy_payload(policy):
     }
 
 
+
+def _mail_ready():
+    """Un serveur d'envoi est-il paramétré (infra/mail-server.sh) ? Sinon, l'écran ouvre la messagerie du poste."""
+    return bool(request.env["ir.mail_server"].sudo().search_count([]))
+
+
+def _send_relance(dossier, body):
+    """Message de relance (annexe D) au contact du dossier : la ligne « Objet : » devient le sujet du courriel, et les
+    réponses reviennent à l'évaluateur."""
+    email = dossier.contact()["email"]
+    if not email:
+        raise ApiError(422, "business_rule", "Renseignez le courriel du contact à l'étape 1.", fields=["contact_email"])
+    if not _mail_ready():
+        raise ApiError(422, "business_rule", "L'envoi de courriel n'est pas paramétré sur cette plateforme : ouvrez "
+                                             "le message dans votre messagerie.")
+    if not body:
+        raise ApiError(400, "missing_fields", "Message à envoyer manquant.", fields=["body"])
+    first, _sep, rest = body.partition("\n")
+    subject = first[len("Objet :"):].strip() if first.startswith("Objet :") else ""
+    text = rest.strip() if subject else body
+    request.env["mail.mail"].sudo().create({
+        "subject": subject or f"{dossier.reference} · Pièces attendues",
+        "body_html": Markup("<div style='white-space:pre-wrap;font-family:Arial,sans-serif'>{}</div>").format(text),
+        "email_to": email, "email_from": dossier.company_id.email or False,
+        "reply_to": request.env.user.email or False, "auto_delete": True,
+    })
+
+
 class EguitraAxispro(http.Controller):
     # ─── Politique d'évaluation ───────────────────────────────────────────
 
@@ -212,12 +273,15 @@ class EguitraAxispro(http.Controller):
             raise ApiError(400, "missing_fields", "Classeur manquant.", fields=["file"])
         form = request.httprequest.form
         go = form.get("go_threshold")
+        # Version 3 de l'outil, en complément d'un outil V2.0 : compartiments des domaines.
+        complement = request.httprequest.files.get("complement")
         policy = request.env["axispro.policy"].import_grid(
             request.env.company, form.get("name") or "Politique d'évaluation MB AxisPro Consulting", upload.filename or "grille.xlsx",
             upload.read(), go=as_float(go, "go_threshold") if go else None,
             conditional=as_float(form.get("conditional_threshold") or 50, "conditional_threshold"),
-            notes=form.get("notes") or None,
+            notes=form.get("notes") or None, complement=complement.read() if complement else None,
         )
+        _check_referential(policy)
         return _policy_payload(policy)
 
     @api_route("/axispro/policies/<int:policy_id>", methods=("PATCH",), profiles=WRITE)
@@ -245,6 +309,14 @@ class EguitraAxispro(http.Controller):
         for flag in POLICY_FLAGS:
             if flag in data:
                 values[flag] = bool(data[flag])
+        if data.get("method") in METHODS:
+            values["method"] = data["method"]
+        for key in SC01_POINTS:
+            if key in data:
+                values[key] = as_float(data[key], key)
+        for key in SC01_NUMBERS:
+            if key in data:
+                values[key] = int_value(data[key], key)
         if "capex_criterion_id" in data:
             criterion = policy.criterion_ids.filtered(lambda c: c.id == int(data["capex_criterion_id"] or 0))
             values["capex_criterion_id"] = criterion.id or False
@@ -257,12 +329,15 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/policies/<int:policy_id>/activate", methods=("POST",), profiles=WRITE)
     def activate_policy(self, policy_id, **_kw):
         policy = _record("axispro.policy", policy_id, "Politique")
+        _check_referential(policy)
         policy.action_activate()
         return _policy_payload(policy)
 
     @api_route("/axispro/policies/<int:policy_id>/new-version", methods=("POST",), profiles=WRITE)
     def new_version(self, policy_id, **_kw):
-        return _policy_payload(_record("axispro.policy", policy_id, "Politique").copy_as_new_version())
+        policy = _record("axispro.policy", policy_id, "Politique")
+        _check_referential(policy)
+        return _policy_payload(policy.copy_as_new_version())
 
     @api_route("/axispro/gates/<int:gate_id>", methods=("PATCH",), profiles=WRITE)
     def update_gate(self, gate_id, **_kw):
@@ -412,9 +487,14 @@ class EguitraAxispro(http.Controller):
                 values[key] = " ".join(str(data[key] or "").split())[:size] or False
         if values.get("contact_email") and not lecture_ia.EMAIL.match(values["contact_email"]):
             raise ApiError(400, "invalid_parameter", "Courriel du contact invalide.", fields=["contact_email"])
-        for key in ("investment", "financing_need", "dscr_manual", "irr_manual"):
+        for key in ("investment", "financing_need", "irr_manual"):
             if key in data:
                 values[key] = as_float(data[key] or 0, key)
+        if "dscr_manual" in data:
+            values["dscr_manual"] = _decimal(data["dscr_manual"], "dscr_manual")
+        for key in ADMISSIBILITY_FIELDS | {"admissible"}:
+            if key in data:
+                values[key] = bool(data[key])
         for key in ("date_start", "date_evaluation"):
             if key in data:
                 values[key] = parse_date(data, key) or False
@@ -425,6 +505,8 @@ class EguitraAxispro(http.Controller):
                 values[key] = data[key] or False
         if data.get("promoter_id"):
             values["promoter_id"] = int_value(data["promoter_id"], "promoter_id")
+        elif data.get("promoter_name"):
+            values["promoter_id"] = self._promoter(data["promoter_name"])
         if data.get("currency_id"):
             currency = request.env["res.currency"].browse(int_value(data["currency_id"], "currency_id")).exists()
             if not currency:
@@ -433,6 +515,33 @@ class EguitraAxispro(http.Controller):
         if data.get("state") in ("open", "on_hold", "closed"):
             values["state"] = data["state"]
         return values
+
+    @staticmethod
+    def _promoter(name):
+        """Promoteur saisi en texte (EC-04, EC-05) : tiers de même nom s'il est seul, sinon créé. Le nom vient de
+        l'utilisateur : ses « % » et « _ » ne sont pas des jokers."""
+        name = " ".join(str(name).split())[:200]
+        company = request.env.company
+        pattern = name.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        partners = request.env["res.partner"].search([("name", "=ilike", pattern),
+                                                      ("company_id", "in", (False, company.id))], limit=2)
+        if len(partners) == 1:
+            return partners.id
+        return request.env["res.partner"].sudo().create({"name": name, "company_id": company.id,
+                                                         "is_company": True}).id
+
+    @staticmethod
+    def _check_sc01_values(policy, values, dossier=None):
+        """Contrôles de la fiche selon la méthode SC-01 V2.0 : secteur de la liste de référence (annexe C) et
+        recevabilité (RG-05-02), avec le champ à signaler à l'écran."""
+        if policy.method != METHOD_SC01:
+            return
+        if values.get("sector") and values["sector"] not in SECTORS:
+            raise ApiError(422, "business_rule", "Secteur hors de la liste de référence.", fields=["sector"])
+        if values.get("admissible", dossier.admissible if dossier else False):
+            checked = [values.get(key, dossier[key] if dossier else False) for key in ADMISSIBILITY_FIELDS]
+            if not all(checked):
+                raise ApiError(422, "business_rule", RG_ADMISSIBLE, fields=["admissible"])
 
     @api_route("/axispro/currencies", profiles=READ)
     def currencies(self, **_kw):
@@ -444,13 +553,30 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers", methods=("POST",), profiles=WRITE)
     def create_dossier(self, **_kw):
         data = read_json()
-        require(data, "name", "promoter_id")
-        return dossier_detail(request.env["axispro.dossier"].create(self._values(data)))
+        missing = [k for k, ok in (("name", data.get("name")), ("promoter_id", data.get("promoter_id") or data.get("promoter_name")))
+                   if not ok or not str(ok).strip()]
+        if missing:
+            raise ApiError(400, "missing_fields", RG_IDENTITY, fields=missing)
+        values = self._values(data)
+        policy = request.env["axispro.policy"].active_policy(request.env.company)
+        if policy:
+            self._check_sc01_values(policy, values)
+        # La recevabilité s'écrit après la création : le passage au Gate 1 suit le gate initial du dossier.
+        admissibility = {key: values.pop(key) for key in ADMISSIBILITY_FIELDS | {"admissible"} if key in values}
+        dossier = request.env["axispro.dossier"].create(values)
+        if admissibility:
+            dossier.write(admissibility)
+        return dossier_detail(dossier)
 
     @api_route("/axispro/dossiers/<int:dossier_id>", methods=("PATCH",), profiles=WRITE)
     def update_dossier(self, dossier_id, **_kw):
         dossier = _dossier(dossier_id)
-        dossier.write(self._values(read_json()))
+        data = read_json()
+        if dossier.policy_id.method == METHOD_SC01 and "name" in data and not str(data["name"] or "").strip():
+            raise ApiError(400, "missing_fields", RG_IDENTITY, fields=["name"])
+        values = self._values(data)
+        self._check_sc01_values(dossier.policy_id, values, dossier)
+        dossier.write(values)
         return dossier_detail(dossier)
 
     # ─── Lecture d'un business plan (IA) ──────────────────────────────────
@@ -614,6 +740,9 @@ class EguitraAxispro(http.Controller):
             raise ApiError(422, "business_rule", "Seul un consultant du cabinet ouvert à cette société peut être "
                                                  "responsable du dossier.")
         dossier.change_lead(user)
+        # Un évaluateur qui confie son dossier peut ne plus le voir (section 3) : l'écran le ramène au portefeuille.
+        if not request.env["axispro.dossier"].search_count([("id", "=", dossier.id)]):
+            return {"id": dossier.id, "handed_over": True}
         return dossier_detail(dossier)
 
     # ─── Évaluation ───────────────────────────────────────────────────────
@@ -647,6 +776,7 @@ class EguitraAxispro(http.Controller):
             evaluations = evaluations.filtered(lambda e: e.criterion_id.domain_id.compartment_id.id in mine)
         rows = []
         editable = {}
+        ranks = {c.id: i for i, c in enumerate(dossier.policy_id.criterion_ids.sorted("sequence"))}
         for e in evaluations.sorted(lambda e: (e.criterion_id.sequence, e.criterion_id.id)):
             c = e.criterion_id
             line = lines.get(c.id, {})
@@ -655,6 +785,9 @@ class EguitraAxispro(http.Controller):
                 editable[compartment.id] = not dossier._evaluation_refusal(compartment)
             rows.append({
                 "id": e.id, "criterion_id": c.id, "code": c.code, "name": c.name, "domain": c.domain_id.name,
+                "rank": ranks.get(c.id), "reference": e.reference or None, "na_validated": e.na_validated,
+                "na_validated_by": e.na_validated_by.name or None, "na_validated_at": e.na_validated_at,
+                "na_pending": bool(line.get("na_pending")),
                 "domain_id": c.domain_id.id, "domain_code": c.domain_id.code, "gate_id": c.gate_id.id,
                 "compartment_id": c.domain_id.compartment_id.id or None,
                 "compartment": c.domain_id.compartment_id.code or None,
@@ -691,11 +824,16 @@ class EguitraAxispro(http.Controller):
             if data["status"] not in dict(STATUSES):
                 raise ApiError(400, "invalid_parameter", "Statut inconnu.")
             values["status"] = data["status"]
-        for key in ("comment", "deliverable", "responsible"):
+        for key in ("comment", "deliverable", "responsible", "reference"):
             if key in data:
                 values[key] = (str(data[key])[:2000] if data[key] else False)
         if "due_date" in data:
             values["due_date"] = parse_date(data, "due_date") or False
+        # RG-07-02 : l'enregistrement est bloqué, et l'écran envoie le statut et l'observation ensemble.
+        if evaluation.dossier_id.policy_id.method == METHOD_SC01 and {"status", "comment"} & values.keys():
+            comment = values["comment"] if "comment" in values else evaluation.comment
+            if values.get("status", evaluation.status) in OBSERVATION_STATUSES and not (comment or "").strip():
+                raise ApiError(422, "business_rule", RG_OBSERVATION, fields=["comment"])
         if "document_ids" in data:
             docs = request.env["axispro.document"].browse([int(i) for i in data["document_ids"]]).exists()
             if docs.filtered(lambda d: d.dossier_id != evaluation.dossier_id):
@@ -918,14 +1056,16 @@ class EguitraAxispro(http.Controller):
 
     @staticmethod
     def _relances(dossier):
-        items = dossier.relance_items()
+        result = dossier.evaluate()
+        items = dossier.relance_items(result)
         labels = dict(CHANNELS)
         return {
-            "followup": dossier.followup(items),
+            "followup": dossier.followup(items, result),
             "contact": dossier.contact(),
             "portal": bool(dossier.portal_user_ids),
+            "email_ready": _mail_ready(),
             "items": items,
-            "message": dossier.relance_message(items),
+            "message": dossier.relance_message(items, result),
             "channels": [{"key": key, "label": label} for key, label in CHANNELS],
             "history": [{"id": x.id, "date": x.date, "channel": x.channel, "channel_label": labels[x.channel],
                          "note": x.note or None, "body": x.body or None, "pieces": x.pieces,
@@ -939,7 +1079,8 @@ class EguitraAxispro(http.Controller):
     @api_route("/axispro/dossiers/<int:dossier_id>/relances", methods=("POST",), profiles=WRITE)
     def add_relance(self, dossier_id, **_kw):
         """Relance enregistrée (date, canal, note, message envoyé) ; par le portail, le message part
-        aussi au porteur, qui en est notifié. Un dossier clos ne se relance pas."""
+        aussi au porteur, qui en est notifié ; avec send (canal courriel), il part au contact du dossier
+        par la file d'envoi du noyau. Un dossier clos ne se relance pas."""
         dossier = _dossier(dossier_id)
         dossier._check_open()
         data = read_json()
@@ -955,6 +1096,8 @@ class EguitraAxispro(http.Controller):
             if not body:
                 raise ApiError(400, "missing_fields", "Message à envoyer au porteur manquant.", fields=["body"])
             message = message.create({"dossier_id": dossier.id, "body": body[:5000], "internal": False})
+        if channel == "email" and data.get("send") is True:
+            _send_relance(dossier, body)
         request.env["axispro.relance"].create({
             "dossier_id": dossier.id, "date": parse_date(data, "date") or today(), "channel": channel,
             "note": str(data.get("note") or "").strip()[:2000] or False, "body": body or False,
@@ -973,7 +1116,7 @@ class EguitraAxispro(http.Controller):
             domain += [("billable", "=", True), ("invoice_id", "=", False)]
         return domain
 
-    @api_route("/axispro/timesheets", profiles=READ)
+    @api_route("/axispro/timesheets", profiles=TIME_READ)
     def timesheets(self, **kw):
         """Saisies de temps, les plus récentes d'abord (300 par défaut, `limit` jusqu'à 2 000) ; les
         totaux de tout le filtre se lisent dans /axispro/timesheets/summary."""
@@ -986,7 +1129,7 @@ class EguitraAxispro(http.Controller):
             for t in sheets
         ]
 
-    @api_route("/axispro/timesheets/summary", profiles=READ)
+    @api_route("/axispro/timesheets/summary", profiles=TIME_READ)
     def timesheets_summary(self, **kw):
         """Totaux de toutes les saisies du filtre (mêmes filtres que /axispro/timesheets, sans limite) :
         nombre de saisies, heures, heures facturables encore sans facture, et par dossier. La liste,

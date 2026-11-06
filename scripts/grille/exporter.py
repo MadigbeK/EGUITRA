@@ -72,7 +72,9 @@ book.close()
 
 settings = {key: policy[key] for key in ("threshold_hold", "conditional_threshold", "go_threshold",
                                          "threshold_bankable", "dscr_target", "weighting", "ko_partial_blocks",
-                                         "evidence_check", "exclude_na", "expiry_check")}
+                                         "evidence_check", "exclude_na", "expiry_check", "method",
+                                         "ko_partial_from_gate", "points_met", "points_partial", "points_not_met",
+                                         "relance_days", "max_file_mb")}
 settings["notes"] = policy.notes or ""
 kinds = {k: sum(1 for r in rows if r["type"] == k) for k in ("gate", "domaine", "critere", "piece")}
 print(f"EXPORT\t{policy.name}, version {policy.version}\t{kinds['gate']} gates\t{len(policy.compartment_ids)} "

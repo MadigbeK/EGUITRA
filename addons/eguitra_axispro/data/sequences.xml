@@ -7,4 +7,15 @@
         <field name="padding">4</field>
         <field name="company_id" eval="False"/>
     </record>
+    <!-- N° des dossiers de la méthode SC-01 V2.0 (RG-05-04) : MBAP-AAAA-NNN, repartant à 001 chaque année, sans
+         trou et jamais réutilisé. -->
+    <record id="seq_dossier_mbap" model="ir.sequence">
+        <field name="name">Dossiers MB AxisPro (MBAP)</field>
+        <field name="code">axispro.dossier.mbap</field>
+        <field name="prefix">MBAP-%(range_year)s-</field>
+        <field name="padding">3</field>
+        <field name="use_date_range" eval="True"/>
+        <field name="implementation">no_gap</field>
+        <field name="company_id" eval="False"/>
+    </record>
 </odoo>

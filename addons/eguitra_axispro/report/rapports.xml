@@ -224,6 +224,148 @@
         </t>
     </template>
 
+    <!-- Synthèse du dossier complet de la méthode SC-01 V2.0 (cahier des charges, 11.1) : valeurs préparées par
+         controllers/sc01.py (synthese_context). -->
+    <template id="report_dossier_synthese_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="synthese"/>
+            <div class="page ax">
+                <t t-call="eguitra_axispro.report_axispro_style"/>
+                <p class="muted small">MB AxisPro Consulting · méthode SC-01 V2</p>
+                <h1 t-esc="r['title']"/>
+                <p class="muted small">Généré le <t t-esc="r['generated']"/>.</p>
+
+                <h2>Fiche d'identité</h2>
+                <table>
+                    <tr t-foreach="r['fiche']" t-as="x"><td class="small" t-esc="x[0]"/><td t-esc="x[1]"/></tr>
+                </table>
+
+                <h2>Résultats</h2>
+                <table>
+                    <tr t-foreach="r['scores']" t-as="x"><td class="small" t-esc="x[0]"/><td><b t-esc="x[1]"/></td></tr>
+                </table>
+                <t t-if="r['knockouts']">
+                    <p><b>Knock-out actifs :</b></p>
+                    <ul><li t-foreach="r['knockouts']" t-as="k" t-esc="k"/></ul>
+                </t>
+                <p t-else="" class="muted">Aucun knock-out actif.</p>
+
+                <h2>Score par domaine</h2>
+                <table>
+                    <tr><th>Domaine</th><th>Score</th><th>Priorité</th></tr>
+                    <tr t-foreach="r['domains']" t-as="d">
+                        <td t-esc="d['name']"/><td t-esc="d['score']"/><td class="small" t-esc="d['priority']"/>
+                    </tr>
+                </table>
+
+                <h2>Pièces manquantes prioritaires</h2>
+                <table t-if="r['gaps']">
+                    <tr><th>Rang</th><th>Critère</th><th>Statut</th><th>Échéance</th></tr>
+                    <tr t-foreach="r['gaps']" t-as="g">
+                        <td t-esc="g['rank']"/><td t-esc="g['name']"/><td class="small" t-esc="g['status']"/>
+                        <td class="small" t-esc="g['due']"/>
+                    </tr>
+                </table>
+                <p t-else="" class="muted">Aucune pièce manquante.</p>
+
+                <h2>Pièces du dossier</h2>
+                <table t-if="r['pieces']">
+                    <tr><th>Fichier</th><th>Catégorie</th><th>Critère</th><th>Vérification</th></tr>
+                    <tr t-foreach="r['pieces']" t-as="p">
+                        <td class="small" t-esc="p['name']"/><td class="small" t-esc="p['category']"/>
+                        <td class="small" t-esc="p['criterion']"/><td class="small" t-esc="p['verification']"/>
+                    </tr>
+                </table>
+                <p t-else="" class="muted">Aucune pièce déposée.</p>
+
+                <h2>Relances</h2>
+                <table t-if="r['relances']">
+                    <tr><th>Date</th><th>Canal</th><th>Note</th><th>Par</th></tr>
+                    <tr t-foreach="r['relances']" t-as="x">
+                        <td class="small" t-esc="x['date']"/><td class="small" t-esc="x['channel']"/>
+                        <td class="small" t-esc="x['note']"/><td class="small" t-esc="x['user']"/>
+                    </tr>
+                </table>
+                <p t-else="" class="muted">Aucune relance enregistrée.</p>
+
+                <h2>Décisions du comité</h2>
+                <table t-if="r['decisions']">
+                    <tr><th>Date</th><th>Gate</th><th>Décision</th><th>Readiness</th><th>Membres</th><th>Motif</th></tr>
+                    <tr t-foreach="r['decisions']" t-as="x">
+                        <td class="small" t-esc="x['date']"/><td class="small" t-esc="x['gate']"/>
+                        <td t-esc="x['decision_label']"/><td class="small" t-esc="x['readiness']"/>
+                        <td class="small" t-esc="x['members'] or '–'"/><td class="small" t-esc="x['motive'] or '–'"/>
+                    </tr>
+                </table>
+                <p t-else="" class="muted">Aucune décision enregistrée.</p>
+
+                <h2>Versions figées</h2>
+                <table t-if="r['versions']">
+                    <tr><th>Version</th><th>Date</th><th>Readiness</th><th>Classification</th><th>Par</th></tr>
+                    <tr t-foreach="r['versions']" t-as="x">
+                        <td t-esc="x['label']"/><td class="small" t-esc="x['date']"/><td class="small" t-esc="x['readiness']"/>
+                        <td class="small" t-esc="x['classification']"/><td class="small" t-esc="x['user']"/>
+                    </tr>
+                </table>
+                <p t-else="" class="muted">Aucune version figée.</p>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_dossier_synthese">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_axispro.report_dossier_synthese_document"/>
+            </t>
+        </t>
+    </template>
+
+    <template id="report_decision_pv_document">
+        <t t-call="web.external_layout">
+            <t t-set="r" t-value="pv"/>
+            <div class="page ax">
+                <t t-call="eguitra_axispro.report_axispro_style"/>
+                <p class="muted small">MB AxisPro Consulting · méthode SC-01 V2</p>
+                <h1 t-esc="r['title']"/>
+                <table>
+                    <tr t-foreach="r['fiche']" t-as="x"><td class="small" t-esc="x[0]"/><td t-esc="x[1]"/></tr>
+                    <tr t-foreach="r['scores']" t-as="x"><td class="small" t-esc="x[0]"/><td t-esc="x[1]"/></tr>
+                </table>
+                <h2>Motif</h2>
+                <p style="white-space: pre-wrap;" t-esc="r['motive']"/>
+                <h2>Conditions</h2>
+                <p style="white-space: pre-wrap;" t-esc="r['conditions']"/>
+                <h2>Scellement</h2>
+                <p t-esc="r['sealed']"/>
+                <p class="muted small">Empreinte : <t t-esc="r['fingerprint']"/></p>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_decision_pv">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="eguitra_axispro.report_decision_pv_document"/>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_decision_pv" model="ir.actions.report">
+        <field name="name">Procès-verbal de décision AxisPro</field>
+        <field name="model">axispro.dossier</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_axispro.report_decision_pv</field>
+        <field name="report_file">eguitra_axispro.report_decision_pv</field>
+    </record>
+
+    <record id="action_report_dossier_synthese" model="ir.actions.report">
+        <field name="name">Synthèse du dossier AxisPro</field>
+        <field name="model">axispro.dossier</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">eguitra_axispro.report_dossier_synthese</field>
+        <field name="report_file">eguitra_axispro.report_dossier_synthese</field>
+    </record>
+
     <record id="action_report_dossier_committee" model="ir.actions.report">
         <field name="name">Rapport d'évaluation AxisPro</field>
         <field name="model">axispro.dossier</field>

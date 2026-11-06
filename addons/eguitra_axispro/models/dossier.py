@@ -51,6 +51,8 @@ FROZEN_FIELDS = {
     "name", "promoter_id", "sector", "location", "capacity", "investment", "financing_need", "currency_id",
     "date_start", "date_evaluation", "description", "hypotheses", "dscr_manual", "irr_manual", "dd_red_flag",
     "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed", "consultant_id",
+    # Recevabilité de la méthode SC-01 V2.0 (models/sc01.py).
+    "rec_sector", "rec_country", "rec_size", "rec_promoter", "admissible",
 }
 HYPOTHESES = ("dd_red_flag", "dataroom_open", "lenders_agreement", "cp_lifted", "financing_signed")
 # Ce qui entre dans le score ou le contenu scellé : qui l'écrit rejoint les auteurs de la révision en
@@ -59,7 +61,7 @@ HYPOTHESES = ("dd_red_flag", "dataroom_open", "lenders_agreement", "cp_lifted", 
 # d'un critère, que seuls les consultants admis sur son compartiment écrivent.
 DECISION_FIELDS = FROZEN_FIELDS - {"consultant_id"}
 DOCUMENT_INPUT_FIELDS = {"name", "document_type_id", "attachment_id", "state", "validity_date", "evaluation_ids"}
-EVALUATION_FIELDS = {"status", "comment", "deliverable", "responsible", "due_date", "document_ids"}
+EVALUATION_FIELDS = {"status", "comment", "deliverable", "responsible", "due_date", "document_ids", "reference"}
 
 
 def _system(env):
@@ -154,7 +156,7 @@ class AxisproDossier(models.Model):
                     raise UserError("Aucune politique d'évaluation en vigueur : importez puis activez la grille.")
                 vals["policy_id"] = policy.id
             if vals.get("reference", "/") == "/":
-                vals["reference"] = self.env["ir.sequence"].next_by_code("axispro.dossier") or "/"
+                vals["reference"] = self._next_reference()
             vals.setdefault("currency_id", company.currency_id.id)
             vals.setdefault("date_evaluation", fields.Date.context_today(self))
         records = super().create(vals_list)
@@ -170,6 +172,16 @@ class AxisproDossier(models.Model):
             ])
         records._note_decision_input()
         return records
+
+    @api.model
+    def _next_reference(self):
+        """N° MBAP-AAAA-NNN (RG-05-04) : suite annuelle sur 3 chiffres, sans trou, jamais réutilisé. Un numéro
+        déjà pris (dossier repris du prototype sous son numéro d'origine) est sauté."""
+        Sequence = self.env["ir.sequence"]
+        reference = Sequence.next_by_code("axispro.dossier.mbap") or "/"
+        while reference != "/" and self.sudo().search_count([("reference", "=", reference)]):
+            reference = Sequence.next_by_code("axispro.dossier.mbap")
+        return reference
 
     def write(self, vals):
         if FROZEN_FIELDS & set(vals) and not self.env.context.get("axispro_unlocked"):
@@ -219,8 +231,8 @@ class AxisproDossier(models.Model):
             raise AccessError(f"Seul {_lead_label(self)} confie le dossier à un autre responsable.")
         if user == lead:
             return True
-        self.write({"consultant_id": user.id})
         self.log("assignment", note="Responsable du dossier", before=lead.name or "Aucun", after=user.name)
+        self.write({"consultant_id": user.id})
         return True
 
     def evaluators(self):
@@ -323,6 +335,9 @@ class AxisproDossier(models.Model):
                 "status": e.status, "has_proof": bool(proofs),
                 "expired_on": max(proofs.mapped("validity_date")) if proofs and not valid else None,
                 "study": bool(e.deliverable),
+                # Méthode SC-01 V2.0 : non applicable validé, échéance et observations des manques.
+                "na_validated": e.na_validated, "due_date": e.due_date or None, "comment": e.comment or None,
+                "responsible": e.responsible or None, "reference": e.reference or None,
             }
         latest = {}
         for doc in self.document_ids.sorted("version"):
@@ -348,6 +363,9 @@ class AxisproDossier(models.Model):
         dscr = financial.get("dscr_min")
         if dscr is None and self.dscr_manual:
             dscr = self.dscr_manual
+        if policy.method == method.METHOD_SC01:
+            # Condition 7.6 : le DSCR saisi à l'étape des résultats, seul.
+            dscr = self.dscr_manual or None
         context = {
             "fiche": {"name": self.name, "promoter": self.promoter_id.name, "sector": self.sector, "location": self.location},
             "hyp": dict({h: self[h] or None for h in HYPOTHESES}, dscr=dscr),
@@ -355,6 +373,7 @@ class AxisproDossier(models.Model):
             # Gate courant : les knock-outs encore à évaluer des gates non atteints ne sont pas actifs, et
             # le prochain gate se cherche à partir de lui (scoring.compute).
             "current_gate_index": index.get(self.current_gate_id.id, 0) if self.current_gate_id else 0,
+            "admissible": self.admissible, "today": today,
         }
         return policy.scoring_settings(), criteria, evaluations, domains, documents, gate_rows, context, financial
 
@@ -411,8 +430,12 @@ class AxisproDossier(models.Model):
         pending = sum(1 for x in r["lines"] if x["entered"] == "not_assessed" and x["gate_index"] <= current)
         # Recommandation « à compléter » tant que les critères des gates atteints ne sont pas tous
         # évalués : la méthode compte un critère non évalué comme non disponible, ce qui donnerait un
-        # NO-GO en cours de saisie. Les scores, eux, restent ceux de la méthode.
-        if not r["assessed"]:
+        # NO-GO en cours de saisie. Les scores, eux, restent ceux de la méthode. La méthode SC-01 V2.0 donne sa
+        # décision telle quelle, à tout moment (EC-08).
+        sc01 = r.get("method") == method.METHOD_SC01
+        if sc01:
+            recommendation, detail = r["recommendation"], r["recommendation_detail"]
+        elif not r["assessed"]:
             recommendation, detail = "pending", "Évaluation à commencer : aucun critère n'est encore renseigné."
         elif pending:
             recommendation, detail = "pending", (f"{method.pluriel(pending, 'critère des gates atteints', 'critères des gates atteints')} "
@@ -422,7 +445,18 @@ class AxisproDossier(models.Model):
         owners = {a.compartment_id.id: a.user_id for a in self.assignment_ids}
         compartments = [dict(c, owner={"id": owners[c["compartment_id"]].id, "name": owners[c["compartment_id"]].name}
                              if c["compartment_id"] in owners else None) for c in r["compartments"]]
+        extra = {}
+        if sc01:
+            extra = {
+                "gate": r["gate"], "target_gate": r["target_gate"], "passage": self._named_passage(r["passage"]),
+                "knockouts_next": [brief(x) for x in r["knockouts_next"]], "decision": r["decision"],
+                "decision_label": r["decision_label"], "ready_for_committee": r["ready_for_committee"],
+                "critical_total": r["critical_total"], "missing": r["missing"], "next_due": r["next_due"],
+                "overdue": r["overdue"], "na_pending": len(r["na_pending"]),
+            }
         return {
+            **extra,
+            "method": policy.method,
             "global_score": r["readiness"],
             "readiness": r["readiness"],
             "apd": r["apd"],
@@ -471,6 +505,7 @@ class AxisproDossier(models.Model):
             c = criteria[g["id"]]
             rows.append({
                 "criterion_id": g["id"], "code": g["code"], "name": g["name"], "domain": g["domain"].get("name"),
+                "rank": g["rank"], "comment": (e and e.comment) or None,
                 "compartment": g["domain"].get("compartment_code"), "compartment_id": g["domain"].get("compartment_id"),
                 "compartment_name": g["domain"].get("compartment_name"),
                 "gate": gate_by_index.get(g["gate_index"], {}).get("code"), "status": g["status"], "entered": g["entered"],
@@ -553,9 +588,12 @@ class AxisproDossier(models.Model):
         """Passage au gate suivant : décision GO ou CONDITIONAL GO du gate courant (consultant du
         cabinet) ; sinon refus motivé, sauf passage forcé avec un motif inscrit au journal, par un
         associé ou la direction, jamais par une seule personne : un autre compte doit avoir contribué
-        à la révision (quatre yeux)."""
+        à la révision (quatre yeux). Méthode SC-01 V2.0 : le gate ne change que par la recevabilité et par
+        une décision de comité (models/sc01.py)."""
         self.ensure_one()
         self._check_unlocked()
+        if self.policy_id.method == method.METHOD_SC01 and not _system(self.env):
+            raise UserError("Le passage au gate suivant se décide au comité : enregistrez la décision.")
         gates = self.policy_id.gate_ids.sorted("sequence")
         gate = self.current_gate_id or gates[:1]
         following = gates.filtered(lambda g: g.sequence > gate.sequence)[:1]
@@ -760,7 +798,8 @@ class AxisproJournal(models.Model):
     kind = fields.Selection(
         [("status", "Statut d'un critère"), ("document", "Data room"), ("gate", "Stage gate"),
          ("decision", "Décision de comité"), ("revision", "Révision"), ("import", "Import"),
-         ("assignment", "Équipe du dossier"), ("portal", "Portail du porteur"), ("state", "État du dossier")],
+         ("assignment", "Équipe du dossier"), ("portal", "Portail du porteur"), ("state", "État du dossier"),
+         ("evaluation", "Saisie d'un critère")],
         required=True, readonly=True,
     )
     criterion_id = fields.Many2one("axispro.criterion", "Critère", ondelete="set null", readonly=True)

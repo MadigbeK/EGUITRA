@@ -23,5 +23,8 @@ COMPARTMENT_MODELS = ["axispro.compartment", "axispro.assignment"]
 # existante.
 RELANCE_MODELS = ["axispro.relance"]
 
+# Méthode SC-01 V2.0 (19.0.1.7.0) : versions figées de l'évaluation.
+SC01_MODELS = ["axispro.version"]
+
 # Liste complète, lue par eguitra_base (eguitra.setup.audited_models).
-AUDITED_MODELS = CORE_MODELS + EXPERT_MODELS + COMPARTMENT_MODELS + RELANCE_MODELS
+AUDITED_MODELS = CORE_MODELS + EXPERT_MODELS + COMPARTMENT_MODELS + RELANCE_MODELS + SC01_MODELS

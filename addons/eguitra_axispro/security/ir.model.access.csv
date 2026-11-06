@@ -42,3 +42,26 @@ access_assignment_cabinet,équipe des dossiers cabinet,model_axispro_assignment,
 access_assignment_direction,équipe des dossiers direction,model_axispro_assignment,eguitra_base.group_profile_direction,1,0,0,0
 access_relance_cabinet,relances du porteur cabinet,model_axispro_relance,eguitra_base.group_profile_cabinet,1,1,1,0
 access_relance_direction,relances du porteur direction,model_axispro_relance,eguitra_base.group_profile_direction,1,0,0,0
+access_policy_lecteur,politique lecteur,model_axispro_policy,eguitra_base.group_profile_lecteur,1,0,0,0
+access_gate_lecteur,gates lecteur,model_axispro_gate,eguitra_base.group_profile_lecteur,1,0,0,0
+access_domain_lecteur,domaines lecteur,model_axispro_domain,eguitra_base.group_profile_lecteur,1,0,0,0
+access_criterion_lecteur,critères lecteur,model_axispro_criterion,eguitra_base.group_profile_lecteur,1,0,0,0
+access_document_type_lecteur,pièces standard lecteur,model_axispro_document_type,eguitra_base.group_profile_lecteur,1,0,0,0
+access_dossier_lecteur,dossiers lecteur,model_axispro_dossier,eguitra_base.group_profile_lecteur,1,0,0,0
+access_evaluation_lecteur,évaluations lecteur,model_axispro_evaluation,eguitra_base.group_profile_lecteur,1,0,0,0
+access_document_lecteur,data room lecteur,model_axispro_document,eguitra_base.group_profile_lecteur,1,0,0,0
+access_message_lecteur,échanges lecteur,model_axispro_message,eguitra_base.group_profile_lecteur,1,0,0,0
+access_review_lecteur,comités lecteur,model_axispro_review,eguitra_base.group_profile_lecteur,1,0,0,0
+access_plan_lecteur,modèle financier lecteur,model_axispro_plan,eguitra_base.group_profile_lecteur,1,0,0,0
+access_plan_line_lecteur,hypothèses financières lecteur,model_axispro_plan_line,eguitra_base.group_profile_lecteur,1,0,0,0
+access_risk_lecteur,risques lecteur,model_axispro_risk,eguitra_base.group_profile_lecteur,1,0,0,0
+access_action_lecteur,plan d'actions lecteur,model_axispro_action,eguitra_base.group_profile_lecteur,1,0,0,0
+access_funding_lecteur,financements lecteur,model_axispro_funding,eguitra_base.group_profile_lecteur,1,0,0,0
+access_journal_lecteur,journal lecteur,model_axispro_journal,eguitra_base.group_profile_lecteur,1,0,0,0
+access_compartment_lecteur,compartiments lecteur,model_axispro_compartment,eguitra_base.group_profile_lecteur,1,0,0,0
+access_assignment_lecteur,équipe des dossiers lecteur,model_axispro_assignment,eguitra_base.group_profile_lecteur,1,0,0,0
+access_relance_lecteur,relances du porteur lecteur,model_axispro_relance,eguitra_base.group_profile_lecteur,1,0,0,0
+access_version_cabinet,versions figées cabinet,model_axispro_version,eguitra_base.group_profile_cabinet,1,0,0,0
+access_version_direction,versions figées direction,model_axispro_version,eguitra_base.group_profile_direction,1,0,0,0
+access_version_lecteur,versions figées lecteur,model_axispro_version,eguitra_base.group_profile_lecteur,1,0,0,0
+access_deposit_link_cabinet,liens de dépôt cabinet,model_axispro_deposit_link,eguitra_base.group_profile_cabinet,1,1,1,0

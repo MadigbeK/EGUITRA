@@ -21,12 +21,19 @@ Ce que le classeur ne dit pas se déduit ou se reprend :
 - codes des critères et des pièces, aides, livrables, indicateurs du modèle financier et
   rattachements des pièces aux critères : repris de la version précédente de la grille quand le
   libellé est le même, pour que les dossiers, exports et analyses gardent leurs repères.
+
+La version 2.0 de l'outil (référence depuis le 4 novembre 2026 ; l'onglet Parametres porte sa « Règle V2 »)
+s'importe telle quelle en méthode SC-01 V2.0 (scoring.compute_sc01) : barème, gate à partir duquel
+« Incomplet » bloque un knock-out et seuil DSCR du classeur, noms des gates de l'annexe C du cahier des
+charges (le nom anglais du classeur passe dans l'aide du gate). Elle n'a pas de compartiments ni de documents
+à produire : ils viennent, par libellé de critère, de la version 3 de l'outil (complément) ou de la version
+en vigueur ; les critères SPV / Gouvernance, absents de la version 3, vont à SC01_FALLBACK_COMPARTMENT.
 """
 
 import re
 import unicodedata
 
-from .scoring import accord
+from .scoring import METHOD_SC01, accord
 
 RULE_KEYWORDS = (  # le premier trouvé l'emporte : « Structuration financière et Financial Close » ferme le mandat
     ("closing", ("financial close", "cloture financiere")),
@@ -51,6 +58,12 @@ DOMAIN_STEMS = ("promot", "fonci", "march", "commerc", "reglement", "spv", "gouv
 CLASS_KEYS = (("bankable", "threshold_bankable"), ("apd ready", "go_threshold"),
               ("conditional", "conditional_threshold"), ("hold", "threshold_hold"))
 POINTS = {"disponible et exploitable": 1.0, "incomplet a actualiser": 0.5, "non disponible": 0.0}
+POINT_FIELDS = {"disponible et exploitable": "points_met", "incomplet a actualiser": "points_partial",
+                "non disponible": "points_not_met"}
+# Noms des gates de l'annexe C du cahier des charges, repris sur les écrans.
+SC01_GATE_NAMES = ("Intake", "Préqualification", "Préfaisabilité", "APD Readiness", "Bankability Review",
+                   "Due Diligence", "SPV & Financement", "Financial Close")
+SC01_FALLBACK_COMPARTMENT = "C5 — Juridique et corporate"
 SCORING_COLUMNS = {
     "compartiment": ("compartiment",),
     "domaine": ("domaine",),
@@ -134,6 +147,8 @@ def parse_parameters(rows):
     col_status, col_points = header.index("statut"), header.index("points")
     col_threshold = next((i for i, h in enumerate(header) if h.startswith("seuil")), None)
     col_class = next((i for i, h in enumerate(header) if h.startswith("classification")), None)
+    # La méthode se lit d'abord : en V2.0, le barème du classeur s'applique tel quel.
+    version2 = any(plain(row[col_status]).startswith("regle v2") for row in rows[1:] if col_status < len(row))
     for row in rows[1:]:
         if _notice(row):
             break
@@ -141,10 +156,16 @@ def parse_parameters(rows):
         points = row[col_points] if col_points < len(row) else None
         if status and isinstance(points, (int, float)):
             if status == "non applicable":
-                settings["exclude_na"] = float(points) != 1.0
+                settings["exclude_na"] = version2 or float(points) != 1.0
+            elif version2 and status in POINT_FIELDS:
+                settings[POINT_FIELDS[status]] = float(points)
             elif status in POINTS and float(points) != POINTS[status]:
                 errors.append(f"Parametres : « {row[col_status]} » vaut {points:g} {accord(float(points), 'point')} dans le classeur ; la "
                               f"méthode de la plateforme lui donne {POINTS[status]:g}.")
+            elif version2 and status.startswith("statut incomplet bloquant"):
+                settings["ko_partial_from_gate"] = int(points)
+            elif version2 and status.startswith("seuil dscr"):
+                settings["dscr_target"] = float(points)
         if col_threshold is None or col_class is None or col_class >= len(row):
             continue
         label, value = plain(row[col_class]), row[col_threshold] if col_threshold < len(row) else None
@@ -153,7 +174,28 @@ def parse_parameters(rows):
                 if key in label:
                     settings[field] = float(value)
                     break
+    if version2:
+        settings["method"] = METHOD_SC01
     return settings, errors
+
+
+def parse_complement(sheets):
+    """Repères d'une version antérieure de l'outil (V3) : {clé du libellé : (compartiment, document à produire)}."""
+    rows = (sheets or {}).get("scoring") or []
+    if not rows:
+        return {}
+    col = _columns([plain(h) for h in rows[0]], {"compartiment": ("compartiment",), "critere": ("critere",),
+                                                 "document": ("etude",)})
+    found = {}
+    if "critere" not in col:
+        return found
+    for values in rows[1:]:
+        if _notice(values):
+            break
+        cells = {k: _text(values[i]) if i < len(values) else "" for k, i in col.items()}
+        if cells["critere"]:
+            found[label_key(cells["critere"])] = (cells.get("compartiment", ""), cells.get("document", ""))
+    return found
 
 
 def parse_gates(rows):
@@ -217,16 +259,23 @@ def compartment(value):
     return None, text
 
 
-def grid_rows(sheets, blank, previous=None):
+def grid_rows(sheets, blank, previous=None, complement=None):
     """Lignes du format d'import tirées de l'outil du cabinet.
 
     sheets : feuilles du classeur (files.workbook_sheets) ; blank : fabrique d'une ligne vide du
-    format d'import ; previous : repères de la version précédente (policy._inheritance) ou None.
-    Renvoie (lignes [(repère, ligne)], réglages de la politique, erreurs).
+    format d'import ; previous : repères de la version précédente (policy._inheritance) ou None ;
+    complement : feuilles de la version 3 de l'outil, pour une grille V2.0 (compartiments, documents à
+    produire). Renvoie (lignes [(repère, ligne)], réglages de la politique, erreurs).
     """
     previous = previous or {"criteria": {}, "pieces": {}, "domains": {}}
     settings, errors = parse_parameters(sheets.get("parametres") or [])
-    settings.update({"ko_partial_blocks": False, "weighting": "flat"})
+    version2 = settings.get("method") == METHOD_SC01
+    extra = parse_complement(complement) if version2 else {}
+    if version2:
+        # Ni requalification ni preuve exigée (RG-06-03) ; le knock-out incomplet se règle par gate.
+        settings.update({"ko_partial_blocks": True, "evidence_check": False, "expiry_check": False, "weighting": "flat"})
+    else:
+        settings.update({"ko_partial_blocks": False, "weighting": "flat"})
     settings.setdefault("exclude_na", False)
     rows = []
 
@@ -234,6 +283,12 @@ def grid_rows(sheets, blank, previous=None):
     if not gates:
         errors.append("Stage_Gate : aucun gate « Gate 0 », « Gate 1 »… trouvé.")
     gate_codes = {g["code"] for g in gates}
+    if version2:
+        for g in gates:
+            index = int(g["code"][1:])
+            if index < len(SC01_GATE_NAMES):
+                g["aide"] = g["libelle"]
+                g["libelle"] = SC01_GATE_NAMES[index]
 
     scoring = sheets.get("scoring") or []
     header = [plain(h) for h in scoring[0]] if scoring else []
@@ -272,6 +327,15 @@ def grid_rows(sheets, blank, previous=None):
         domains[domain]["criteria"].append(label_key(label))
         criteria.append((n, label, domain, gate_code, values))
 
+    if version2:
+        # Compartiment d'un domaine : celui de la plupart de ses critères dans le complément ou la version en vigueur.
+        for d in domains.values():
+            found = [extra[k][0] if extra.get(k, ("",))[0] else previous["criteria"].get(k, {}).get("compartment")
+                     for k in d["criteria"]]
+            found = [c for c in found if c]
+            d["compartment"] = d["compartment"] or (max(set(found), key=found.count) if found
+                                                    else SC01_FALLBACK_COMPARTMENT)
+
     used = {v["code"] for v in previous["criteria"].values()}
     numbers = [int(m.group(1)) for c in used if (m := re.match(r"^C(\d+)$", c))]
     counter = max(numbers, default=0)
@@ -296,10 +360,10 @@ def grid_rows(sheets, blank, previous=None):
         targets = [d["code"] for name, d in domains.items() if any(s in plain(name) for s in g["stems"])]
         row.update({k: g[k] for k in ("code", "libelle", "regle", "entree", "livrable", "passage", "seuil_attente",
                                        "seuil_go", "portee", "completude_min")},
-                   type="gate", domaines=";".join(targets))
+                   type="gate", domaines=";".join(targets), aide=g.get("aide", ""))
         if g["regle"] == "prequalification":
             row["seuil_go"] = f"{settings.get('conditional_threshold', 50.0):g}"
-        if g.get("dscr"):
+        if g.get("dscr") and not version2:
             settings["dscr_target"] = g["dscr"]
         rows.append((g["line"], row))
 
@@ -321,12 +385,14 @@ def grid_rows(sheets, blank, previous=None):
         requirement = cell(values, "exigence")
         ko = plain(cell(values, "eliminatoire"))
         row = blank()
+        evidence = not version2 and (ko in ("oui", "1", "x") or plain(requirement) == "bloquant")
         row.update(
             type="critere", code=codes[key], libelle=label, domaine=domains[domain]["code"], gate=gate_code,
             poids=cell(values, "poids"), critique=cell(values, "critique"), eliminatoire=cell(values, "eliminatoire"),
-            preuve="oui" if ko in ("oui", "1", "x") or plain(requirement) == "bloquant" else "non",
-            exigence=requirement, bancabilite=cell(values, "bancabilite") or "oui",
-            aide=known.get("guidance") or "", livrable=known.get("deliverable") or "",
+            preuve="oui" if evidence else "non",
+            exigence=requirement, bancabilite=cell(values, "bancabilite") or ("non" if version2 else "oui"),
+            aide=known.get("guidance") or "",
+            livrable=(extra[key][1] if key in extra and len(extra[key]) > 1 else "") or known.get("deliverable") or "",
             indicateur=known.get("indicator") or "", seuil=known.get("indicator_threshold") or "",
             seuil_partiel=known.get("indicator_partial") or "",
         )

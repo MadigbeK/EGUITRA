@@ -5,3 +5,5 @@ from . import timesheet
 from . import plan
 from . import pilotage
 from . import relance
+from . import sc01
+from . import depot

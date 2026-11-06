@@ -20,10 +20,11 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, csv_text, workbook_rows,
 from ..engine import INDICATORS
 from ..models.dossier import HYPOTHESES, RECOMMENDATIONS, STATUSES
 from ..models.pilotage import ACTION_OPEN, ACTION_STATES, RISK_CATEGORIES, risk_level
-from ..scoring import DECISIONS, REQUIREMENTS, RULES, fnum, pluriel
+from ..models.sc01 import OBSERVATION_STATUSES, RG_OBSERVATION
+from ..scoring import DECISIONS, METHOD_SC01, REQUIREMENTS, RULES, fnum, pluriel
 from .common import dossier_detail
 
-READ = ("admin", "direction", "cabinet")
+READ = ("admin", "direction", "cabinet", "lecteur")
 WRITE = ("cabinet",)
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 EXPORT_FORMAT = "axispro-dossier"
@@ -539,6 +540,7 @@ class EguitraAxisproRapports(http.Controller):
         by_code = {e.criterion_id.code.upper(): e for e in dossier.evaluation_ids}
         by_label = {_label_key(e.criterion_id.name): e for e in dossier.evaluation_ids}
         statuses = dict(STATUSES)
+        sc01 = dossier.policy_id.method == METHOD_SC01
         changes, unknown, errors = [], [], []
         for n, row in rows:
             code = str(row.get("code") or "").strip().upper()
@@ -573,6 +575,11 @@ class EguitraAxisproRapports(http.Controller):
                     continue
                 if due != evaluation.due_date:
                     values["due_date"] = due
+            # RG-07-02 : ligne signalée dès l'aperçu, rien n'est appliqué.
+            if sc01 and values and values.get("status", evaluation.status) in OBSERVATION_STATUSES \
+                    and not (values.get("comment", evaluation.comment) or "").strip():
+                errors.append(f"Ligne {n} ({code}) : {RG_OBSERVATION}")
+                continue
             if values:
                 # Compartiment confié à un autre consultant : signalé dès l'aperçu, rien n'est appliqué.
                 refusal = dossier._evaluation_refusal(evaluation.criterion_id.domain_id.compartment_id)

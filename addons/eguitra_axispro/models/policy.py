@@ -26,7 +26,7 @@ from odoo.addons.eguitra_api.files import XLSX_OPTIONS, workbook_rows, workbook_
 
 from .. import grille_cabinet
 from ..engine import INDICATORS, MONEY, indicator_unit, suggest
-from ..scoring import DEFAULT_POLICY, REQUIREMENTS, RULES, accord, pluriel
+from ..scoring import DEFAULT_POLICY, METHOD_PLATFORM, METHOD_SC01, METHODS, REQUIREMENTS, RULES, accord, pluriel
 
 STATUS_VALUES = {"met": 1.0, "partial": 0.5, "not_met": 0.0}
 GRID_COLUMNS = ("type", "code", "libelle", "domaine", "gate", "poids", "critique", "eliminatoire", "preuve", "aide")
@@ -63,6 +63,15 @@ class AxisproPolicy(models.Model):
     state = fields.Selection([("draft", "Brouillon"), ("active", "En vigueur"), ("archived", "Archivée")],
                              default="draft", required=True)
     date_active = fields.Date("En vigueur depuis", readonly=True)
+    method = fields.Selection(list(METHODS.items()), "Méthode d'évaluation", default=METHOD_PLATFORM, required=True)
+    # Paramètres de la méthode SC-01 V2.0 (section 7.7), sans effet sur l'autre méthode.
+    ko_partial_from_gate = fields.Integer("Incomplet bloquant à partir du gate", default=3)
+    points_met = fields.Float("Points « Disponible et exploitable »", default=1.0)
+    points_partial = fields.Float("Points « Incomplet / à actualiser »", default=0.5)
+    points_not_met = fields.Float("Points « Non disponible »", default=0.0)
+    relance_days = fields.Integer("Délai de relance (jours)", default=14)
+    max_file_mb = fields.Integer("Taille maximale d'une pièce (Mo)", default=20)
+    source_checksum = fields.Char("Empreinte du classeur importé", copy=False, readonly=True)
     threshold_bankable = fields.Float("Seuil BANKABLE CANDIDATE (sur 100)", default=80.0)
     go_threshold = fields.Float("Seuil APD READY (sur 100)", default=65.0)
     conditional_threshold = fields.Float("Seuil CONDITIONAL GO (sur 100)", default=50.0)
@@ -89,15 +98,24 @@ class AxisproPolicy(models.Model):
         return self.search([("company_id", "=", company.id), ("state", "=", "active")], limit=1)
 
     def scoring_settings(self):
-        """Réglages passés à la méthode d'évaluation (scoring.compute)."""
+        """Réglages passés à la méthode d'évaluation (scoring.compute). Les décisions scellées les contiennent
+        (review._canonical) : l'ancienne méthode garde exactement les mêmes clés."""
         self.ensure_one()
-        return {
+        settings = {
             "weighting": self.weighting, "ko_partial_blocks": self.ko_partial_blocks,
             "evidence_check": self.evidence_check, "exclude_na": self.exclude_na, "expiry_check": self.expiry_check,
             "threshold_bankable": self.threshold_bankable, "threshold_apd": self.go_threshold,
             "threshold_conditional": self.conditional_threshold, "threshold_hold": self.threshold_hold,
             "dscr_target": self.dscr_target or DEFAULT_POLICY["dscr_target"],
         }
+        if self.method == METHOD_SC01:
+            settings.update({
+                "method": self.method, "ko_partial_from_gate": self.ko_partial_from_gate,
+                "points_met": self.points_met, "points_partial": self.points_partial,
+                "points_not_met": self.points_not_met, "relance_days": self.relance_days,
+                "max_file_mb": self.max_file_mb,
+            })
+        return settings
 
     def integrity(self):
         """Contrôle de cohérence de la grille, affiché avant la mise en vigueur."""
@@ -166,6 +184,8 @@ class AxisproPolicy(models.Model):
                 "indicator_threshold": f"{c.indicator_threshold:g}" if c.indicator else "",
                 "indicator_partial": f"{c.indicator_partial:g}" if c.indicator and c.indicator_has_partial else "",
                 "capex": c == self.capex_criterion_id,
+                "compartment": (f"{c.domain_id.compartment_id.code} — {c.domain_id.compartment_id.name}"
+                                if c.domain_id.compartment_id else ""),
             } for c in self.criterion_ids
         }
         pieces = {
@@ -177,9 +197,10 @@ class AxisproPolicy(models.Model):
         return {"criteria": criteria, "pieces": pieces}
 
     @api.model
-    def import_grid(self, company, name, filename, content, go=None, conditional=50.0, notes=None):
+    def import_grid(self, company, name, filename, content, go=None, conditional=50.0, notes=None, complement=None):
         """Nouvelle version de la politique depuis un classeur (XLSX ou CSV, colonnes GRID_COLUMNS et,
         au choix, OPTIONAL_COLUMNS), ou depuis l'outil de scoring du cabinet tel quel (grille_cabinet.py).
+        complement : contenu de la version 3 de l'outil, pour les compartiments d'un outil V2.0.
 
         Lignes de type « gate », « domaine », « critere » et « piece ». Le poids d'un critère est sa
         pondération dans le score ; celui d'un domaine ne sert qu'en pondération par domaine. Une
@@ -195,7 +216,8 @@ class AxisproPolicy(models.Model):
             reference = self.active_policy(company) or last
             rows, settings, problems = grille_cabinet.grid_rows(
                 sheets, lambda: dict.fromkeys(GRID_COLUMNS + OPTIONAL_COLUMNS, ""),
-                reference._inheritance() if reference else None)
+                reference._inheritance() if reference else None,
+                workbook_sheets(complement) if complement else None)
             if problems:
                 raise UserError("Outil de scoring refusé :\n" + "\n".join(problems[:20]))
             method = True
