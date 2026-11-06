@@ -15,11 +15,15 @@
     "recette": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "EXPO_PUBLIC_ENVIRONMENT": "Recette" }
+      "env": {
+        "EXPO_PUBLIC_ENVIRONMENT": "Recette",
+        "EXPO_PUBLIC_API_URL": "https://recette.nimova.cloud/api/natif"
+      }
     },
     "production": {
       "android": { "buildType": "app-bundle" },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": { "EXPO_PUBLIC_API_URL": "https://finance.nimova.cloud/api/natif" }
     }
   },
   "submit": {

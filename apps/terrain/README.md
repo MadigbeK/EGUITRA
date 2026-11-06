@@ -111,6 +111,10 @@ lui-même :
 
 Seul `apps/terrain` est envoyé à Expo (`.easignore` à la racine du dépôt).
 
+Les autres profils portent leur adresse dans `eas.json`, sans laquelle l'application refuse de
+démarrer : `recette` (APK sur `recette.nimova.cloud`) et `production` (paquet sur
+`finance.nimova.cloud`).
+
 ## Organisation
 
 | Dossier | Rôle |
