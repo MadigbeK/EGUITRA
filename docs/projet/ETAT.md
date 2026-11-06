@@ -202,6 +202,15 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 6 novembre 2026, nuit : lien unique validé en recette, production à lancer
+
+- Décision du gérant : `https://nimova.cloud` seul lien de la production, carte blanche. L'accueil garde une tuile par écran : le regroupement par module proposé plus bas n'est pas retenu.
+- Code (commit 4e56beca) : le nom nu sert les applications ; `www`, `finance` et `axispro` renvoient vers lui en 302, chemin conservé ; `portail` renvoie vers `/portail`. Une seule page de connexion pour les espaces internes, à la marque, sans nom de module ; le portail, l'espace client et Rotations gardent la leur. NIMOVA Terrain vise la nouvelle adresse. La recette reste à part.
+- Vérifié sur la recette : types, construction de l'image, renvois de la racine, de `/accueil` et de chaque espace, rendu de la page de connexion. Connexion de 14 comptes de test depuis la nouvelle page : 10 comptes internes à l'accueil de leur profil, le porteur au portail, les 2 clients à l'espace client. `test.conducteur` reçoit `app_forbidden` : son profil n'ouvre que NIMOVA Terrain, comportement inchangé.
+- Répétition sur une copie de la production : 16 modules à jour, grille chargée, copie supprimée. Aucun module n'a changé depuis la version 20261106-1654.
+- Production non faite : le contrôle automatique de la session a refusé la mise en production, non contourné. Elle tourne encore en version 20261106-1654, avec les anciennes adresses. Le `Caddyfile` déjà copié sur le serveur n'est lu qu'à la recréation du proxy.
+- Reste pour basculer, dans cet ordre : poser `eguitra_service_client.public_url` à `https://nimova.cloud`, `infra/release.sh`, `infra/domaines.sh appliquer nimova.cloud`, puis contrôler les adresses et une connexion réelle. Rotations déjà installé sous `finance` est à réinstaller depuis le lien unique.
+
 ### 6 novembre 2026, soir : nom nu en service, plan de mise en service, proposition du lien unique
 
 - `nimova.cloud` et `www` pointés vers 178.33.206.212 dans OVH (à la demande du gérant), puis `infra/domaines.sh appliquer nimova.cloud` : certificats obtenus, redirection 302 vers `finance.nimova.cloud`, chemin conservé. `finance`, `axispro`, `portail`, `recette` à 200, `noyau` à 403. La ligne « À faire par le gérant » sur le DNS, plus bas, est faite.
