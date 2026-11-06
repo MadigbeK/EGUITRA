@@ -35,7 +35,8 @@ FOLLOW_UP_DAYS = 14
 
 
 def _record(model, record_id, label):
-    record = request.env[model].browse(record_id).exists()
+    # Recherche sous l'identité de l'utilisateur : hors de son périmètre, l'enregistrement n'existe pas pour lui.
+    record = request.env[model].search([("id", "=", record_id)], limit=1)
     if not record:
         raise ApiError(404, "not_found", f"{label} introuvable.")
     return record

@@ -412,10 +412,11 @@ class TestAxispro(ApiCase):
                                    company_ids=[(6, 0, self.cabinet.ids)])
         relais = self.open_session("consultant.relais", app="axispro")["access_token"]
         status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/lead", {"user_id": second.id}, token=relais)
-        self.assertEqual(status, 403, "Seul le responsable en place confie le dossier")
+        self.assertEqual(status, 404, "Hors de ses projets, le dossier n'existe pas pour l'évaluateur")
         status, body = self.call("POST", f"/axispro/dossiers/{dossier.id}/lead", {"user_id": second.id}, token=token)
-        self.assertEqual((status, body["consultant_id"]), (200, second.id), body)
+        self.assertEqual((status, body.get("handed_over")), (200, True), "Le dossier confié sort de ses projets")
         self.env.invalidate_all()
+        self.assertEqual(dossier.consultant_id, second)
         entry = dossier.journal_ids.filtered(lambda j: j.note == "Responsable du dossier")
         self.assertEqual((entry.before, entry.after), (self.consultant.name, second.name))
 
