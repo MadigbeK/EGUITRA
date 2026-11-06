@@ -90,14 +90,14 @@ export function PlanTrajet({ rotationId, onChange }: PlanTrajetProps) {
   async function valider() {
     setMessage(null);
     const ok = await demanderConfirmation(
-      "Le motif V08 tombe pour cette rotation. Une modification ultérieure du plan le remet à valider ; la validation est journalisée.",
+      "Le plan de trajet ne bloque plus cette rotation. Une modification ultérieure du plan le remet à valider ; la validation est journalisée.",
       { titre: `Valider le plan de trajet de ${vehicule} ?`, action: "Valider le plan" },
     );
     if (!ok) return;
     setEnvoi(true);
     try {
       maj(await apiSend<RotationJourney>("POST", `/hsseq/rotations/${rotationId}/journey/validate`, {}));
-      setMessage({ tone: "ok", texte: "Plan validé : le motif V08 est levé pour cette rotation." });
+      setMessage({ tone: "ok", texte: "Plan validé : il ne bloque plus le départ de cette rotation." });
     } catch (e) {
       setMessage({ tone: "danger", texte: refus(e, "La validation n'a pas abouti.") });
       // Le plan a pu changer entre-temps (écarts, rotation partie) : la fiche est relue.
@@ -150,7 +150,7 @@ export function PlanTrajet({ rotationId, onChange }: PlanTrajetProps) {
         />
       ) : (
         <>
-          {j ? <LecturePlan ligne={l} plan={j} /> : <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">Aucun plan de trajet pour cette rotation : le motif V08 reste ouvert tant qu&apos;un plan conforme n&apos;est pas validé.</p>}
+          {j ? <LecturePlan ligne={l} plan={j} /> : <p className="mt-3 text-[13.5px] leading-relaxed text-ink-2">Aucun plan de trajet pour cette rotation : le départ reste bloqué tant qu&apos;un plan conforme n&apos;est pas validé.</p>}
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
             <p className="max-w-[52ch] text-[12.5px] leading-snug text-muted">
@@ -469,7 +469,7 @@ function SaisiePlan({ ligne, onAnnuler, onEnregistre }: { ligne: RotationJourney
       <h4 id={`${id}-titre`} ref={titre} tabIndex={-1} className="text-[14px] font-semibold text-ink outline-none">
         {ligne.journey ? "Modifier le plan de trajet" : "Établir le plan de trajet"}
       </h4>
-      {ligne.journey?.status === "validated" && <Notice tone="warn">Ce plan est validé : modifié puis enregistré, il revient à valider, et le motif V08 se rouvre jusqu&apos;à la nouvelle validation.</Notice>}
+      {ligne.journey?.status === "validated" && <Notice tone="warn">Ce plan est validé : modifié puis enregistré, il revient à valider, et le départ est de nouveau bloqué jusqu&apos;à la nouvelle validation.</Notice>}
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Départ prévu" hint="Heure de Conakry." error={erreurDepart}>

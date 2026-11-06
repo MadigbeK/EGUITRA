@@ -213,7 +213,7 @@ export function ListeEvenements() {
     <div>
       <PageHeader
         title="Événements"
-        subtitle="Accidents, presque-accidents, situations dangereuses, déversements et atteintes à la sûreté : de la déclaration à la clôture, avec la criticité, l'enquête et les actions."
+        subtitle="Déclarez tout événement, classez-le, enquêtez, puis suivez ses actions jusqu'à la clôture."
         actions={
           <>
             {/* Export du registre : profils du cockpit ; l'auditeur lit sans exporter (refusé par le noyau). */}

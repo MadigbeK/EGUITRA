@@ -10,7 +10,7 @@ export default function Page() {
     <div>
       <PageHeader
         title="Audits et conformité"
-        subtitle="Programme d'audits et constats classés écart majeur, écart mineur ou observation, avec leurs actions ; registre des exigences légales, normatives et contractuelles des donneurs d'ordre, leur preuve et leur revue ; éléments de la revue de direction. Un audit ne se clôt qu'une fois chaque écart majeur couvert par une action."
+        subtitle="Planifiez les audits, couvrez chaque écart par une action et tenez les exigences à jour."
       />
       <Suspense fallback={<Loading label="Chargement des audits…" />}>
         <Conformite />

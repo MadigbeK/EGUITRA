@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CheckCheck, ChevronLeft, ChevronRight, FileText, Plus, Smartphone, Truck } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, Select, Textarea, cx, demanderConfirmation, type Tri } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etapes, Etat, Field, Input, Modal, Notice, Select, Textarea, cx, demanderConfirmation, type Tri } from "@/components/ui";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, nombreIllisible, pluriel } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
-import { ChampNombre, ETAT_ROTATION, INSECABLE, TauxMarge, fmtM3, fmtVolume } from "./commun";
+import { ChampNombre, ETAPES_ROTATION, ETAT_ROTATION, INSECABLE, TauxMarge, doitPartir, etapeRotation, fmtM3, fmtVolume } from "./commun";
 import { parseNumber, type DepartureIssue, type Ref, type Referentials } from "./types";
 
 // Profils des routes du noyau (addons/eguitra_transport/controllers/transport.py) : saisie et validation
@@ -27,6 +27,10 @@ interface Rotation {
   /** Départ permis à l'utilisateur (admin, exploitation ; sites du chef de parc avec HSSEQ) et, sinon, pourquoi. */
   can_depart: boolean;
   depart_refusal: string | null;
+  /** Départ exigé avant la validation (verrou HSSEQ en service pour la rotation) ; absent : exigé. */
+  departure_required?: boolean;
+  /** Départ donné (une rotation validée puis remise en saisie le garde) ; absent : pas encore partie. */
+  departed_at?: string | null;
   date_loading: string;
   vehicle: Ref;
   driver: Ref | null;
@@ -34,8 +38,9 @@ interface Rotation {
   route: Ref;
   product: string;
   product_label: string;
+  /** N° du bon de livraison signé par le client. */
   delivery_note: string | null;
-  /** N° de bon du dépôt : colonne « N° de bon » de la facture du client. */
+  /** N° du bon de chargement du dépôt : colonne « N° de bon » de la facture du client. */
   loading_voucher?: string | null;
   volume_loaded: number;
   volume_delivered: number;
@@ -102,9 +107,20 @@ const margeLue = (r: Rotation) => (r.margin_estimated ? r.estimated_margin : r.m
  */
 const tauxLu = (r: Rotation) => (!r.revenue ? null : r.margin_estimated ? r.estimated_margin_rate : r.margin_rate);
 
-/** Rotations : saisie, validation, facturation ; marge estimée tant qu'aucun frais n'est saisi. */
-export function Rotations() {
-  const [state, setState] = useState("draft,en_route,done");
+/** Filtre de la liste par défaut : tout ce qui reste à traiter. */
+export const A_TRAITER = "draft,en_route,done";
+
+/**
+ * Rotations : saisie, départ, validation, facturation ; marge estimée tant qu'aucun frais n'est saisi.
+ * `statut` et `onStatut` : filtre tenu par l'écran appelant (compteurs de l'accueil), sinon par la liste.
+ */
+export function Rotations({ statut, onStatut }: { statut?: string; onStatut?: (s: string) => void } = {}) {
+  const [statutLocal, setStatutLocal] = useState(A_TRAITER);
+  const state = statut ?? statutLocal;
+  const setState = (s: string) => {
+    setStatutLocal(s);
+    onStatut?.(s);
+  };
   // Plus récentes d'abord, comme le noyau sans tri demandé.
   const [tri, setTri] = useState<Tri>({ key: "date_loading", dir: -1 });
   const [page, setPage] = useState(0);
@@ -119,6 +135,11 @@ export function Rotations() {
   }, [data]);
   const [enCours, setEnCours] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
+  // Filtre changé par l'écran appelant (compteur de l'accueil) : retour à la première page.
+  useEffect(() => {
+    setPage(0);
+    setSelected([]);
+  }, [statut]);
   const [creating, setCreating] = useState(false);
   const [ouverte, setOuverte] = useState<number | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "danger"; text: string } | null>(null);
@@ -128,10 +149,11 @@ export function Rotations() {
   const selection = saisie || facturation;
   const rows = data?.items ?? [];
   const chosen = rows.filter((r) => selected.includes(r.id));
-  // Une rotation se valide par un autre compte que celui qui l'a saisie.
-  const aValider = (r: Rotation) => r.state === "draft" || r.state === "en_route";
+  // Une rotation se valide une fois partie (si le verrou l'exige), par un autre compte que celui qui l'a saisie.
+  const aValider = (r: Rotation) => r.state === "en_route" || (r.state === "draft" && !doitPartir(r));
   const validables = chosen.filter((r) => aValider(r) && !r.self_entered);
   const siennes = chosen.filter((r) => aValider(r) && r.self_entered).length;
+  const pasParties = chosen.filter((r) => r.state === "draft" && doitPartir(r)).length;
   const basculer = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   async function run(action: "validate" | "invoice" | "depart") {
@@ -150,13 +172,13 @@ export function Rotations() {
             refus.push(motifs?.length ? motifs.filter((m) => m.severity === "block").map((m) => m.label).join(" ") : `${r.name ?? r.vehicle.name} : ${e instanceof ApiError ? e.message : "départ impossible"}`);
           }
         }
-        setMessage(refus.length ? { tone: "danger", text: `Départ refusé. ${refus.join(" ")}` } : { tone: "ok", text: "Rotations parties en route." });
+        setMessage(refus.length ? { tone: "danger", text: `Départ refusé. ${refus.join(" ")}` } : { tone: "ok", text: "Rotations parties : saisissez la livraison à leur retour." });
       } else if (action === "validate") {
         await apiSend("POST", "/transport/rotations/validate", { ids: validables.map((r) => r.id) });
-        setMessage({ tone: "ok", text: `${pluriel(validables.length, "rotation validée", "rotations validées")}.${siennes ? ` ${pluriel(siennes, "rotation saisie par vous reste", "rotations saisies par vous restent")} à valider par un autre compte.` : ""}` });
+        setMessage({ tone: "ok", text: `${pluriel(validables.length, "rotation validée", "rotations validées")}.${siennes ? ` ${pluriel(siennes, "rotation saisie par vous reste", "rotations saisies par vous restent")} à valider par un autre compte.` : ""}${pasParties ? ` ${pluriel(pasParties, "rotation pas encore partie reste", "rotations pas encore parties restent")} à faire partir.` : ""}` });
       } else {
         const res = await apiSend<{ invoices: Array<{ name: string | null; partner: Ref | null; amount_total: number }>; claims: unknown[]; unclaimed: Array<{ rotation: string; driver: Ref | null; amount: number }> }>("POST", "/transport/invoice", { rotation_ids: chosen.filter((r) => r.state === "done").map((r) => r.id) });
-        const claims = res.claims.length ? ` ${pluriel(res.claims.length, "créance sur chauffeur", "créances sur chauffeur")} en opérations diverses, à valider dans Journaux et OD.` : "";
+        const claims = res.claims.length ? ` ${pluriel(res.claims.length, "créance sur chauffeur", "créances sur chauffeur")} en opérations diverses, à valider dans Écritures comptables.` : "";
         const unclaimed = res.unclaimed.length ? ` Sans fiche tiers, créance à passer à la main : ${res.unclaimed.map((u) => `${u.driver?.name ?? "chauffeur non renseigné"} (${u.rotation}, ${fmtGNF(u.amount)})`).join(", ")}.` : "";
         setMessage({ tone: res.unclaimed.length ? "danger" : "ok", text: `${pluriel(res.invoices.length, "facture créée", "factures créées")} en brouillon, à valider dans Ventes.${claims}${unclaimed}` });
       }
@@ -170,7 +192,7 @@ export function Rotations() {
   }
 
   return (
-    <div className="space-y-4">
+    <div id="liste-rotations" className="scroll-mt-6 space-y-4">
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
       {error && data && (
         <Notice tone="danger">
@@ -180,17 +202,17 @@ export function Rotations() {
       )}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <Field label="Statut">
-          <Select value={state} onChange={(e) => { setState(e.target.value); setPage(0); setSelected([]); }} options={[{ value: "draft,en_route,done", label: "À traiter (saisies, en route, à facturer)" }, { value: "draft", label: "Saisies à valider" }, { value: "en_route", label: "En route" }, { value: "done", label: "À facturer (validées)" }, { value: "invoiced", label: "Facturées" }, { value: "draft,en_route,done,invoiced,cancelled", label: "Toutes" }]} />
+          <Select value={state} onChange={(e) => { setState(e.target.value); setPage(0); setSelected([]); }} options={[{ value: A_TRAITER, label: "À traiter (saisies, en route, à facturer)" }, { value: "draft", label: "Saisies, à faire partir" }, { value: "en_route", label: "En route : livraison à saisir, à valider" }, { value: "done", label: "À facturer (validées)" }, { value: "invoiced", label: "Facturées" }, { value: "draft,en_route,done,invoiced,cancelled", label: "Toutes" }]} />
         </Field>
         {selection && (
           <div className="flex flex-wrap gap-2">
             {saisie && (
-              <Button loading={enCours} disabled={!chosen.some((r) => r.state === "draft" && r.can_depart)} onClick={() => run("depart")}>
-                <Truck className="h-4 w-4" /> Départ en route
+              <Button loading={enCours} disabled={!chosen.some((r) => r.state === "draft" && r.can_depart)} onClick={() => run("depart")} title="Fait partir les rotations saisies cochées ; le serveur vérifie le verrou de chacune">
+                <Truck className="h-4 w-4" /> Faire partir
               </Button>
             )}
             {saisie && (
-              <Button loading={enCours} disabled={!validables.length} onClick={() => run("validate")} title={siennes && !validables.length ? "Vos propres saisies se valident par un autre compte" : undefined}>
+              <Button loading={enCours} disabled={!validables.length} onClick={() => run("validate")} title={validables.length ? undefined : pasParties ? "Les rotations saisies doivent d'abord partir." : siennes ? "Vos propres saisies se valident par un autre compte." : undefined}>
                 <CheckCheck className="h-4 w-4" /> Valider la sélection
               </Button>
             )}
@@ -210,6 +232,12 @@ export function Rotations() {
       <Card padded={false}>
         {!data ? (
           <Etat error={error} onRetry={() => mutate()} />
+        ) : !data.total_count && state === A_TRAITER && saisie ? (
+          <Empty
+            title="Aucune rotation à traiter"
+            hint="Saisissez la rotation d'un camion chargé ; le chef de parc la fera partir."
+            action={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouvelle rotation</Button>}
+          />
         ) : (
           <DataTable
             rows={rows}
@@ -245,7 +273,16 @@ export function Rotations() {
                 </span>
               ) : <span className={r.margin < 0 ? "font-semibold text-danger" : ""}>{fmtInt(r.margin)}</span>) },
               { key: "margin_rate", label: "Taux", align: "right", render: (r) => <TauxMarge taux={tauxLu(r)} minimum={minimum} negative={margeLue(r) < 0} estime={r.margin_estimated} /> },
-              { key: "state", label: "Statut", render: (r) => <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge> },
+              // Sous le statut, l'étape à faire quand elle le précise (en route : livraison à saisir ou à valider).
+              { key: "state", label: "Statut", render: (r) => {
+                const etape = etapeRotation(r);
+                return (
+                  <span className="inline-flex flex-col items-start gap-0.5">
+                    <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge>
+                    {etape.rang !== null && etape.rang <= 4 && <span className="whitespace-nowrap text-[11.5px] text-muted">{etape.court}</span>}
+                  </span>
+                );
+              } },
             ]}
             footer={
               data.items.length > 0 ? (
@@ -354,22 +391,41 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
   }
 
   const titre = r ? `Rotation ${r.name ?? "en saisie"}` : "Rotation";
+  const etape = r ? etapeRotation(r) : null;
+  // Boutons impossibles à ce stade : grisés, avec leur raison écrite (au lieu d'un refus après clic).
+  // Le serveur décide toujours ; ces raisons reprennent ses règles (départ, validation).
+  const aPartir = Boolean(r && r.state === "draft" && !r.departed_at);
+  const raisonDepart = !r || !aPartir ? null
+    : !r.can_depart ? (r.depart_refusal ?? "Le chef de parc du site fait partir la rotation.")
+      : changes.length ? "Enregistrez d'abord vos modifications."
+        : r.departure_blockers?.some((b) => b.severity === "block") ? "Un motif bloque le départ : voyez ci-dessus quoi corriger."
+          : null;
+  const raisonValider = !r ? null
+    : r.state === "draft" && doitPartir(r) ? "La rotation doit d'abord partir."
+      : r.self_entered ? "Vous l'avez saisie : un autre compte la valide."
+        : changes.length ? "Enregistrez d'abord vos modifications."
+          : !(r.volume_loaded || r.volume_delivered) ? "Indiquez d'abord le volume chargé ou livré."
+            : !r.rate ? "Tarif manquant pour cette route et ce client (Routes et tarifs)."
+              : r.over_capacity ? "Volume chargé au-delà de la capacité de l'ensemble : corrigez-le."
+                : null;
+  // Raison écrite au pied de la fiche : celle de l'étape en cours (départ, sinon validation).
+  const raison = r && (r.state === "draft" || r.state === "en_route") ? (aPartir ? raisonDepart : raisonValider) : null;
   return (
     <Modal open wide title={titre} onClose={onClose} footer={r && saisie ? (
       <>
+        {raison && <span className="mr-auto max-w-[44ch] self-center text-[12.5px] leading-snug text-muted">{raison}</span>}
         {(r.state === "en_route" || r.state === "done" || r.state === "cancelled") && <Button loading={busy} onClick={() => action("reset")}>Remettre en saisie</Button>}
         {modifiable && <Button variant="danger" loading={busy} onClick={() => action("cancel")}>Annuler la rotation</Button>}
         {modifiable && <Button loading={busy} disabled={!changes.length || illisible} onClick={enregistrer}>Enregistrer</Button>}
-        {r.state === "draft" && r.can_depart && (
-          <Button loading={busy} disabled={changes.length > 0 || Boolean(r.departure_blockers?.some((b) => b.severity === "block"))} onClick={() => action("depart")}
-            title={changes.length ? "Enregistrez d'abord les modifications" : "Départ évalué par le serveur au moment du clic"}>
-            Départ en route
+        {aPartir && (
+          <Button variant={raisonDepart ? "secondary" : "primary"} loading={busy} disabled={Boolean(raisonDepart)} onClick={() => action("depart")}
+            title={raisonDepart ?? "Le serveur vérifie le verrou au moment du clic"}>
+            <Truck className="h-4 w-4" /> Faire partir
           </Button>
         )}
         {(r.state === "draft" || r.state === "en_route") && (
-          <Button variant="primary" loading={busy} disabled={r.self_entered || changes.length > 0} onClick={() => action("validate")}
-            title={r.self_entered ? "Vous l'avez saisie : elle se valide par un autre compte" : changes.length ? "Enregistrez d'abord les modifications" : undefined}>
-            Valider
+          <Button variant={aPartir ? "secondary" : "primary"} loading={busy} disabled={Boolean(raisonValider)} onClick={() => action("validate")} title={raisonValider ?? undefined}>
+            <CheckCheck className="h-4 w-4" /> Valider
           </Button>
         )}
       </>
@@ -379,6 +435,7 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
       ) : (
         <div className="space-y-4">
           {erreur && <Notice tone="danger">{erreur}</Notice>}
+          {etape && <ProchaineEtape etape={etape} />}
           <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted">
             <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge>
             <span>{r.source === "mobile" ? "Saisie au téléphone" : "Saisie au bureau"}{r.created_by ? ` par ${r.created_by}` : ""}</span>
@@ -386,8 +443,8 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
             <Link className="font-semibold text-accent underline" href={`/transport/operations?id=${r.id}`}>Documents, budget et lettre de voiture</Link>
             <BoutonDiscussion model="eguitra.transport.rotation" id={r.id} libelle={titre} petit className="ml-auto" />
           </div>
-          {r.state === "draft" && r.self_entered && saisie && <Notice tone="accent">Vous avez saisi cette rotation : elle se valide par un autre compte.</Notice>}
-          {r.state === "draft" && !r.can_depart && r.depart_refusal && <Notice tone="accent">{r.depart_refusal}</Notice>}
+          {(r.state === "draft" || r.state === "en_route") && r.self_entered && saisie && <Notice tone="accent">Vous avez saisi cette rotation : un autre compte la valide.</Notice>}
+          {aPartir && !r.can_depart && r.depart_refusal && <Notice tone="accent">{r.depart_refusal}</Notice>}
           {r.state === "done" && modifiable && <Notice tone="accent">Corriger une rotation validée la remet en saisie : un autre compte la revalide.</Notice>}
           {(r.budget_cost_fields?.length ?? 0) > 0 && <Notice tone="accent">Carburant, péages et frais couverts par le budget de voyage clôturé suivent ses dépenses justifiées : ils ne se corrigent plus ici.</Notice>}
           {r.state === "draft" && r.departure_blockers && r.departure_blockers.length > 0 && (
@@ -420,8 +477,8 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
                 <Field label="Chauffeur"><Select value={f.driver_id} onChange={set("driver_id")} placeholder="–" options={ref.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
                 <ChampNombre label="Volume chargé (m³)" value={f.volume_loaded} onChange={set("volume_loaded")} />
                 <ChampNombre label="Volume livré (m³)" value={f.volume_delivered} onChange={set("volume_delivered")} />
-                <Field label="Bon de livraison"><Input value={f.delivery_note} onChange={set("delivery_note")} /></Field>
-                <Field label="N° de bon" hint="Bon du dépôt, sur la facture"><Input value={f.loading_voucher} onChange={set("loading_voucher")} /></Field>
+                <Field label="N° du bon de chargement (dépôt)" hint="Imprimé sur la facture du client"><Input value={f.loading_voucher} onChange={set("loading_voucher")} /></Field>
+                <Field label="N° du bon de livraison (client)" hint="Signé par le client à la livraison"><Input value={f.delivery_note} onChange={set("delivery_note")} /></Field>
                 <ChampNombre label="Tarif (m³)" value={f.rate} onChange={set("rate")} />
                 <ChampNombre label="Distance parcourue (km)" value={f.distance_km} onChange={set("distance_km")} />
                 {(ref.measures ?? []).map((m) => (
@@ -442,6 +499,24 @@ function RotationFiche({ id, saisie, onClose, onChanged }: { id: number; saisie:
         </div>
       )}
     </Modal>
+  );
+}
+
+/**
+ * Bandeau « Prochaine étape » de la fiche : les cinq étapes (saisie, départ, livraison, validation,
+ * facturation), celle en cours, et qui doit agir. Une rotation annulée le dit seulement.
+ */
+function ProchaineEtape({ etape }: { etape: ReturnType<typeof etapeRotation> }) {
+  if (etape.rang === null) return <Notice tone="neutral">{etape.texte}</Notice>;
+  const rang = etape.rang;
+  return (
+    <section aria-label="Prochaine étape" className="space-y-3 rounded-2xl border border-line bg-panel-2 px-4 py-3.5">
+      <p className="text-[14px] font-semibold leading-snug text-ink">
+        <span className="font-normal text-muted">Prochaine étape · </span>
+        {etape.texte}
+      </p>
+      <Etapes steps={ETAPES_ROTATION.map((label, i) => ({ key: label, label, state: i + 1 < rang ? "done" : i + 1 === rang ? "current" : "todo" }))} />
+    </section>
   );
 }
 
@@ -515,12 +590,15 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
     }
   }
   return (
-    <Modal open wide title="Nouvelle rotation" onClose={() => !busy && onClose()} footer={<><span className="mr-auto text-[12.5px] text-muted">La validation revient à un autre compte que celui qui saisit.</span><Button variant="primary" loading={busy} onClick={() => void submit()} disabled={!f.vehicle_id || !f.partner_id || !f.route_id || illisible}>Enregistrer</Button></>}>
+    <Modal open wide title="Nouvelle rotation" onClose={() => !busy && onClose()} footer={<><span className="mr-auto text-[12.5px] text-muted">Un autre compte que le vôtre la validera.</span><Button variant="primary" loading={busy} onClick={() => void submit()} disabled={!f.vehicle_id || !f.partner_id || !f.route_id || illisible}>Enregistrer</Button></>}>
       {!ref ? (
         <Etat error={erreurChargement} onRetry={() => majReferentiels()} />
       ) : (
         <div className="space-y-4">
           {error && <Notice tone="danger">{error}</Notice>}
+          <p className="text-[13px] leading-snug text-ink-2">
+            Étape 1 sur 5 : saisie. Ensuite, le chef de parc la fait partir, la livraison est saisie au retour, un autre compte la valide, puis la finance la facture.
+          </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <Field label="Chargement"><Input type="date" value={f.date_loading} onChange={set("date_loading")} /></Field>
             <Field label="Ensemble routier"><Select value={f.vehicle_id ?? ""} onChange={set("vehicle_id")} placeholder="Choisir…" options={ref.vehicles.map((v) => ({ value: v.id, label: `${v.name} ${v.tractor_plate ?? ""}` }))} /></Field>
@@ -530,8 +608,8 @@ function RotationForm({ onClose, onDone }: { onClose: () => void; onDone: () => 
             <Field label="Route" className="md:col-span-2"><Select value={f.route_id ?? ""} onChange={set("route_id")} placeholder="Choisir…" options={ref.routes.map((r) => ({ value: r.id, label: r.name }))} /></Field>
             <ChampNombre label="Volume chargé (m³)" value={f.volume_loaded} onChange={set("volume_loaded")} />
             <ChampNombre label="Volume livré (m³)" value={f.volume_delivered} onChange={set("volume_delivered")} />
-            <Field label="Bon de livraison"><Input value={f.delivery_note ?? ""} onChange={set("delivery_note")} /></Field>
-            <Field label="N° de bon" hint="Bon du dépôt, sur la facture"><Input value={f.loading_voucher ?? ""} onChange={set("loading_voucher")} /></Field>
+            <Field label="N° du bon de chargement (dépôt)" hint="Imprimé sur la facture du client"><Input value={f.loading_voucher ?? ""} onChange={set("loading_voucher")} /></Field>
+            <Field label="N° du bon de livraison (client)" hint="Si déjà livré"><Input value={f.delivery_note ?? ""} onChange={set("delivery_note")} /></Field>
             <ChampNombre label="Tarif (m³)" hint="Vide : tarif du client ou de la route" value={f.rate} onChange={set("rate")} />
             <Field label="Retour au dépôt"><Input type="date" value={f.date_return ?? ""} onChange={set("date_return")} /></Field>
             <ChampNombre label="Distance parcourue (km)" hint="Vide : aller-retour de la route" value={f.distance_km} onChange={set("distance_km")} />

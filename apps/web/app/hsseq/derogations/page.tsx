@@ -7,7 +7,7 @@ export default function HsseqDerogations() {
     <div className="space-y-6">
       <PageHeader
         title="Dérogations"
-        subtitle="Le chef de parc demande, et sa demande vaut première validation ; le Responsable HSSEQ, une autre personne, donne la seconde ou refuse. Une dérogation vaut pour une seule rotation, jamais sur V01 ni V03, et le Directeur général en est informé."
+        subtitle="Validez ou refusez les demandes du chef de parc ; le contrôle avant départ et l'alcootest ne se dérogent jamais."
       />
       <Derogations />
     </div>

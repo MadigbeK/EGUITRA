@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useSWRConfig } from "swr";
 import { FileCheck2, Pencil, Plus, Printer, RefreshCw } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation, type Tone } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, demanderConfirmation, type Tone } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
@@ -56,6 +56,18 @@ function useRelireImmobilier() {
 /** Un bouton dans une ligne cliquable n'ouvre pas aussi la ligne. */
 const arreter = (e: MouseEvent | KeyboardEvent) => e.stopPropagation();
 
+/**
+ * Référence proposée d'office pour un nouveau bail, modifiable : « BAIL-2026-004 », suite des références
+ * de l'année de la forme BAIL-AAAA-NNN ; à défaut, le rang du bail parmi ceux de l'année.
+ */
+function referenceProposee(baux: Lease[], jour: string): string {
+  const annee = jour.slice(0, 4);
+  const prefixe = `BAIL-${annee}-`;
+  const numeros = baux.filter((l) => l.name.startsWith(prefixe)).map((l) => Number(l.name.slice(prefixe.length))).filter((n) => Number.isInteger(n) && n > 0);
+  const suivant = numeros.length ? Math.max(...numeros) + 1 : baux.filter((l) => l.date_start.startsWith(annee)).length + 1;
+  return `${prefixe}${String(suivant).padStart(3, "0")}`;
+}
+
 export default function RealEstatePage() {
   const [tab, setTab] = useState<"biens" | "loyers" | "impayes">("biens");
   const { data: summary, error: summaryError, mutate: refreshSummary } = useApi<Summary>("/immobilier/summary");
@@ -81,7 +93,17 @@ export default function RealEstatePage() {
 
   return (
     <div>
-      <PageHeader title="Immobilier" subtitle="Biens, baux, loyers et quittancement automatique, relances, valorisation du patrimoine." actions={gestion ? <Button variant="primary" loading={envoi.busy === "emettre"} disabled={!!envoi.busy} onClick={() => void emettre()}><RefreshCw className="h-4 w-4" /> Émettre les loyers échus</Button> : undefined} />
+      <PageHeader
+        title="Immobilier"
+        subtitle="Louez vos biens et suivez les impayés ; les loyers échus s'émettent chaque nuit."
+        // Le passage de nuit émet les loyers échus : le bouton, secondaire, les émet tout de suite.
+        actions={gestion ? (
+          <div className="flex flex-col items-end gap-1">
+            <Button loading={envoi.busy === "emettre"} disabled={!!envoi.busy} onClick={() => void emettre()}><RefreshCw className="h-4 w-4" /> Émettre les loyers échus</Button>
+            <span className="max-w-[34ch] text-right text-[12px] leading-snug text-muted">Le passage de nuit s&apos;en charge ; ce bouton les émet tout de suite.</span>
+          </div>
+        ) : undefined}
+      />
       {envoi.message && <div className="mb-4"><Notice tone={envoi.message.tone}>{envoi.message.text}</Notice></div>}
       {echecs.length > 0 && (
         <div className="mb-4">
@@ -134,7 +156,13 @@ function Properties({ gestion }: { gestion: boolean }) {
       {gestion && <div className="mb-3 flex justify-end"><Button onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bien</Button></div>}
       <Card padded={false}>
         <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement des biens…">
-          {(d) => (
+          {(d) => !d.items.length && gestion ? (
+            <Empty
+              title="Aucun bien"
+              hint="Enregistrez un bien, puis louez-le : le quittancement démarre à l'activation du bail."
+              action={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bien</Button>}
+            />
+          ) : (
             <DataTable rows={d.items} rowKey={(p) => p.id} onRowClick={(p) => setOuvert(p.id)} empty="Aucun bien." columns={[
               { key: "name", label: "Bien", render: (p) => <span className="font-medium text-ink">{p.name}</span> },
               { key: "kind", label: "Nature", render: (p) => d.kinds.find((k) => k.code === p.kind)?.label ?? p.kind },
@@ -299,6 +327,11 @@ function LeaseForm({ property, lease, onClose, onDone }: { property: Property; l
     deposit_amount: lease?.deposit_amount ? fmtDec(lease.deposit_amount) : "", vat: lease?.vat ?? false,
   });
   const envoi = useEnvoi();
+  // Nouveau bail : référence proposée d'office d'après les baux existants, tant que rien n'est saisi.
+  const { data: baux } = useApi<Lease[]>(lease ? null : "/immobilier/leases");
+  useEffect(() => {
+    if (baux) setF((x) => (x.name ? x : { ...x, name: referenceProposee(baux, aujourdhui()) }));
+  }, [baux]);
   const loyer = lireNombre(f.rent);
   const charges = montantFacultatif(f.charges);
   const depot = montantFacultatif(f.deposit_amount);
@@ -340,7 +373,7 @@ function LeaseForm({ property, lease, onClose, onDone }: { property: Property; l
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {envoi.message && <div className="md:col-span-3"><Notice tone={envoi.message.tone}>{envoi.message.text}</Notice></div>}
         {property.occupied && <div className="md:col-span-3"><Notice tone="neutral">Le bien a un bail en cours{property.lease?.date_end ? ` jusqu'au ${fmtDate(property.lease.date_end)}` : ""} : ce bail s&apos;enregistre en attente et s&apos;active après la fin du bail en cours.</Notice></div>}
-        <Field label="Référence du bail"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="Référence du bail" hint={lease ? undefined : "Proposée d'office, modifiable"}><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Locataire" className="md:col-span-2"><PartnerPicker value={tenant} onChange={setTenant} kind="customer" /></Field>
         <Field label="Prise d'effet" error={!f.rent_start ? horsBorne : undefined}><Input type="date" value={f.date_start} onChange={(e) => setF({ ...f, date_start: e.target.value })} /></Field>
         <Field label="Échéance du bail" hint="Facultative" error={erreurFin}><Input type="date" value={f.date_end} onChange={(e) => setF({ ...f, date_end: e.target.value })} /></Field>

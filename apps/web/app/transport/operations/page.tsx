@@ -10,7 +10,7 @@ export default function TransportOperation() {
     <div className="space-y-6">
       <PageHeader
         title="Opération"
-        subtitle="Ordre de mission, budget de voyage et lettre de voiture : chaque document apparaît dès que ses informations sont complètes."
+        subtitle="Complétez l'opération ; chaque document s'imprime dès que ses informations sont complètes."
       />
       <Suspense fallback={<Loading label="Chargement de l'opération…" />}>
         <OperationDepuisAdresse />

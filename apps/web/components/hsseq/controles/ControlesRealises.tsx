@@ -73,7 +73,7 @@ export function ControlesRealises({ ref_, lire, ecrire, choisi }: { ref_: Refere
           label="Contrôles bloquants"
           value={n ? fmtInt(bloquants) : "–"}
           tone={!n ? "neutral" : bloquants > 0 ? "danger" : "ok"}
-          hint="Point critique non conforme : départ bloqué (V02) jusqu'à la levée"
+          hint="Point critique non conforme : départ bloqué jusqu'à la levée"
         />
       </div>
 

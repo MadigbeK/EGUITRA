@@ -398,7 +398,7 @@ class EguitraTransportRotation(models.Model):
         if "admin" in user_profiles:
             return None
         if "exploitation" not in user_profiles or not user.has_group(EXPLOITATION_GROUP):
-            return "Le départ en route est donné par un chef de parc (profil Exploitation transport) ou par " \
+            return "Faire partir un camion revient à un chef de parc (profil Exploitation transport) ou à " \
                    "l'administration."
         if not self._hsseq_lock_active():
             return None
@@ -408,6 +408,9 @@ class EguitraTransportRotation(models.Model):
         if site not in user._hsseq_site_ids():
             return f"Rotation {self._label()} : ensemble hors de vos sites."
         return None
+
+    def _departure_required(self):
+        return self._hsseq_lock_active()
 
     def _validation_blockers(self):
         """Une rotation soumise au verrou ne se valide qu'après son départ « en route »."""

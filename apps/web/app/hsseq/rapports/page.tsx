@@ -10,7 +10,7 @@ export default function Page() {
     <div>
       <PageHeader
         title="Rapport mensuel"
-        subtitle="Le rapport du mois au format de chaque donneur d'ordre : indicateurs calculés par NIMOVA, valeurs à compléter, validation, puis export en Excel et en PDF."
+        subtitle="Complétez les valeurs manquantes du rapport du mois, validez-le, puis exportez-le en Excel ou en PDF."
       />
       <Suspense fallback={<Loading label="Chargement des rapports…" />}>
         <RapportsMensuels />

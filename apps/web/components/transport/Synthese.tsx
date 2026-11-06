@@ -1,11 +1,58 @@
 "use client";
 
-import { CheckCircle2, Droplet, TriangleAlert } from "@/components/icons";
-import { Card, Compteur, Etat, FEUILLE, IconTile, Kpi, Repartition, cx } from "@/components/ui";
+import { CheckCheck, CheckCircle2, Droplet, ListChecks, TriangleAlert, Truck } from "@/components/icons";
+import { Card, Compteur, Etat, FEUILLE, IconTile, Kpi, Repartition, cx, type Teinte } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
 import { useApi } from "@/lib/api-client";
 import { fmtGNF, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
-import { fmtM3 } from "./commun";
+import { etapeRotation, fmtM3, type ETAT_ROTATION } from "./commun";
+
+/**
+ * Rotations ouvertes (saisies et en route), lues par la route de la liste ouverte aux mêmes profils :
+ * de quoi compter ce qui est à faire. Relue après chaque action sur la liste (page d'accueil).
+ */
+export const CLE_A_FAIRE = "/transport/rotations?state=draft,en_route&limit=500";
+
+type Ouverte = { state: keyof typeof ETAT_ROTATION; departed_at?: string | null; volume_delivered: number };
+
+/** Compteurs de l'accueil : étape de la rotation, filtre de la liste qu'ouvre le compteur, et qui agit. */
+const A_FAIRE: Array<{ rang: number; label: string; statut: string; hint: string; icone: typeof Truck; teinte: Teinte }> = [
+  { rang: 2, label: "À faire partir", statut: "draft", hint: "Le chef de parc les fait partir", icone: Truck, teinte: "ambre" },
+  { rang: 3, label: "Livraisons à saisir", statut: "en_route", hint: "Volume livré et bon de livraison, au retour", icone: ListChecks, teinte: "azur" },
+  { rang: 4, label: "À valider", statut: "draft,en_route", hint: "Par un autre compte que celui qui a saisi", icone: CheckCheck, teinte: "jade" },
+];
+
+/**
+ * Ce qui est à faire sur les rotations, en tête de l'accueil : un compteur par étape (départ,
+ * livraison, validation). Un compteur ouvre la liste des rotations sur ce filtre.
+ */
+export function AFaire({ onFiltre }: { onFiltre: (statut: string) => void }) {
+  const { data, error, mutate } = useApi<{ items: Ouverte[]; total_count: number }>(CLE_A_FAIRE);
+  if (!data) return <Etat error={error} onRetry={() => mutate()} label="Rotations à traiter…" />;
+  const compte = (rang: number) => data.items.filter((r) => etapeRotation(r).rang === rang).length;
+  return (
+    <section aria-label="À faire" className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {A_FAIRE.map((c) => {
+        const n = compte(c.rang);
+        return (
+          <button
+            key={c.rang}
+            type="button"
+            onClick={() => onFiltre(c.statut)}
+            className={cx(FEUILLE, "flex items-start gap-4 p-5 text-left transition-shadow hover:shadow-[var(--ombre-flottante)] focus-visible:outline-2 focus-visible:outline-offset-2")}
+          >
+            <IconTile icon={c.icone} teinte={c.teinte} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13.5px] font-semibold text-ink-2">{c.label}</span>
+              <span className={cx("mt-0.5 block font-compteur text-[30px] font-bold leading-tight", n ? "text-ink" : "text-muted")}>{fmtInt(n)}</span>
+              <span className="mt-0.5 block text-[12.5px] leading-snug text-muted">{n ? c.hint : "Rien à faire pour l'instant"}</span>
+            </span>
+          </button>
+        );
+      })}
+    </section>
+  );
+}
 
 /** Chiffres du mois : volume livré au compteur, état de la flotte, chiffre d'affaires, marge, à facturer, saisies. */
 export function Synthese() {

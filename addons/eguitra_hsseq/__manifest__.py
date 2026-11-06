@@ -9,7 +9,7 @@
                "formulaires ; revue périodique, document à afficher, tableau de bord) et alertes avec accusé de "
                "lecture, plans d'urgence et exercices, annuaire de crise, revue de direction, import des violations "
                "de la télématique",
-    "version": "19.0.1.3.0",
+    "version": "19.0.1.3.1",
     "category": "Human Resources",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

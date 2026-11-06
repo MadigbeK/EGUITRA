@@ -59,7 +59,7 @@ export function DepartsDuJour() {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi label="Départs prévus" value={data ? fmtInt(lignes.length) : "–"} hint={data ? `${jourLong(data.date)}${enRoute ? `, ${pluriel(enRoute, "parti", "partis")}` : ""}` : undefined} />
-        <Kpi label="Autorisés" value={data ? fmtInt(autorises) : "–"} tone={autorises ? "ok" : "neutral"} hint={horsVerrou ? `Aucun motif bloquant, ou couvert ; plus ${pluriel(horsVerrou, "départ")} hors verrou` : "Aucun motif bloquant, ou couvert par une dérogation"} />
+        <Kpi label="Autorisés" value={data ? fmtInt(autorises) : "–"} tone={autorises ? "ok" : "neutral"} hint={horsVerrou ? `Aucun motif bloquant, ou couvert ; plus ${pluriel(horsVerrou, "départ")} sans verrou (chargés avant sa mise en service)` : "Aucun motif bloquant, ou couvert par une dérogation"} />
         <Kpi label="À contrôler" value={data ? fmtInt(aControler) : "–"} tone={aControler ? "warn" : "neutral"} hint="Contrôle avant départ ou alcootest à faire sur NIMOVA Terrain" />
         <Kpi label="Bloqués" value={data ? fmtInt(bloques) : "–"} tone={bloques ? "danger" : "neutral"} hint="Motif à lever, ou à déroger quand il le permet" />
       </div>
@@ -81,7 +81,7 @@ export function DepartsDuJour() {
             { key: "Bloqué", label: `Bloqués, ${bloques}` },
             { key: "À contrôler", label: `À contrôler, ${aControler}` },
             { key: "Autorisé", label: `Autorisés, ${autorises}` },
-            ...(horsVerrou ? [{ key: HORS_VERROU as Filtre, label: `Hors verrou, ${horsVerrou}` }] : []),
+            ...(horsVerrou ? [{ key: HORS_VERROU as Filtre, label: `Verrou pas en service, ${horsVerrou}` }] : []),
             ...(enRoute ? [{ key: "En route" as const, label: `En route, ${enRoute}` }] : []),
           ]}
         />

@@ -8,7 +8,7 @@ export default function TransportTaxes() {
     <div className="space-y-6">
       <PageHeader
         title="Taxes spécifiques"
-        subtitle="Barème, état mensuel par nature et rapprochement avec la comptabilité."
+        subtitle="Vérifiez les taxes du mois par nature et rapprochez-les de la comptabilité."
       />
       <Taxes />
     </div>

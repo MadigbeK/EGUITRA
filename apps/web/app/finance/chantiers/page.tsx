@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { HardHat, Pencil, Plus, Unlock } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { BoutonDiscussion } from "@/components/discussions/BoutonDiscussion";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, fmtPct, fmtShort, lireNombre, nombreIllisible } from "@/lib/format";
+import { anneeEnCours, moisEnCours } from "@/lib/jour";
 import type { Profile } from "@/lib/types";
 
 // Profils des routes du noyau (addons/eguitra_chantier/controllers/chantier.py) : saisie et modification
@@ -61,6 +62,14 @@ const STATE: Record<EtatChantier, readonly [string, "neutral" | "accent" | "ok"]
 /** Taux de retenue écrit sans zéro inutile : « 5 % », « 7,5 % ». */
 const taux = (v: number) => fmtPct(v, Number.isInteger(v) ? 0 : 1);
 
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"] as const;
+
+/** Période proposée pour une nouvelle situation, le mois en cours à Conakry : « Travaux de novembre 2026 », « Travaux d'avril 2027 ». */
+function periodeProposee(): string {
+  const mois = MOIS[moisEnCours() - 1] ?? "";
+  return `Travaux ${/^[aeiou]/.test(mois) ? "d'" : "de "}${mois} ${anneeEnCours()}`;
+}
+
 export default function ChantiersPage() {
   const { data, error, mutate } = useApi<{ items: Chantier[]; totals: Record<string, number> }>("/chantiers");
   const [selected, setSelected] = useState<number | null>(null);
@@ -70,7 +79,7 @@ export default function ChantiersPage() {
     <div>
       <PageHeader
         title="BTP"
-        subtitle="Situations d'avancement, facturation à l'avancement, retenues de garantie suivies jusqu'à leur libération."
+        subtitle="Saisissez chaque mois la situation de chaque chantier ; la finance la facture et suit les retenues."
         actions={saisie ? <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau chantier</Button> : undefined}
       />
       <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement des chantiers…">
@@ -82,6 +91,13 @@ export default function ChantiersPage() {
               <Kpi label="Retenues de garantie à recouvrer" value={fmtShort(d.totals.retention_outstanding)} tone="warn" />
             </div>
             <Card padded={false}>
+              {!d.items.length && saisie ? (
+                <Empty
+                  title="Aucun chantier"
+                  hint="Créez le chantier avec son marché ; ses situations se saisissent ensuite chaque mois."
+                  action={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau chantier</Button>}
+                />
+              ) : (
               <DataTable
                 rows={d.items}
                 rowKey={(c) => c.id}
@@ -97,6 +113,7 @@ export default function ChantiersPage() {
                   { key: "state", label: "État", render: (c) => <Badge tone={STATE[c.state][1]}>{STATE[c.state][0]}</Badge> },
                 ]}
               />
+              )}
             </Card>
           </>
         )}
@@ -111,7 +128,8 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
   const { data, error, mutate } = useApi<Chantier>(`/chantiers/${id}`);
   const [mode, setMode] = useState<"amount" | "pct">("pct");
   const [value, setValue] = useState("");
-  const [label, setLabel] = useState("");
+  // Période proposée d'office (mois en cours), modifiable.
+  const [label, setLabel] = useState(periodeProposee);
   const [editing, setEditing] = useState(false);
   const saisie = useAutorise(SAISIE);
   const facturation = useAutorise(FACTURATION);
@@ -155,7 +173,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
                 {saisie && <Button disabled={!!envoi.busy} onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> Modifier le chantier</Button>}
               </div>
               {c.state === "closed" && <Notice tone="neutral">Chantier clos : aucune situation ne s&apos;y saisit plus. « Modifier le chantier » le remet en cours au besoin.</Notice>}
-              <DataTable dense rows={situations} rowKey={(s) => s.id} empty="Aucune situation." columns={[
+              <DataTable dense rows={situations} rowKey={(s) => s.id} empty={saisie && c.state !== "closed" ? "Aucune situation : saisissez la première ci-dessous." : "Aucune situation."} columns={[
                 { key: "number", label: "N°", align: "right", render: (s) => String(s.number) },
                 { key: "date", label: "Date", render: (s) => fmtDate(s.date) },
                 { key: "period_label", label: "Période", render: (s) => s.period_label ?? "–" },
@@ -186,11 +204,11 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
                     <Field label="Saisie"><Select value={mode} onChange={(e) => setMode(e.target.value as "amount" | "pct")} options={[{ value: "pct", label: "Avancement cumulé (%)" }, { value: "amount", label: "Travaux cumulés HT" }]} /></Field>
                     <Field label={mode === "pct" ? "Avancement cumulé (%)" : "Montant cumulé HT (GNF)"} error={erreurSaisie}><Input inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} /></Field>
-                    <Field label="Période" className="md:col-span-2"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Travaux d'octobre 2026" /></Field>
+                    <Field label="Période" hint="Proposée : le mois en cours" className="md:col-span-2"><Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={periodeProposee()} /></Field>
                     <div className="flex items-end">
                       <Button variant="primary" loading={envoi.busy === "situation"} disabled={saisi === null || saisi <= 0 || !!envoi.busy} onClick={async () => {
                         const corps = mode === "pct" ? { progress_pct: saisi, period_label: label } : { cumulative_amount: saisi, period_label: label };
-                        if (await agir("situation", () => apiSend("POST", `/chantiers/${c.id}/situations`, corps), "Situation enregistrée en brouillon.")) { setValue(""); setLabel(""); }
+                        if (await agir("situation", () => apiSend("POST", `/chantiers/${c.id}/situations`, corps), "Situation enregistrée en brouillon.")) { setValue(""); setLabel(periodeProposee()); }
                       }}>Enregistrer</Button>
                     </div>
                   </div>
@@ -201,7 +219,7 @@ function ChantierModal({ id, onClose, onChanged }: { id: number; onClose: () => 
                   Retenues constituées {fmtGNF(c.retention_total)}, libérées {fmtGNF(c.retention_released)}, à recouvrer <b>{fmtGNF(c.retention_outstanding)}</b>.
                   {c.retention_released_due > 0.5 && <> Libérées et non encore réglées par le client : <b>{fmtGNF(c.retention_released_due)}</b>, exigibles et relancées.</>}
                 </span>
-                {facturation && <Button loading={envoi.busy === "liberer"} disabled={c.retention_outstanding <= 0.5 || !!envoi.busy} onClick={async () => { if (await demanderConfirmation(`Libérer les retenues de garantie ? ${fmtGNF(c.retention_outstanding)} passent de 4117 au compte du client et deviennent exigibles.`, { action: "Libérer les retenues", danger: true })) void agir("liberer", () => apiSend("POST", `/chantiers/${c.id}/release-retention`), "Retenues libérées : elles redeviennent exigibles du client."); }}><Unlock className="h-4 w-4" /> Libérer les retenues</Button>}
+                {facturation && <Button loading={envoi.busy === "liberer"} disabled={c.retention_outstanding <= 0.5 || !!envoi.busy} onClick={async () => { if (await demanderConfirmation(`Libérer les retenues de garantie ? ${fmtGNF(c.retention_outstanding)} passent au compte du client et deviennent exigibles.`, { action: "Libérer les retenues", danger: true })) void agir("liberer", () => apiSend("POST", `/chantiers/${c.id}/release-retention`), "Retenues libérées : elles redeviennent exigibles du client."); }}><Unlock className="h-4 w-4" /> Libérer les retenues</Button>}
               </div>
               {editing && <ChantierEdit chantier={c} onClose={() => setEditing(false)} onDone={() => { setEditing(false); relire(); }} />}
             </div>

@@ -212,7 +212,7 @@ export function FicheDerogation({
         <div className="flex items-start gap-3 rounded-xl border border-line bg-panel-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2">
           <Lock className="mt-[3px] h-4 w-4 flex-none text-muted" />
           <p>
-            <span className="font-semibold text-ink">Toujours vérifiés, jamais dérogeables :</span> contrôle avant départ (V01) et alcootest (V03).
+            <span className="font-semibold text-ink">Le contrôle avant départ et l&apos;alcootest ne se dérogent jamais.</span> Ils sont toujours vérifiés.
           </p>
         </div>
 

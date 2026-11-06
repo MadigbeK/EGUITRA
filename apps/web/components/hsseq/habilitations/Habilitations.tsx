@@ -226,10 +226,10 @@ function Chiffres({ data, enAttente }: { data: QualificationMatrix | undefined; 
         label="Habilitations à jour"
         value={taux === null ? "–" : fmtPct(taux, 1)}
         tone={taux === null ? "neutral" : taux >= 100 ? "ok" : "danger"}
-        hint={`${fmtInt(c.up_to_date)} sur ${pluriel(c.drivers, "conducteur")} sans motif V04 ; cible 100${INSECABLE}%`}
+        hint={`${fmtInt(c.up_to_date)} sur ${pluriel(c.drivers, "conducteur")} sans habilitation bloquante ; cible 100${INSECABLE}%`}
       />
       <Kpi label="À renouveler" value={fmtInt(c.by_status.to_renew)} tone={c.by_status.to_renew > 0 ? "warn" : "neutral"} hint="Habilitation exigée à échéance dans les 30 jours" />
-      <Kpi label="Départ refusé (V04)" value={fmtInt(c.blocking)} tone={c.blocking > 0 ? "danger" : "ok"} hint="Exigée échue, aptitude inapte ou échue" />
+      <Kpi label="Départ refusé" value={fmtInt(c.blocking)} tone={c.blocking > 0 ? "danger" : "ok"} hint="Exigée échue, aptitude inapte ou échue" />
     </div>
   );
 }

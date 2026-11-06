@@ -9,7 +9,7 @@ import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtGNF, lireNombre, nombreIllisible, pluriel } from "@/lib/format";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { ChampNombre, ETAT_ROTATION } from "../commun";
+import { ChampNombre, ETAT_ROTATION, FenetreMotif } from "../commun";
 import type { Referentials } from "../types";
 import { PanneauDocuments, texteErreur } from "./PanneauDocuments";
 import { ETATS_ORDRE, ETATS_VOYAGE, OPS, type EtatOrdre, type Ordre, type OrdreDetail } from "./types";
@@ -179,6 +179,7 @@ function FicheOrdre({ id, saisie, onClose, onChanged }: { id: number; saisie: bo
   const [busy, setBusy] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [nouvelle, setNouvelle] = useState(false);
+  const [annulation, setAnnulation] = useState(false);
   useEffect(() => { if (o) setV(valeursOrdre(o)); }, [o]);
   const modifiable = saisie && !!o && (o.state === "draft" || o.state === "validated" || o.state === "executed");
 
@@ -194,9 +195,7 @@ function FicheOrdre({ id, saisie, onClose, onChanged }: { id: number; saisie: bo
       setBusy(false);
     }
   }
-  async function annuler() {
-    const motif = window.prompt("Motif de l'annulation de l'ordre de transport :");
-    if (!motif?.trim()) return;
+  function annuler(motif: string) {
     void agir(() => apiSend<OrdreDetail>("POST", `/transport/orders/${id}/cancel`, { reason: motif }));
   }
   async function valider() {
@@ -208,7 +207,7 @@ function FicheOrdre({ id, saisie, onClose, onChanged }: { id: number; saisie: bo
     <Modal open wide title={o ? `Ordre de transport ${o.name ?? ""}` : "Ordre de transport"} onClose={onClose} footer={o && saisie ? (
       <>
         {o.state === "validated" && o.rotations.every((r) => r.state === "draft" || r.state === "cancelled") && <Button loading={busy} onClick={() => void agir(() => apiSend<OrdreDetail>("POST", `/transport/orders/${id}/reset`))}>Remettre en brouillon</Button>}
-        {modifiable && <Button variant="danger" loading={busy} onClick={() => void annuler()}>Annuler l'ordre</Button>}
+        {modifiable && <Button variant="danger" loading={busy} onClick={() => setAnnulation(true)}>Annuler l'ordre</Button>}
         {modifiable && v && <Button loading={busy} onClick={() => void agir(() => apiSend<OrdreDetail>("PATCH", `/transport/orders/${id}`, corpsOrdre(v)))}>Enregistrer</Button>}
         {o.state === "draft" && <Button variant="primary" loading={busy} disabled={o.missing.length > 0} title={o.missing.length ? `Il manque : ${o.missing.join(", ")}` : undefined} onClick={() => void valider()}>Valider (accord du client)</Button>}
       </>
@@ -245,7 +244,7 @@ function FicheOrdre({ id, saisie, onClose, onChanged }: { id: number; saisie: bo
                 { key: "vehicle", label: "Ensemble", render: (r) => r.vehicle.name },
                 { key: "engins", label: "Tracteur / remorque", render: (r) => `${r.tractor?.name ?? "–"} / ${r.trailer?.name ?? "–"}` },
                 { key: "driver", label: "Chauffeur", render: (r) => r.driver?.name ?? "–" },
-                { key: "etd", label: "ETD", render: (r) => fmtDate(r.date_planned_departure) },
+                { key: "etd", label: "Départ prévu", render: (r) => fmtDate(r.date_planned_departure) },
                 { key: "docs", label: "Documents", render: (r) => <Badge tone={r.documents_ready === 4 ? "ok" : "warn"}>{r.documents_ready}/4 prêts</Badge> },
                 { key: "budget", label: "Budget", render: (r) => ETATS_VOYAGE[r.trip_state] },
                 { key: "state", label: "Statut", render: (r) => <Badge tone={tonEtat(ETAT_ROTATION[r.state])}>{ETAT_ROTATION[r.state]}</Badge> },
@@ -256,6 +255,7 @@ function FicheOrdre({ id, saisie, onClose, onChanged }: { id: number; saisie: bo
         </div>
       )}
       {nouvelle && o && ref && <NouvelleOperation ordre={o} ref_={ref} onClose={() => setNouvelle(false)} onDone={() => { setNouvelle(false); void mutate(); onChanged(); }} />}
+      {annulation && o && <FenetreMotif titre={`Annuler l'ordre ${o.name ?? ""}`} aide="L'ordre annulé ne donne plus d'opération ; le motif reste lisible sur l'ordre." action="Annuler l'ordre" danger onClose={() => setAnnulation(false)} envoyer={annuler} />}
     </Modal>
   );
 }
@@ -300,9 +300,9 @@ function NouvelleOperation({ ordre, ref_, onClose, onDone }: { ordre: OrdreDetai
           <Field label="Chauffeur" hint="Vide : chauffeur habituel"><Select value={f.driver_id ?? ""} onChange={set("driver_id")} placeholder="–" options={chauffeurs.map((d) => ({ value: d.id, label: d.name }))} /></Field>
           <Field label="Convoyeur"><Select value={f.co_driver_id ?? ""} onChange={set("co_driver_id")} placeholder="–" options={convoyeurs.map((d) => ({ value: d.id, label: d.name }))} /></Field>
           <ChampNombre label="Volume prévu (m³)" hint={vehicule ? `Vide : reste de l'ordre, ${vehicule.capacity_liters / 1000} m³ au plus` : "Vide : reste de l'ordre"} value={f.volume_planned} onChange={set("volume_planned")} />
-          <Field label="Départ prévu (ETD)"><Input type="date" value={f.date_planned_departure ?? ""} onChange={set("date_planned_departure")} /></Field>
-          <Field label="Arrivée prévue (ETA)"><Input type="date" value={f.date_planned_arrival ?? ""} onChange={set("date_planned_arrival")} /></Field>
-          <Field label="Retour à la base (ETR)"><Input type="date" value={f.date_planned_return ?? ""} onChange={set("date_planned_return")} /></Field>
+          <Field label="Départ prévu"><Input type="date" value={f.date_planned_departure ?? ""} onChange={set("date_planned_departure")} /></Field>
+          <Field label="Arrivée prévue"><Input type="date" value={f.date_planned_arrival ?? ""} onChange={set("date_planned_arrival")} /></Field>
+          <Field label="Retour au parc prévu"><Input type="date" value={f.date_planned_return ?? ""} onChange={set("date_planned_return")} /></Field>
         </div>
       </div>
     </Modal>

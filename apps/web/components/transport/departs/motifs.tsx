@@ -2,15 +2,15 @@
 
 /**
  * Briques du verrou de départ, communes à Transport (« Départs du jour », panneau du verrou) et à
- * HSSEQ (file des dérogations) : tampon de code d'un motif (V01 à V09, ou motif propre à Transport
- * comme T01), état d'un départ, dates courtes, lecture des erreurs du noyau. Contrat :
+ * HSSEQ (file des dérogations) : tampon d'un motif nommé en clair (V01 à V09, ou motif propre à
+ * Transport comme T01, le code en infobulle), état d'un départ, dates courtes, lecture des erreurs du noyau. Contrat :
  * docs/design/hsseq-contrat.md, §9 (verrou), §10 (dérogations) et §12 (décisions).
  */
 
 import type { ReactNode } from "react";
 import { Lock } from "@/components/icons";
 import { Badge, cx } from "@/components/ui";
-import { MOTIFS, etatDepart, texteErreur } from "@/components/hsseq/commun";
+import { MOTIFS, etatDepart, nomMotif, texteErreur } from "@/components/hsseq/commun";
 import { ApiError } from "@/lib/api-client";
 import type { TonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDateTime } from "@/lib/format";
@@ -41,11 +41,14 @@ export function tonMotif(m: { severity: Severity; waiver_id?: number | null }): 
   return m.waiver_id ? "warn" : "danger";
 }
 
-/** Tampon du code d'un motif (V02, T01…), le libellé en infobulle ; `masque` le dit au lecteur d'écran. */
+/**
+ * Tampon d'un motif, nommé en clair (« Alcootest », « Point critique ») ; le code (V03, T01…) et le
+ * libellé restent en infobulle seulement. `masque` le dit au lecteur d'écran.
+ */
 export function CodeMotif({ code, ton, titre, masque }: { code: string; ton: TonEtat; titre?: string; masque?: string }) {
   return (
-    <span title={titre} className="inline-flex flex-none">
-      <Badge tone={ton}>{code}</Badge>
+    <span title={titre ? `${code} : ${titre}` : code} className="inline-flex flex-none">
+      <Badge tone={ton}>{nomMotif(code)}</Badge>
       {masque && <span className="sr-only">{` : ${masque}`}</span>}
     </span>
   );
@@ -138,16 +141,15 @@ export function LigneMotif({ motif, jour, fin, dense }: { motif: MotifLu; jour?:
   );
 }
 
-/** Encadré « Jamais dérogeables » : V01 et V03, sans bouton (§4.1). `ouverts` : codes ouverts pour ce départ. */
+/** Encadré « jamais dérogeables » : contrôle avant départ et alcootest (§4.1), sans bouton. `ouverts` : codes ouverts pour ce départ. */
 export function JamaisDerogeables({ ouverts = [] }: { ouverts?: readonly string[] }) {
-  const presents = JAMAIS_DEROGEABLES.filter((c) => ouverts.includes(c));
+  const presents = JAMAIS_DEROGEABLES.filter((c) => ouverts.includes(c)).map((c) => nomMotif(c).toLocaleLowerCase("fr"));
   return (
     <div className="flex items-start gap-3 rounded-xl border border-line bg-panel-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2">
       <Lock aria-hidden className="mt-[3px] h-4 w-4 flex-none text-muted" />
       <p>
-        <span className="font-semibold text-ink">Jamais dérogeables :</span> contrôle avant départ non réalisé (V01), alcootest non réalisé ou positif
-        (V03).
-        {presents.length > 0 && ` Ouvert pour ce départ : ${presents.join(" et ")}. Le conducteur les fait sur NIMOVA Terrain ; aucune dérogation ne les couvre.`}
+        <span className="font-semibold text-ink">Le contrôle avant départ et l&apos;alcootest ne se dérogent jamais.</span>
+        {presents.length > 0 && ` À faire pour ce départ : ${presents.join(" et ")}, par le conducteur sur NIMOVA Terrain.`}
       </p>
     </div>
   );

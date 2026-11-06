@@ -49,6 +49,6 @@ export function effetVerrou(motif: ReasonSetting | undefined, vehicule: VehicleR
   const bloque = v09Bloque(motif, vehicule, site);
   if (bloque === null) return null;
   return bloque
-    ? `Le verrou refuse tout départ de ${vehicule.name} (motif V09) jusqu'à sa remise en service.`
-    : `Le motif V09 n'est pas actif pour ${vehicule.name} : l'immobilisation est enregistrée et notifiée, mais le verrou ne bloque pas encore son départ.`;
+    ? `Le verrou refuse tout départ de ${vehicule.name} jusqu'à sa remise en service.`
+    : `Le motif « Immobilisation » n'est pas actif pour ${vehicule.name} : l'immobilisation est enregistrée et notifiée, mais le verrou ne bloque pas encore son départ.`;
 }

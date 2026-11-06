@@ -8,7 +8,7 @@ export default function TransportRentabilite() {
     <div className="space-y-6">
       <PageHeader
         title="Rentabilité"
-        subtitle="Marge par ensemble, route, chauffeur, client et mois : coûts standard, déclarés et comptabilisés, structure."
+        subtitle="Comparez la marge par ensemble, route, chauffeur, client ou mois pour repérer ce qui perd."
       />
       <Rentabilite />
     </div>

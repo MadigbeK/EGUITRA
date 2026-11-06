@@ -9,7 +9,7 @@ export default function TransportFlotte() {
     <div className="space-y-6">
       <PageHeader
         title="Flotte et chauffeurs"
-        subtitle="Ensembles routiers, tracteurs et remorques, propriété et charges mensuelles, chauffeurs et convoyeurs."
+        subtitle="Tenez à jour ensembles, tracteurs, remorques et chauffeurs ; ouvrez une ligne pour la modifier."
       />
       <Flotte />
       <Engins />

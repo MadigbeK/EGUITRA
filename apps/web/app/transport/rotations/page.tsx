@@ -8,8 +8,8 @@ export default function TransportRotations() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Rotations"
-        subtitle="Saisie, validation et facturation des rotations ; une facture par client."
+        title="Suivi des rotations"
+        subtitle="Saisissez, faites partir, validez puis facturez ; ouvrez une rotation pour voir sa prochaine étape."
         actions={<ExportRotations />}
       />
       <Rotations />

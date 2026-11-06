@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { ArrowUpRight } from "@/components/icons";
 import { Badge, Card, FEUILLE, cx } from "@/components/ui";
-import { DOCUMENT_VEHICULE, MOTIFS, Tampon, TYPE_VEHICULE, etatDepart, nomRotation, tonHsseq } from "@/components/hsseq/commun";
+import { DOCUMENT_VEHICULE, MOTIFS, Tampon, TYPE_VEHICULE, etatDepart, nomMotif, nomRotation, tonHsseq } from "@/components/hsseq/commun";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtInt, pluriel } from "@/lib/format";
 import type { Cockpit, Deadline, Departure, LockReason, VehicleDocumentKind } from "@/lib/hsseq-types";
@@ -64,13 +64,13 @@ function Compteur({ valeur, ton, href, texte }: { valeur: number; ton: "danger" 
 
 /* ─── Départs du jour ─────────────────────────────────────────────────── */
 
-/** Code d'un motif ouvert : à contrôler (saisie de terrain à faire), sous dérogation ou bloquant. */
+/** Motif ouvert, nommé en clair (le code en infobulle) : à contrôler (saisie de terrain à faire), sous dérogation ou bloquant. */
 function CodeMotif({ r }: { r: LockReason }) {
   const libelle = r.label || MOTIFS[r.code].libelle;
   const etat = r.waiver_id ? "sous dérogation" : r.pending ? "saisie de terrain à faire" : r.severity === "warn" ? "avertissement" : "bloquant";
   return (
-    <span title={`${libelle} (${etat})`}>
-      <Badge tone={r.waiver_id || r.pending || r.severity === "warn" ? "warn" : "danger"}>{r.code}</Badge>
+    <span title={`${r.code} : ${libelle} (${etat})`}>
+      <Badge tone={r.waiver_id || r.pending || r.severity === "warn" ? "warn" : "danger"}>{nomMotif(r.code)}</Badge>
       <span className="sr-only">{` : ${libelle}, ${etat}`}</span>
     </span>
   );

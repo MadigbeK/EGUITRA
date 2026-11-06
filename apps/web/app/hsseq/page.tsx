@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { Cockpit } from "@/components/hsseq/cockpit/Cockpit";
 import { Loading } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Cockpit" };
+export const metadata: Metadata = { title: "Tableau de bord" };
 
 /**
  * Cockpit de NIMOVA · HSSEQ (lot 1). Les filtres sont lus dans l'adresse de la page : le cockpit

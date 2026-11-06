@@ -52,7 +52,7 @@ export function Motifs() {
     <Card padded={false} title="Motifs du verrou de départ">
       <div className="space-y-3 px-6 pb-4">
         <p className="max-w-[90ch] text-[13px] leading-relaxed text-muted">
-          Le noyau évalue le verrou à chaque départ, sans contournement possible depuis un écran. V01 (contrôle absent) et V03 (alcootest) ne se dérogent jamais. V06 à V09 sont livrés désactivés : activez-les ici, puis écartez-les au besoin d&apos;un site par « Par site ».
+          Le noyau évalue le verrou à chaque départ, sans contournement possible depuis un écran. Le contrôle avant départ (V01) et l&apos;alcootest (V03) ne se dérogent jamais. V06 à V09 sont livrés désactivés : activez-les ici, puis écartez-les au besoin d&apos;un site par « Par site ».
         </p>
         {message && <Notice tone={message.tone}>{message.texte}</Notice>}
       </div>

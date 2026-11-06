@@ -8,7 +8,7 @@ export default function TransportBareme() {
     <div className="space-y-6">
       <PageHeader
         title="Barème officiel"
-        subtitle="Tarifs du transport des hydrocarbures fixés par arrêté, par dépôt et par destination."
+        subtitle="Consultez le tarif officiel par dépôt et destination pour vérifier vos tarifs clients."
       />
       <Bareme />
     </div>

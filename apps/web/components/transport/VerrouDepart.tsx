@@ -20,7 +20,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import useSWR from "swr";
 import { BadgeCheck, Bell, CheckCircle2, Clock, Lock, RefreshCw, Truck } from "@/components/icons";
 import { Button, ErrorBox, Field, Loading, Modal, Notice, Textarea, cx, demanderConfirmation } from "@/components/ui";
-import { HORS_VERROU, STATUT_DEROGATION, TYPE_VEHICULE, Tampon, nomRotation } from "@/components/hsseq/commun";
+import { HORS_VERROU, STATUT_DEROGATION, TYPE_VEHICULE, Tampon, nomMotif, nomRotation } from "@/components/hsseq/commun";
 import { PlanTrajet } from "@/components/hsseq/trajets/PlanTrajet";
 import { Repesee } from "@/components/hsseq/trajets/Repesee";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
@@ -66,7 +66,7 @@ const ERREURS_DEPART: Partial<Record<string, string>> = {
 };
 
 const ERREURS_DEMANDE: Partial<Record<string, string>> = {
-  not_waivable: "V01 et V03 ne sont jamais dérogeables : le contrôle avant départ et l'alcootest se font sur NIMOVA Terrain.",
+  not_waivable: "Le contrôle avant départ et l'alcootest ne se dérogent jamais : le conducteur les fait sur NIMOVA Terrain.",
   reason_not_open: "Ce motif n'est plus ouvert pour la rotation. Vérifiez à nouveau le verrou.",
   conflict: "Une dérogation est déjà demandée ou active pour cette rotation et ce motif : une dérogation couvre un seul motif.",
   reason_required: "Le motif écrit est obligatoire.",
@@ -405,7 +405,7 @@ function TeteVerrou({ etat, evaluation, parti }: { etat: string; evaluation: Loc
       ? "Tous les motifs bloquants sont levés ou couverts par une dérogation active."
       : "Aucun motif bloquant ouvert.";
   else if (etat === "À contrôler")
-    texte = `${bloquants.map((r) => r.code).join(" et ")} : saisie de terrain encore à faire par le conducteur, contrôle avant départ ou alcootest.`;
+    texte = `${bloquants.map((r) => nomMotif(r.code)).join(" et ")} : à faire par le conducteur sur NIMOVA Terrain.`;
   else texte = `${pluriel(bloquants.length, "motif")} à lever, ou à couvrir par une dérogation quand il est dérogeable, avant de partir.`;
   if (!parti && nbAvis) texte += ` ${pluriel(nbAvis, "avertissement")} sans effet sur le départ.`;
   return (

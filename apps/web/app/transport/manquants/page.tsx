@@ -8,7 +8,7 @@ export default function TransportManquants() {
     <div className="space-y-6">
       <PageHeader
         title="Manquants"
-        subtitle="Manquants tolérés et excédentaires, valorisation, déduction et créances sur les chauffeurs."
+        subtitle="Suivez les manquants hors tolérance et décidez la déduction ou la créance sur le chauffeur."
       />
       <Manquants />
     </div>

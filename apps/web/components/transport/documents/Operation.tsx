@@ -9,7 +9,7 @@ import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Notice,
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { tonEtat } from "@/lib/couleurs";
 import { fmtDate, fmtDateTime, fmtGNF, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
-import { ChampNombre, ETAT_ROTATION, fmtM3 } from "../commun";
+import { ChampNombre, ETAT_ROTATION, FenetreMotif, fmtM3 } from "../commun";
 import type { Referentials } from "../types";
 import { PanneauDocuments, texteErreur } from "./PanneauDocuments";
 import {
@@ -104,9 +104,9 @@ function Planification({ op, ref_, onChanged }: { op: Operation; ref_: Referenti
         <Field label="Remorque"><Select value={f.trailer_id} onChange={set("trailer_id")} placeholder="–" options={remorques.map((e) => ({ value: e.id, label: e.name }))} /></Field>
         <Field label="Chauffeur"><Select value={f.driver_id} onChange={set("driver_id")} placeholder="–" options={ref_.drivers.filter((d) => d.crew_role !== "assistant").map((d) => ({ value: d.id, label: d.name }))} /></Field>
         <Field label="Convoyeur"><Select value={f.co_driver_id} onChange={set("co_driver_id")} placeholder="–" options={ref_.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
-        <Field label="Départ prévu (ETD)"><Input type="date" value={f.date_planned_departure} onChange={set("date_planned_departure")} /></Field>
-        <Field label="Arrivée prévue (ETA)"><Input type="date" value={f.date_planned_arrival} onChange={set("date_planned_arrival")} /></Field>
-        <Field label="Retour à la base (ETR)"><Input type="date" value={f.date_planned_return} onChange={set("date_planned_return")} /></Field>
+        <Field label="Départ prévu"><Input type="date" value={f.date_planned_departure} onChange={set("date_planned_departure")} /></Field>
+        <Field label="Arrivée prévue"><Input type="date" value={f.date_planned_arrival} onChange={set("date_planned_arrival")} /></Field>
+        <Field label="Retour au parc prévu"><Input type="date" value={f.date_planned_return} onChange={set("date_planned_return")} /></Field>
         <ChampNombre label="Volume prévu (m³)" value={f.volume_planned} onChange={set("volume_planned")} />
       </fieldset>
       <p className="mt-3 text-[12.5px] text-muted">
@@ -168,9 +168,8 @@ function BudgetsOperation({ op, reglages, onChanged }: { op: Operation; reglages
   const { busy, erreur, agir } = useAction(onChanged);
   const initial = op.budgets.find((b) => b.kind === "initial");
   const peutAdditif = op.can.ops && initial?.state === "approved" && op.trip.state !== "closed";
-  async function nouvelAdditif() {
-    const motif = window.prompt("Motif de l'additif (éclatement de pneu, attente au dépôt…) :");
-    if (!motif?.trim()) return;
+  const [additif, setAdditif] = useState(false);
+  function nouvelAdditif(motif: string) {
     void agir(() => apiSend<BudgetDetail>("POST", `/transport/rotations/${op.rotation.id}/budgets/new`, { kind: "additive", reason: motif }));
   }
   const total = op.budgets.filter((b) => b.state !== "rejected").reduce((s, b) => s + b.amount_total, 0);
@@ -178,10 +177,11 @@ function BudgetsOperation({ op, reglages, onChanged }: { op: Operation; reglages
     <Card title="Budget de voyage" actions={op.can.ops && op.rotation.state !== "cancelled" ? (
       <div className="flex gap-2">
         {!initial && <Button size="sm" variant="primary" loading={busy} onClick={() => void agir(() => apiSend("POST", `/transport/rotations/${op.rotation.id}/budgets/new`, { kind: "initial" }))}>Budget initial (pré-rempli)</Button>}
-        {peutAdditif && <Button size="sm" loading={busy} onClick={() => void nouvelAdditif()}><Plus className="h-4 w-4" /> Additif</Button>}
+        {peutAdditif && <Button size="sm" loading={busy} onClick={() => setAdditif(true)}><Plus className="h-4 w-4" /> Additif</Button>}
       </div>
     ) : undefined}>
       {erreur && <Notice tone="danger">{erreur}</Notice>}
+      {additif && <FenetreMotif titre="Additif au budget de voyage" aide="Dépense imprévue en route : l'additif suit le même circuit d'approbation que le budget." action="Créer l'additif" exemple="Éclatement de pneu, attente au dépôt…" onClose={() => setAdditif(false)} envoyer={nouvelAdditif} />}
       {!op.budgets.length ? <p className="text-[13px] text-muted">Aucun budget : le budget initial se pré-remplit depuis la route (jours prévus × frais de route, carburant selon la distance et la consommation, péages).</p> : (
         <div className="space-y-2">
           {op.budgets.map((b) => (
@@ -215,6 +215,8 @@ function EditeurBudget({ id, op, reglages, onChanged }: { id: number; op: Operat
   const { data: b, error, mutate } = useApi<BudgetDetail>(`/transport/budgets/${id}`);
   const [lignes, setLignes] = useState<LigneSaisie[]>([]);
   const [journal, setJournal] = useState("");
+  // Motif demandé avant un refus ou une annulation (fenêtre, lisible au téléphone).
+  const [motifDemande, setMotifDemande] = useState<"refus" | "annulation" | null>(null);
   useEffect(() => { if (b) setLignes(b.lines.map(versSaisie)); }, [b]);
   useEffect(() => { if (reglages.journal) setJournal(String(reglages.journal.id)); }, [reglages.journal]);
   const apres = () => { void mutate(); onChanged(); };
@@ -229,24 +231,19 @@ function EditeurBudget({ id, op, reglages, onChanged }: { id: number; op: Operat
     quantity: lireNombre(l.quantity) ?? 0, price_unit: lireNombre(l.price_unit) ?? 0, partner_id: l.kind === "nature" ? l.partner?.id ?? null : null,
   })) });
   const total = lignes.reduce((s, l) => s + (lireNombre(l.quantity) ?? 0) * (lireNombre(l.price_unit) ?? 0), 0);
-  async function trancher(decision: "approve" | "reject") {
+  function trancher(decision: "approve" | "reject", motif?: string) {
     if (!b?.approval) return;
-    let corpsDecision: Record<string, unknown> = {};
-    if (decision === "reject") {
-      const motif = window.prompt("Motif du refus :");
-      if (!motif?.trim()) return;
-      corpsDecision = { comment: motif };
-    }
+    const corpsDecision: Record<string, unknown> = decision === "reject" ? { comment: motif } : {};
     void agir(() => apiSend("POST", `/approvals/${b.approval!.request_id}/${decision}`, corpsDecision));
   }
-  async function annuler() {
-    const motif = window.prompt("Motif de l'annulation du budget :");
-    if (!motif?.trim()) return;
+  function annuler(motif: string) {
     void agir(() => apiSend("POST", `/transport/budgets/${id}/cancel`, { reason: motif }));
   }
   return (
     <div className="space-y-3 border-t border-line p-3">
       {erreur && <Notice tone="danger">{erreur}</Notice>}
+      {motifDemande === "refus" && <FenetreMotif titre={`Refuser le budget ${b.name}`} aide="Le demandeur lit ce motif pour corriger son budget." action="Refuser" danger onClose={() => setMotifDemande(null)} envoyer={(m) => trancher("reject", m)} />}
+      {motifDemande === "annulation" && <FenetreMotif titre={`Annuler le budget ${b.name}`} action="Annuler le budget" danger onClose={() => setMotifDemande(null)} envoyer={annuler} />}
       {b.missing.length > 0 && modifiable && <Notice tone="warn">À compléter avant la soumission : {b.missing.join(", ")}.</Notice>}
       {b.approval && (
         <p className="text-[12.5px] text-muted">
@@ -288,7 +285,7 @@ function EditeurBudget({ id, op, reglages, onChanged }: { id: number; op: Operat
         {b.approval?.can_decide && b.state === "submitted" && (
           <>
             <Button size="sm" variant="primary" loading={busy} onClick={() => void trancher("approve")}>Approuver</Button>
-            <Button size="sm" variant="danger" loading={busy} onClick={() => void trancher("reject")}>Refuser</Button>
+            <Button size="sm" variant="danger" loading={busy} onClick={() => setMotifDemande("refus")}>Refuser</Button>
           </>
         )}
         {op.can.cash && b.state === "approved" && b.amount_cash > 0 && !b.disbursed && (
@@ -301,7 +298,7 @@ function EditeurBudget({ id, op, reglages, onChanged }: { id: number; op: Operat
           </>
         )}
         {b.disbursement && <span className="text-[12.5px] text-muted">Avance décaissée par {b.disbursed_by?.name ?? "la finance"} le {fmtDateTime(b.disbursed_at)} ({b.disbursement.journal}).</span>}
-        {op.can.ops && b.state !== "cancelled" && !b.disbursed && <Button size="sm" variant="ghost" loading={busy} onClick={() => void annuler()}>Annuler le budget</Button>}
+        {op.can.ops && b.state !== "cancelled" && !b.disbursed && <Button size="sm" variant="ghost" loading={busy} onClick={() => setMotifDemande("annulation")}>Annuler le budget</Button>}
       </div>
     </div>
   );
@@ -459,7 +456,7 @@ function CarteLettreVoiture({ op, onChanged }: { op: Operation; onChanged: () =>
         {champ("bill_of_lading", "Connaissement")}
         {champ("consignee", "Destinataire", ef.consignee)}
         {champ("destination", "Destination", ef.destination)}
-        <Field label="Arrivée estimée" hint="Vide : ETA de l'opération"><Input type="datetime-local" disabled={!modifiable} value={f.arrival_planned_at ?? ""} onChange={(e) => setF({ ...f, arrival_planned_at: e.target.value })} /></Field>
+        <Field label="Arrivée estimée" hint="Vide : arrivée prévue de l'opération"><Input type="datetime-local" disabled={!modifiable} value={f.arrival_planned_at ?? ""} onChange={(e) => setF({ ...f, arrival_planned_at: e.target.value })} /></Field>
         {champ("client_ref", "Référence du client", ef.client_ref)}
         {champ("forwarder", "Transitaire")}
         {champ("delivery_agent", "Agent livreur")}

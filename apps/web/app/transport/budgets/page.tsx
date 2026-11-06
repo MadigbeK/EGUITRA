@@ -8,7 +8,7 @@ export default function TransportBudgets() {
     <div className="space-y-6">
       <PageHeader
         title="Budgets de voyage"
-        subtitle="À approuver, à décaisser, à justifier, et les écarts entre budget et réel. Le détail se traite dans la fiche de l'opération."
+        subtitle="Approuvez, décaissez puis justifiez chaque budget ; ouvrez l'opération pour le détail."
       />
       <BudgetsVoyage />
     </div>

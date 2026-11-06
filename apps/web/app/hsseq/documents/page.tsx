@@ -10,7 +10,7 @@ export default function Page() {
     <div>
       <PageHeader
         title="Documents et urgences"
-        subtitle="Vos documents à lire et leur accusé de lecture, politiques signées par la direction et procédures, instructions, consignes et formulaires versionnés et revus à date, alertes flash et retours d'expérience anonymisés, plans d'intervention d'urgence et leurs exercices, annuaire de crise à appeler d'un geste."
+        subtitle="Lisez et accusez réception de vos documents ; publiez et revoyez procédures, alertes et plans d'urgence."
         actions={<CommandesDocuments />}
       />
       <Suspense fallback={<Loading label="Chargement des documents…" />}>

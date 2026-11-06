@@ -8,7 +8,7 @@ export default function TransportRoutes() {
     <div className="space-y-6">
       <PageHeader
         title="Routes et tarifs"
-        subtitle="Distances, coûts standard, prix du carburant, tarifs négociés et conditions de manquant."
+        subtitle="Fixez distance, coûts standard et tarifs négociés de chaque route ; chaque rotation s'en sert."
       />
       <RoutesTarifs />
     </div>

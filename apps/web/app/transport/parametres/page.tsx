@@ -9,7 +9,7 @@ export default function TransportParametres() {
     <div className="space-y-6">
       <PageHeader
         title="Paramètres"
-        subtitle="Manquants, relevés des propriétaires, conditions des clients, taxes et produits transportés ; documents des opérations et budgets de voyage."
+        subtitle="Réglez une fois les règles du transport : manquants, propriétaires, clients, taxes, produits et documents."
       />
       <Parametres />
       <ParametresDocuments />

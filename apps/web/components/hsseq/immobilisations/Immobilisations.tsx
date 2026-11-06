@@ -94,7 +94,7 @@ export function Immobilisations() {
 
       {motifV09 && !motifV09.active && (
         <Notice tone="neutral">
-          Le motif V09 du verrou n&apos;est pas encore activé : une immobilisation est enregistrée et notifiée, mais elle ne bloque pas encore le départ du véhicule.{" "}
+          Le motif « Immobilisation » du verrou n&apos;est pas encore activé : une immobilisation est enregistrée et notifiée, mais elle ne bloque pas encore le départ du véhicule.{" "}
           {parametrage ? (
             <Link href="/hsseq/parametres?onglet=motifs" className={LIEN}>
               Motifs du verrou
@@ -203,7 +203,7 @@ export function Immobilisations() {
           onRelire={relire}
           onRemis={(maj) => {
             setRemise(null);
-            setMessage(`${maj.vehicle.name} remis en service : le motif V09 ne bloque plus ses départs.`);
+            setMessage(`${maj.vehicle.name} remis en service : son immobilisation ne bloque plus ses départs.`);
             relire();
           }}
         />
@@ -356,7 +356,7 @@ function FenetreRemise({ i, onClose, onRemis, onRelire }: { i: Immobilization; o
           {i.imposed_by ? ` par ${i.imposed_by.name}` : ""}, événement <span className="font-mono text-[12.5px]">{i.event.reference}</span> : {i.event.title}
         </p>
         <p className="text-[13px] leading-relaxed text-ink-2">
-          Le motif V09 tombe : {i.vehicle.name} peut de nouveau partir en rotation, si les autres motifs du verrou le permettent. L&apos;enquête de l&apos;événement suit son cours.
+          L&apos;immobilisation ne bloque plus : {i.vehicle.name} peut de nouveau partir en rotation, si les autres motifs du verrou le permettent. L&apos;enquête de l&apos;événement suit son cours.
         </p>
         <Field label="Motif de la levée (obligatoire)" hint="Ce qui a été vérifié, réparé ou décidé ; cinq caractères au moins. Journalisé." error={tente && court ? "Le motif de la levée est obligatoire." : undefined}>
           <Textarea rows={3} maxLength={2000} value={motif} onChange={(e) => setMotif(e.target.value)} aria-invalid={tente && court ? true : undefined} placeholder="Vérin de levée et alarme de proximité contrôlés par l'atelier, consigne affichée au point de déversement" />

@@ -6,7 +6,7 @@
                "saisie mobile ; chaîne documentaire d'une opération : ordre de transport, tracteur et remorque, "
                "ordre de mission, budget de voyage (approbation, bons carburant, avance, justification), lettre de "
                "voiture et réception, immobilisation",
-    "version": "19.0.1.8.1",
+    "version": "19.0.1.8.2",
     "category": "Accounting/Accounting",
     "author": "E-VOLUTION XP",
     "website": "https://e-volutionxp.com",

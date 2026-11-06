@@ -95,11 +95,12 @@ def _move_ref(move):
 
 
 def _depart_fields(rot):
-    """Départ permis à l'utilisateur (écrans : bouton « Faire partir ») et, sinon, pourquoi."""
+    """Départ permis à l'utilisateur (écrans : bouton « Faire partir ») et, sinon, pourquoi ; départ exigé
+    avant la validation (verrou HSSEQ en service pour la rotation)."""
     if rot.state != "draft":
-        return {"can_depart": False, "depart_refusal": None}
+        return {"can_depart": False, "depart_refusal": None, "departure_required": False}
     refusal = rot._depart_refusal()
-    return {"can_depart": not refusal, "depart_refusal": refusal}
+    return {"can_depart": not refusal, "depart_refusal": refusal, "departure_required": rot._departure_required()}
 
 
 def _rotation_row(rot, detail=False, official=None):

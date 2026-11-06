@@ -10,7 +10,7 @@ export default function Page() {
     <div>
       <PageHeader
         title="Plan d'actions"
-        subtitle="Registre unique des actions correctives et préventives, quelle que soit leur origine. Une action ne se clôt qu'avec sa preuve de réalisation ; celles issues d'un événement de criticité 8 ou plus sont vérifiées 90 jours après."
+        subtitle="Suivez chaque action jusqu'à sa clôture, preuve de réalisation jointe."
       />
       <Suspense fallback={<Loading label="Chargement des actions…" />}>
         <PlanActions />

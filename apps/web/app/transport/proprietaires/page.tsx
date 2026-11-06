@@ -8,7 +8,7 @@ export default function TransportProprietaires() {
     <div className="space-y-6">
       <PageHeader
         title="Propriétaires et répartition"
-        subtitle="Ensembles gérés pour des propriétaires : relevés mensuels, commissions, pièces."
+        subtitle="Établissez chaque mois le relevé des ensembles gérés pour un propriétaire, puis passez ses pièces."
       />
       <Proprietaires />
     </div>

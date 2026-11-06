@@ -381,7 +381,9 @@ class TestLock(HsseqCase):
         with self.assertRaises(RotationBlocked) as refus:
             rot.action_validate()
         self.assertIn("H01", [b["code"] for b in refus.exception.blockers])
+        self.assertTrue(rot._departure_required(), "Écrans : « Valider » attend le départ")
         old = self._rotation(date_loading=self.day - timedelta(days=60))
+        self.assertFalse(old._departure_required())
         old.action_validate()
         self.assertEqual(old.state, "done", "Avant la mise en service du verrou : Transport comme avant")
         self.settings.lock_start_date = False

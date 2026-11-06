@@ -136,7 +136,7 @@ export function RisquesConformite({ c }: { c: Cockpit }) {
 
         <Card title="Véhicules immobilisés" actions={lien("/hsseq/immobilisations", "Immobilisations")}>
           <Chiffre valeur={immobilises.active} ton="danger">
-            {immobilises.active > 1 ? "véhicules immobilisés" : "véhicule immobilisé"} le temps d&apos;une enquête (V09)
+            {immobilises.active > 1 ? "véhicules immobilisés" : "véhicule immobilisé"} le temps d&apos;une enquête
           </Chiffre>
           {immobilises.items.length === 0 ? (
             <p className="mt-4 text-sm text-muted">Aucun véhicule immobilisé.</p>

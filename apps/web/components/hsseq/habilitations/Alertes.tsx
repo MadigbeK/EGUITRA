@@ -48,7 +48,7 @@ export function Alertes({ nature, onNature }: { nature: NatureAlertes; onNature:
   return (
     <div className="space-y-4">
       <p className="max-w-[90ch] text-[13px] leading-relaxed text-muted">
-        Alertes envoyées 30 puis 7 jours avant chaque échéance, une seule fois par seuil : au Responsable HSSEQ, au chef de parc du site et, pour les personnes, à RH. Le jour de l&apos;échéance, le verrou de départ prend le relais : V04 pour une personne, V05 ou V06 pour un véhicule.
+        Alertes envoyées 30 puis 7 jours avant chaque échéance, une seule fois par seuil : au Responsable HSSEQ, au chef de parc du site et, pour les personnes, à RH. Le jour de l&apos;échéance, le verrou de départ prend le relais : habilitation pour une personne, document ou barémage pour un véhicule.
       </p>
       <div className="-mx-1 overflow-x-auto px-1">
         <Segmented

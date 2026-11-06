@@ -201,6 +201,11 @@ class EguitraTransportRotation(models.Model):
         """Motifs dérogés pour ce départ, écrits dans sa trace ; le module HSSEQ les fournit."""
         return []
 
+    def _departure_required(self):
+        """La rotation doit partir (« Faire partir ») avant d'être validée ; jamais ici. Le module HSSEQ
+        l'exige des rotations chargées après la mise en service de son verrou (écrans : étape et bouton)."""
+        return False
+
     def _validation_blockers(self):
         """Motifs qui s'opposent à la validation (passage à « validée ») ; vide ici. Le module HSSEQ y exige
         le passage par « en route » des rotations chargées après sa mise en service."""
@@ -213,7 +218,7 @@ class EguitraTransportRotation(models.Model):
         self.ensure_one()
         if self.env.su or set(DEPART_PROFILES) & set(self.env.user._eguitra_profiles()):
             return None
-        return "Le départ en route est donné par le parc (profil Exploitation) ou un administrateur."
+        return "Faire partir un camion revient au parc (profil Exploitation) ou à l'administration."
 
     def action_depart(self):
         """Départ en route, évalué par le serveur au moment de la demande (jamais en file hors ligne)."""

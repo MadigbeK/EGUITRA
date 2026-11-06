@@ -9,7 +9,7 @@ export default function TransportOrdres() {
     <div className="space-y-6">
       <PageHeader
         title="Ordres de transport"
-        subtitle="La commande du client : marchandise, origine et destination, accord signé ; ses opérations et leurs documents."
+        subtitle="Saisissez la commande du client, faites-la valider, puis créez une opération par camion."
       />
       <Suspense fallback={<Loading label="Chargement des ordres…" />}>
         <OrdresTransport />

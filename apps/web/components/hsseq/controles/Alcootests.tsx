@@ -105,8 +105,8 @@ export function Alcootests({ ref_, lire, ecrire }: { ref_: Referentials | undefi
             tone={taux === null ? "neutral" : taux >= 100 ? "ok" : "danger"}
             hint={nbDeparts === null ? undefined : `${pluriel(realises, "alcootest réalisé", "alcootests réalisés")} pour ${pluriel(nbDeparts, "départ")} ; objectif 100${INSECABLE}%`}
           />
-          <Kpi label="Non conformes" value={compte ? fmtInt(nonConformes) : "–"} tone={!compte ? "neutral" : nonConformes > 0 ? "danger" : "ok"} hint="Test positif : conducteur retiré de la rotation (V03)" />
-          <Kpi label="Non réalisés" value={compte ? fmtInt(nonRealises) : "–"} tone={!compte ? "neutral" : nonRealises > 0 ? "warn" : "ok"} hint="Départ bloqué (V03) tant que le test n'est pas fait" />
+          <Kpi label="Non conformes" value={compte ? fmtInt(nonConformes) : "–"} tone={!compte ? "neutral" : nonConformes > 0 ? "danger" : "ok"} hint="Test positif : conducteur retiré de la rotation" />
+          <Kpi label="Non réalisés" value={compte ? fmtInt(nonRealises) : "–"} tone={!compte ? "neutral" : nonRealises > 0 ? "warn" : "ok"} hint="Départ bloqué tant que le test n'est pas fait" />
         </div>
       )}
 
@@ -195,7 +195,7 @@ function FenetreAnnulation({ t, onClose, onAnnule }: { t: BreathTestDetail; onCl
       <div className="space-y-3">
         <p className="text-[13px] leading-snug text-ink-2">
           Test du {fmtDateTime(t.reported_at)}
-          {t.rotation ? `, ${nomRotation(t.rotation)}` : ", sans rotation"}. Annulé, il sort du verrou (V03) et des indicateurs ; un conducteur retiré par un positif est rétabli sur la rotation encore saisie.
+          {t.rotation ? `, ${nomRotation(t.rotation)}` : ", sans rotation"}. Annulé, il sort du verrou de départ et des indicateurs ; un conducteur retiré par un positif est rétabli sur la rotation encore saisie.
         </p>
         <Field label="Motif de l'annulation (obligatoire)">
           <Textarea value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Saisie erronée : conducteur, rotation ou résultat." />

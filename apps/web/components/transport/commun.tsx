@@ -5,7 +5,7 @@
  */
 
 import { useState } from "react";
-import { Field, Input, cx } from "@/components/ui";
+import { Button, Field, Input, Modal, Textarea, cx } from "@/components/ui";
 import { AIDE_NOMBRE, INSECABLE, fmtPct, lireNombre, nombreIllisible } from "@/lib/format";
 
 // Volumes et espace insécable : une seule écriture des nombres, dans lib/format.ts, partagée avec
@@ -18,6 +18,67 @@ export { INSECABLE, fmtFixe, fmtM3, fmtVolume } from "@/lib/format";
  * avec « Facturée » dans la vue « Toutes ».
  */
 export const ETAT_ROTATION = { draft: "Saisie", en_route: "En route", done: "À facturer", invoiced: "Facturée", cancelled: "Annulée" } as const;
+
+/**
+ * Étapes d'une rotation, dans l'ordre où elle les franchit : saisie, départ (chef de parc), livraison
+ * (volume livré et bon de livraison), validation par un autre compte que celui qui l'a saisie,
+ * facturation. Écrites sur la fiche (bandeau « Prochaine étape ») et sur l'accueil (compteurs).
+ */
+export const ETAPES_ROTATION = ["Saisie", "Départ", "Livraison", "Validation", "Facturation"] as const;
+
+/** Où en est une rotation : rang de l'étape à faire (1 à 5), ce qu'il reste à faire, et qui le fait. */
+export interface EtapeRotation {
+  /** Étape à faire, de 1 à 5 ; 6 : facturée, tout est fait ; null : annulée. */
+  rang: number | null;
+  /** Mot court, pour une liste : « À faire partir », « Livraison à saisir »… */
+  court: string;
+  /** Phrase du bandeau de la fiche. */
+  texte: string;
+}
+
+/** Pas encore partie alors que le verrou HSSEQ exige le départ avant la validation (absent : exigé). */
+export function doitPartir(r: { departed_at?: string | null; departure_required?: boolean }): boolean {
+  return !r.departed_at && r.departure_required !== false;
+}
+
+/**
+ * Prochaine étape d'une rotation. Une rotation saisie déjà partie (validée puis remise en saisie pour
+ * correction) garde son départ : elle reprend à la livraison ou à la validation.
+ */
+export function etapeRotation(r: { state: keyof typeof ETAT_ROTATION; departed_at?: string | null; departure_required?: boolean; volume_delivered: number }): EtapeRotation {
+  if (r.state === "cancelled") return { rang: null, court: "Annulée", texte: "Rotation annulée : elle n'est ni facturée ni comptée." };
+  if (r.state === "invoiced") return { rang: 6, court: "Terminée", texte: "Toutes les étapes sont faites : la rotation est facturée." };
+  if (r.state === "done") return { rang: 5, court: "À facturer", texte: "Étape 5 sur 5 : à facturer (finance)." };
+  if (r.state === "draft" && doitPartir(r)) return { rang: 2, court: "À faire partir", texte: "Étape 2 sur 5 : à faire partir (chef de parc)." };
+  if (!r.volume_delivered) return { rang: 3, court: "Livraison à saisir", texte: "Étape 3 sur 5 : livraison à saisir, volume livré et bon de livraison (exploitation)." };
+  return { rang: 4, court: "À valider", texte: "Étape 4 sur 5 : à valider (un autre compte que celui qui l'a saisie)." };
+}
+
+/**
+ * Motif écrit demandé avant une action (additif, refus, annulation) : remplace la boîte du navigateur,
+ * illisible au téléphone. `envoyer` reçoit le motif ; la carte appelante affiche un éventuel refus.
+ */
+export function FenetreMotif({ titre, aide, action, exemple, danger, onClose, envoyer }: {
+  titre: string; aide?: string; action: string; exemple?: string; danger?: boolean; onClose: () => void; envoyer: (motif: string) => void;
+}) {
+  const [motif, setMotif] = useState("");
+  const pret = Boolean(motif.trim());
+  return (
+    <Modal open title={titre} onClose={onClose} footer={(
+      <>
+        <Button onClick={onClose}>Retour</Button>
+        <Button variant={danger ? "danger" : "primary"} disabled={!pret} onClick={() => { envoyer(motif.trim()); onClose(); }}>{action}</Button>
+      </>
+    )}>
+      <div className="space-y-3">
+        {aide && <p className="m-0 text-[13px] leading-snug text-ink-2">{aide}</p>}
+        <Field label="Motif (obligatoire)" hint="Il est gardé avec la décision.">
+          <Textarea rows={3} value={motif} onChange={(e) => setMotif(e.target.value)} maxLength={2000} placeholder={exemple} />
+        </Field>
+      </div>
+    </Modal>
+  );
+}
 
 /** Champ en erreur : bordure et halo d'alerte. */
 export const CHAMP_INVALIDE = "aria-[invalid=true]:border-danger aria-[invalid=true]:ring-2 aria-[invalid=true]:ring-danger/15";

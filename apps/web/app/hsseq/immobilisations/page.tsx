@@ -9,8 +9,8 @@ export default function Page() {
   return (
     <div>
       <PageHeader
-        title="Immobilisations"
-        subtitle="Véhicules immobilisés par le Responsable HSSEQ le temps de l'enquête d'un événement de criticité élevée (motif V09 du verrou) : ils ne partent plus en rotation jusqu'à leur remise en service, motif écrit à l'appui."
+        title="Véhicules immobilisés"
+        subtitle="Remettez en service un véhicule immobilisé quand l'enquête le permet, motif écrit à l'appui."
       />
       <Suspense fallback={<Loading label="Chargement des immobilisations…" />}>
         <Immobilisations />

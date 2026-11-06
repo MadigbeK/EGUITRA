@@ -47,7 +47,7 @@ export function Cockpit() {
   return (
     <div>
       <PageHeader
-        title="Cockpit HSSEQ"
+        title="Tableau de bord HSSEQ"
         subtitle={
           c
             ? `${c.period.type === "12m" ? `12 mois glissants, ${c.period.label}` : `Mois de ${c.period.label}`}, du ${fmtDate(c.period.date_from)} au ${fmtDate(c.period.date_to)}. ${c.period.frozen && c.period.frozen_on ? `Mois figé le ${fmtDate(c.period.frozen_on)}.` : "Chiffres provisoires jusqu'au 5 du mois suivant."} Calcul du ${fmtDateTime(c.computed_at)}.`

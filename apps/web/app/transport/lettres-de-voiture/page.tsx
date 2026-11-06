@@ -8,7 +8,7 @@ export default function TransportLettresVoiture() {
     <div className="space-y-6">
       <PageHeader
         title="Lettres de voiture et réceptions"
-        subtitle="Opérations à recevoir, réceptions (volume reçu, manquant, avarie) et immobilisations au-delà de la franchise."
+        subtitle="Saisissez la réception de chaque opération livrée : volume reçu, manquant ou avarie."
       />
       <LettresVoiture />
     </div>

@@ -10,7 +10,7 @@ export default function Page() {
     <div>
       <PageHeader
         title="Habilitations"
-        subtitle="Matrice des compétences des conducteurs, tenue par RH : permis, conduite défensive, matières dangereuses, accès aux sites miniers, secourisme. L'aptitude médicale n'apparaît qu'en statut. Une habilitation est signalée 30 puis 7 jours avant son échéance."
+        subtitle="Renouvelez les habilitations avant échéance : une habilitation échue bloque le départ du conducteur."
       />
       <Suspense fallback={<Loading label="Chargement des habilitations…" />}>
         <Habilitations />

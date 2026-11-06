@@ -10,7 +10,7 @@ export default function Page() {
     <div>
       <PageHeader
         title="Environnement et qualité"
-        subtitle="Déversements et leur récupération, déchets jusqu'à leur enlèvement avec bordereau, poussières mesurées sur site, manquants et contaminations de produit, réclamations des clients et leurs réponses, consommation et CO₂ par kilomètre, écarts de livraison."
+        subtitle="Déclarez et suivez déversements, déchets, poussières, contaminations et réclamations jusqu'à leur clôture."
       />
       <Suspense fallback={<Loading label="Chargement de l'environnement…" />}>
         <Environnement />

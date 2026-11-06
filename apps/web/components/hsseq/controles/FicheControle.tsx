@@ -61,7 +61,7 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
       {message && <Notice tone="ok">{message}</Notice>}
       {bloquantesOuvertes.length > 0 && (
         <Notice tone="danger">
-          Départ de {c.vehicle.name} bloqué (motif V02) : {pluriel(bloquantesOuvertes.length, "non-conformité bloquante ouverte", "non-conformités bloquantes ouvertes")}. Le blocage suit le véhicule d&apos;une rotation à l&apos;autre, jusqu&apos;à la levée, avec une photo de la correction, par le chef de parc du site, le Responsable HSSEQ ou l&apos;administration.
+          Départ de {c.vehicle.name} bloqué (point critique) : {pluriel(bloquantesOuvertes.length, "non-conformité bloquante ouverte", "non-conformités bloquantes ouvertes")}. Le blocage suit le véhicule d&apos;une rotation à l&apos;autre, jusqu&apos;à la levée, avec une photo de la correction, par le chef de parc du site, le Responsable HSSEQ ou l&apos;administration.
         </Notice>
       )}
       {c.photos_missing && <Notice tone="warn">Photos manquantes : au moins une non-conformité attend encore sa photo, envoyée par NIMOVA Terrain après le contrôle. La photo reste exigée.</Notice>}
@@ -77,7 +77,7 @@ export function FicheControle({ id, onFermer }: { id: number; onFermer: () => vo
       {c.awaiting_items.length > 0 && (
         <Notice tone={c.awaiting_items.some((a) => a.blocking) ? "danger" : "warn"}>
           {pluriel(c.awaiting_items.length, "point ajouté", "points ajoutés")} à la grille après la saisie, à répondre par un contrôle complémentaire dans NIMOVA Terrain
-          {c.awaiting_items.some((a) => a.blocking) ? " ; tant que les points bloquants n'ont pas de réponse, le départ reste retenu (motif V01)" : ""} : {c.awaiting_items.map((a) => `${a.label}${a.blocking ? " (bloquant)" : ""}`).join(", ")}.
+          {c.awaiting_items.some((a) => a.blocking) ? " ; tant que les points bloquants n'ont pas de réponse, le départ reste retenu (contrôle avant départ)" : ""} : {c.awaiting_items.map((a) => `${a.label}${a.blocking ? " (bloquant)" : ""}`).join(", ")}.
         </Notice>
       )}
 
@@ -180,7 +180,7 @@ function Point({ p }: { p: CheckAnswer }) {
           <Pieces pieces={p.photos} />
         </div>
       )}
-      {bloque && <span className="sr-only">Point critique non conforme : départ bloqué (V02).</span>}
+      {bloque && <span className="sr-only">Point critique non conforme : départ bloqué.</span>}
     </li>
   );
 }

@@ -498,22 +498,35 @@ export const STATUT_DEROGATION: Record<WaiverStatus, string> = {
  * de véhicule concernés, source, qui lève le motif, dérogeable ou non (V01 et V03 jamais), lot de livraison.
  */
 export const MOTIFS: Record<ReasonCode, { court: string; libelle: string; types: VehicleKind[]; source: string; levee: string; derogeable: boolean; lot: 1 | 2 }> = {
-  V01: { court: "Contrôle absent", libelle: "Contrôle avant départ non réalisé pour la rotation", types: ["tanker", "tipper"], source: "NIMOVA Terrain", levee: "Réaliser le contrôle", derogeable: false, lot: 1 },
+  V01: { court: "Contrôle avant départ", libelle: "Contrôle avant départ non réalisé pour la rotation", types: ["tanker", "tipper"], source: "NIMOVA Terrain", levee: "Réaliser le contrôle", derogeable: false, lot: 1 },
   V02: { court: "Point critique", libelle: "Point critique du contrôle avant départ non conforme", types: ["tanker", "tipper"], source: "NIMOVA Terrain", levee: "Chef de parc après correction, photo obligatoire", derogeable: true, lot: 1 },
   V03: { court: "Alcootest", libelle: "Alcootest non réalisé ou positif", types: ["tanker", "tipper"], source: "NIMOVA Terrain", levee: "Responsable HSSEQ ; positif : conducteur retiré de la rotation", derogeable: false, lot: 1 },
   V04: { court: "Habilitation", libelle: "Habilitation obligatoire expirée ou aptitude médicale « inapte »", types: ["tanker", "tipper"], source: "Habilitations (RH)", levee: "Changer de conducteur", derogeable: true, lot: 1 },
-  V05: { court: "Document véhicule", libelle: "Document du véhicule expiré (assurance, visite technique)", types: ["tanker", "tipper"], source: "Transport, fiche véhicule", levee: "Responsable maintenance", derogeable: true, lot: 1 },
+  V05: { court: "Document du véhicule", libelle: "Document du véhicule expiré (assurance, visite technique)", types: ["tanker", "tipper"], source: "Transport, fiche véhicule", levee: "Responsable maintenance", derogeable: true, lot: 1 },
   V06: { court: "Barémage, étanchéité", libelle: "Barémage ou certificat d'étanchéité de la citerne expiré", types: ["tanker"], source: "Transport, fiche véhicule", levee: "Responsable maintenance", derogeable: true, lot: 2 },
   V07: { court: "Surcharge", libelle: "Charge déclarée supérieure à la charge utile autorisée", types: ["tipper"], source: "Transport, ticket de pesée", levee: "Chef de parc après délestage", derogeable: true, lot: 2 },
   V08: { court: "Trajet", libelle: "Plan de trajet absent, circulation de nuit interdite ou temps de conduite dépassé", types: ["tanker", "tipper"], source: "Transport, rotation", levee: "Responsable exploitation", derogeable: true, lot: 2 },
   V09: { court: "Immobilisation", libelle: "Véhicule immobilisé par un événement en cours d'enquête", types: ["tanker", "tipper"], source: "Événements", levee: "Responsable HSSEQ", derogeable: true, lot: 2 },
 };
 
-/** Code d'un motif dans un tampon : alerte, ou à surveiller quand une dérogation active le couvre. */
+/** Motifs propres à Transport et au départ (refus du noyau), nommés en clair comme ceux du verrou. */
+const MOTIFS_TRANSPORT: Readonly<Record<string, string>> = {
+  T01: "Véhicule indisponible",
+  T02: "Ordre de mission",
+  T03: "Budget de voyage",
+  H01: "Départ non enregistré",
+};
+
+/** Nom en clair d'un motif (« Alcootest ») ; le code (V03) ne sert qu'en infobulle. Code inconnu : tel quel. */
+export function nomMotif(code: string): string {
+  return Object.prototype.hasOwnProperty.call(MOTIFS, code) ? MOTIFS[code as ReasonCode].court : (MOTIFS_TRANSPORT[code] ?? code);
+}
+
+/** Motif dans un tampon, nommé en clair (le code en infobulle) : alerte, ou à surveiller sous dérogation. */
 export function MotifCode({ code, couvert }: { code: ReasonCode; couvert?: boolean }) {
   return (
-    <span title={`${MOTIFS[code].libelle}${couvert ? " (sous dérogation)" : ""}`}>
-      <Badge tone={couvert ? "warn" : "danger"}>{code}</Badge>
+    <span title={`${code} : ${MOTIFS[code].libelle}${couvert ? " (sous dérogation)" : ""}`}>
+      <Badge tone={couvert ? "warn" : "danger"}>{MOTIFS[code].court}</Badge>
       <span className="sr-only">{` : ${MOTIFS[code].libelle}${couvert ? ", sous dérogation" : ""}`}</span>
     </span>
   );

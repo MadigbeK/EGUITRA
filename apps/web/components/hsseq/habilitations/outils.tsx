@@ -36,7 +36,7 @@ export const APTITUDE: Record<Fitness, string> = { fit: "Apte", review: "À revo
 export const APTITUDE_DETAIL: Record<Fitness, string> = {
   fit: "Apte à la conduite.",
   review: "Apte avec réserve, ou aptitude non renseignée : à revoir, sans bloquer le départ.",
-  unfit: "Inapte, ou visite d'aptitude échue : départ refusé (V04).",
+  unfit: "Inapte, ou visite d'aptitude échue : départ refusé.",
 };
 
 export const NATURE_ALERTE: Record<ExpiryAlertKind, string> = {

@@ -167,6 +167,7 @@ class TestFlotteSecurite(TransportCase):
         self.assertEqual(status, 200, row)
         self.assertFalse(row["can_depart"])
         self.assertIn("parc", row["depart_refusal"])
+        self.assertIn("departure_required", row)
         status, body = self.call("POST", f"/transport/rotations/{rot.id}/depart", None, finance)
         self.assertEqual(status, 403, body)
         self.assertEqual(rot.state, "draft")

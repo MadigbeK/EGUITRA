@@ -22,17 +22,66 @@ interface Referentials {
   measures?: Array<{ code: string; label: string }>;
 }
 
+/** Référence gardée d'une rotation envoyée ; l'identifiant manque aux listes gardées avant son ajout. */
+type RefEnvoyee = { id?: number; name: string } | null;
+
 interface SentRotation {
   id: number;
   name: string | null;
   state: "draft" | "en_route" | "done" | "invoiced" | "cancelled";
   date_loading: string;
-  vehicle: { name: string } | null;
-  client: { name: string } | null;
-  route: { name: string } | null;
+  vehicle: RefEnvoyee;
+  client: RefEnvoyee;
+  route: RefEnvoyee;
+  /** Code du produit (reprise de la dernière rotation du camion) ; absent des listes d'avant. */
+  product?: string;
   volume_loaded: number;
   volume_delivered: number;
   source: "office" | "mobile";
+}
+
+/**
+ * Dernière rotation connue d'un camion : client, route et produit, repris quand l'agent choisit ce
+ * camion (tout reste modifiable). Gardée sur le téléphone à chaque enregistrement (clé « habitudes »,
+ * effacée avec les listes du compte) ; complétée par les saisies en attente et la liste « Envoyées ».
+ */
+interface Habitude {
+  partner_id: string;
+  route_id: string;
+  product: string;
+  /** Date de chargement : la plus récente l'emporte. */
+  date: string;
+}
+const CLE_HABITUDES = "habitudes";
+
+/** Champs que le choix du camion propose : repris de sa dernière rotation, volume à sa capacité. */
+type ChampPropose = "partner_id" | "route_id" | "product" | "volume_loaded";
+
+/** Formulaire neuf : seul le produit est proposé d'office (gasoil), pas choisi par l'agent. */
+const PROPOSES_NEUF: ChampPropose[] = ["product"];
+
+/** Capacité de la citerne en m³, écrite à la française pour le champ (« 33 », « 36,5 »). */
+const capaciteM3 = (litres: number) => String(Math.round(litres) / 1000).replace(".", ",");
+
+/**
+ * Dernière rotation connue du camion, la plus récente par date de chargement : celle gardée à
+ * l'enregistrement, une saisie en attente, ou une rotation de la liste « Envoyées ».
+ */
+function derniereRotation(vehicleId: string, habitudes: Record<string, Habitude>, file: QueuedRotation[], envoyees: SentRotation[] | null): Habitude | null {
+  const candidats: Habitude[] = [];
+  const gardee = habitudes[vehicleId];
+  if (gardee) candidats.push(gardee);
+  for (const q of file) {
+    const p = q.payload;
+    if (String(p.vehicle_id) === vehicleId) candidats.push({ partner_id: String(p.partner_id ?? ""), route_id: String(p.route_id ?? ""), product: String(p.product ?? ""), date: String(p.date_loading ?? "") });
+  }
+  for (const r of envoyees ?? []) {
+    if (r.vehicle?.id !== undefined && String(r.vehicle.id) === vehicleId && r.client?.id && r.route?.id) {
+      candidats.push({ partner_id: String(r.client.id), route_id: String(r.route.id), product: r.product ?? "", date: r.date_loading });
+    }
+  }
+  // À date égale, la première trouvée (gardée sur le téléphone) l'emporte.
+  return candidats.reduce<Habitude | null>((m, c) => (!m || c.date > m.date ? c : m), null);
 }
 
 interface Form {
@@ -59,8 +108,9 @@ interface Form {
   partner_id: string;
   route_id: string;
   product: string;
+  /** N° du bon de livraison signé par le client. */
   delivery_note: string;
-  /** N° du bon (commande ou enlèvement), imprimé sur la facture ; absent des saisies d'avant son ajout. */
+  /** N° du bon de chargement du dépôt, imprimé sur la facture ; absent des saisies d'avant son ajout. */
   loading_voucher?: string;
   volume_loaded: string;
   volume_delivered: string;
@@ -379,12 +429,15 @@ function keepReferentials(r: Referentials): Referentials {
   };
 }
 
-/** Rotations envoyées : suivi de l'agent, sans chiffre d'affaires, coûts ni marge. */
+/**
+ * Rotations envoyées : suivi de l'agent, sans chiffre d'affaires, coûts ni marge. Les identifiants du
+ * camion, du client et de la route et le produit servent à reprendre la dernière rotation d'un camion.
+ */
 function keepSent(r: SentRotation): SentRotation {
-  const ref = (x: { name: string } | null) => (x ? { name: x.name } : null);
+  const ref = (x: RefEnvoyee) => (x ? { id: x.id, name: x.name } : null);
   return {
     id: r.id, name: r.name, state: r.state, date_loading: r.date_loading, vehicle: ref(r.vehicle), client: ref(r.client),
-    route: ref(r.route), volume_loaded: r.volume_loaded, volume_delivered: r.volume_delivered, source: r.source,
+    route: ref(r.route), product: r.product, volume_loaded: r.volume_loaded, volume_delivered: r.volume_delivered, source: r.source,
   };
 }
 
@@ -398,6 +451,11 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
   const [sentIndisponible, setSentIndisponible] = useState(false);
   const [echange, setEchange] = useState<Echange | null>(null);
   const [form, setForm] = useState<Form>(blank);
+  // Dernière rotation de chaque camion gardée sur le téléphone, et champs que le choix du camion a
+  // proposés (pas retouchés depuis) : un autre camion peut les remplacer, jamais un choix de l'agent.
+  const [habitudes, setHabitudes] = useState<Record<string, Habitude>>({});
+  const [proposes, setProposes] = useState<ChampPropose[]>(PROPOSES_NEUF);
+  const [reprise, setReprise] = useState<string | null>(null);
   const [showCosts, setShowCosts] = useState(false);
   const [notice, setNotice] = useState<RetourBandeau | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -659,6 +717,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     setOnline(navigator.onLine);
     void (async () => {
       await claimCache(me.id); // listes d'un autre compte effacées avant tout affichage
+      setHabitudes((await cache.get<Record<string, Habitude>>(CLE_HABITUDES).catch(() => undefined)) ?? {});
       if (!brouillonLu.current) {
         const b = await cache.get<Brouillon>(CLE_BROUILLON).catch(() => undefined);
         const repris: Form | null = b && b.user_id === me.id && b.form ? { ...blank(), ...b.form } : null;
@@ -667,6 +726,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
           // Correction reprise : sa saisie ne part pas avant l'enregistrement (envoi lancé juste après).
           enCorrection.current = repris.uuid;
           setForm(repris);
+          // Les valeurs du brouillon sont celles de l'agent : un changement de camion ne les remplace pas.
+          setProposes([]);
           setShowCosts(Boolean(b?.showCosts));
           annoncer({ tone: "neutral", text: "Saisie en cours reprise : vérifiez-la, puis enregistrez-la." }, 6000);
         }
@@ -776,9 +837,18 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
       enCorrection.current = null;
       // Dans la file : le brouillon n'a plus d'objet (repris, il referait la même saisie).
       await cache.remove(CLE_BROUILLON).catch(() => undefined);
+      // Dernière rotation du camion : reprise à son prochain choix (client, route, produit).
+      const plusRecente = habitudes[form.vehicle_id];
+      if (!plusRecente || plusRecente.date <= form.date_loading) {
+        const suite = { ...habitudes, [form.vehicle_id]: { partner_id: form.partner_id, route_id: form.route_id, product: form.product, date: form.date_loading } };
+        setHabitudes(suite);
+        void cache.set(CLE_HABITUDES, suite).catch(() => undefined);
+      }
 
       // Enregistrée sur le téléphone : le bouton le dit 1,5 s, le téléphone vibre, la page remonte.
       setForm({ ...blank(), date_loading: form.date_loading });
+      setProposes(PROPOSES_NEUF);
+      setReprise(null);
       setShowCosts(false);
       setErreurs({});
       setPhase("enregistree");
@@ -821,6 +891,8 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     if (form.uuid === item.client_uuid) {
       enCorrection.current = null;
       setForm(blank());
+      setProposes(PROPOSES_NEUF);
+      setReprise(null);
       setErreurs({});
     }
     await loadQueue();
@@ -837,8 +909,53 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
     if (!formVide(form) && !(await demanderConfirmation("Une saisie est en cours sur « Nouvelle » : la remplacer par cette correction ? Ce qui n'a pas été enregistré sera perdu.", { titre: "Remplacer la saisie en cours ?", action: "Remplacer", danger: true }))) return;
     enCorrection.current = item.client_uuid;
     setForm(fromPayload(item, refs));
+    // Correction : les valeurs sont celles de la saisie, rien n'est repris d'une autre rotation.
+    setProposes([]);
+    setReprise(null);
     setErreurs({});
     ouvrir("saisie");
+  }
+
+  /**
+   * Choix du camion : son chauffeur habituel, puis client, route et produit de sa dernière rotation
+   * connue, et sa capacité comme volume chargé. Seuls les champs vides ou proposés par un choix
+   * précédent sont remplis ; ce que l'agent a saisi reste. Une correction ne reprend rien.
+   */
+  function choisirCamion(vehicleId: string) {
+    if (!refs) return;
+    const v = refs.vehicles.find((x) => String(x.id) === vehicleId);
+    const suite: Form = { ...form, vehicle_id: vehicleId, driver_id: v?.driver_id ? String(v.driver_id) : form.driver_id };
+    corriger("vehicle_id");
+    if (form.uuid || !vehicleId) {
+      setForm(suite);
+      return;
+    }
+    const d = derniereRotation(vehicleId, habitudes, items, sent);
+    const connu = (liste: Array<{ id: number }>, id: string | undefined) => (id && liste.some((x) => String(x.id) === id) ? id : "");
+    const valeurs: Record<ChampPropose, string> = {
+      partner_id: connu(refs.clients, d?.partner_id),
+      route_id: connu(refs.routes, d?.route_id),
+      product: d?.product && refs.products.some((p) => p.code === d.product) ? d.product : "",
+      volume_loaded: v?.capacity_liters ? capaciteM3(v.capacity_liters) : "",
+    };
+    const libres = (Object.keys(valeurs) as ChampPropose[]).filter((k) => proposes.includes(k) || !(suite[k] ?? "").trim());
+    for (const k of libres) {
+      suite[k] = valeurs[k] || (k === "product" ? blank().product : "");
+      if (valeurs[k]) corriger(k);
+    }
+    setForm(suite);
+    setProposes(libres);
+    const repris = [valeurs.partner_id && libres.includes("partner_id") && "client", valeurs.route_id && libres.includes("route_id") && "route", valeurs.product && libres.includes("product") && "produit"].filter(Boolean) as string[];
+    const phrases = [
+      repris.length ? `${repris.join(", ").replace(/, ([^,]*)$/, " et $1").replace(/^./, (c) => c.toUpperCase())} repris de sa dernière rotation` : "",
+      valeurs.volume_loaded && libres.includes("volume_loaded") ? `volume chargé : sa capacité, ${fmtM3(lireNombre(valeurs.volume_loaded) ?? 0)}` : "",
+    ].filter(Boolean);
+    setReprise(phrases.length ? `${phrases.join(" ; ").replace(/^./, (c) => c.toUpperCase())}. Modifiez si besoin.` : null);
+  }
+
+  /** L'agent change un champ proposé : c'est désormais son choix, un autre camion ne le remplace plus. */
+  function retenir(k: ChampPropose) {
+    setProposes((p) => (p.includes(k) ? p.filter((x) => x !== k) : p));
   }
 
   async function logout() {
@@ -966,29 +1083,24 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
               {form.uuid && <Notice tone="accent">Correction d&apos;une saisie en attente.</Notice>}
               <section className={cx(FEUILLE, "space-y-4 p-4")}>
                 <Field label="Date de chargement" className={LIBELLE}><Input className={champ} type="date" value={form.date_loading} onChange={(e) => setForm({ ...form, date_loading: e.target.value })} /></Field>
-                <Field label="Ensemble routier" error={erreurs.vehicle_id} className={LIBELLE}>
-                  <Select id="rotation-vehicle_id" aria-invalid={invalide("vehicle_id")} className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => {
-                    const v = refs.vehicles.find((x) => String(x.id) === e.target.value);
-                    corriger("vehicle_id");
-                    setForm({ ...form, vehicle_id: e.target.value, driver_id: v?.driver_id ? String(v.driver_id) : form.driver_id });
-                  }} options={refs.vehicles.map((v) => ({ value: v.id, label: v.tractor_plate ? `${v.name}, ${v.tractor_plate}` : v.name }))} />
+                <Field label="Ensemble routier" error={erreurs.vehicle_id} hint={reprise ?? undefined} className={LIBELLE}>
+                  <Select id="rotation-vehicle_id" aria-invalid={invalide("vehicle_id")} className={champ} value={form.vehicle_id} placeholder="Choisir le camion" onChange={(e) => choisirCamion(e.target.value)} options={refs.vehicles.map((v) => ({ value: v.id, label: v.tractor_plate ? `${v.name}, ${v.tractor_plate}` : v.name }))} />
                 </Field>
                 <Field label="Chauffeur" className={LIBELLE}><Select className={champ} value={form.driver_id} placeholder="Chauffeur habituel" onChange={(e) => setForm({ ...form, driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Convoyeur" className={LIBELLE}><Select className={champ} value={form.co_driver_id ?? ""} placeholder="Aucun" onChange={(e) => setForm({ ...form, co_driver_id: e.target.value })} options={refs.drivers.map((d) => ({ value: d.id, label: d.name }))} /></Field>
                   <Field label="Remorque" className={LIBELLE}><Select className={champ} value={form.trailer_id ?? ""} placeholder="Celle de l'ensemble" onChange={(e) => setForm({ ...form, trailer_id: e.target.value })} options={(refs.trailers ?? []).map((t) => ({ value: t.id, label: t.name }))} /></Field>
                 </div>
-                <Field label="Client" error={erreurs.partner_id} className={LIBELLE}><Select id="rotation-partner_id" aria-invalid={invalide("partner_id")} className={champ} value={form.partner_id} placeholder="Choisir le client" onChange={(e) => { corriger("partner_id"); setForm({ ...form, partner_id: e.target.value }); }} options={refs.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
-                <Field label="Route" error={erreurs.route_id} className={LIBELLE}><Select id="rotation-route_id" aria-invalid={invalide("route_id")} className={champ} value={form.route_id} placeholder="Choisir la route" onChange={(e) => { corriger("route_id"); setForm({ ...form, route_id: e.target.value }); }} options={refs.routes.map((r) => ({ value: r.id, label: r.distance_km ? `${r.name} (${r.distance_km} km)` : r.name }))} /></Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Produit" className={LIBELLE}><Select className={champ} value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })} options={refs.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
-                  <Field label="Bon de livraison" className={LIBELLE}><Input className={champ} value={form.delivery_note} onChange={(e) => setForm({ ...form, delivery_note: e.target.value })} /></Field>
-                </div>
-                <Field label="N° de bon" className={LIBELLE}><Input className={champ} value={form.loading_voucher ?? ""} onChange={(e) => setForm({ ...form, loading_voucher: e.target.value })} /></Field>
+                <Field label="Client" error={erreurs.partner_id} className={LIBELLE}><Select id="rotation-partner_id" aria-invalid={invalide("partner_id")} className={champ} value={form.partner_id} placeholder="Choisir le client" onChange={(e) => { corriger("partner_id"); retenir("partner_id"); setForm({ ...form, partner_id: e.target.value }); }} options={refs.clients.map((c) => ({ value: c.id, label: c.name }))} /></Field>
+                <Field label="Route" error={erreurs.route_id} className={LIBELLE}><Select id="rotation-route_id" aria-invalid={invalide("route_id")} className={champ} value={form.route_id} placeholder="Choisir la route" onChange={(e) => { corriger("route_id"); retenir("route_id"); setForm({ ...form, route_id: e.target.value }); }} options={refs.routes.map((r) => ({ value: r.id, label: r.distance_km ? `${r.name} (${r.distance_km} km)` : r.name }))} /></Field>
+                <Field label="Produit" className={LIBELLE}><Select className={champ} value={form.product} onChange={(e) => { retenir("product"); setForm({ ...form, product: e.target.value }); }} options={refs.products.map((p) => ({ value: p.code, label: p.label }))} /></Field>
+                {/* Deux bons distincts, chacun sur sa ligne : celui du dépôt au chargement, celui du client à la livraison. */}
+                <Field label="N° du bon de chargement (dépôt)" hint="Imprimé sur la facture du client" className={LIBELLE}><Input className={champ} value={form.loading_voucher ?? ""} onChange={(e) => setForm({ ...form, loading_voucher: e.target.value })} /></Field>
+                <Field label="N° du bon de livraison (client)" hint="Si déjà livré" className={LIBELLE}><Input className={champ} value={form.delivery_note} onChange={(e) => setForm({ ...form, delivery_note: e.target.value })} /></Field>
               </section>
 
               <section className={cx(FEUILLE, "grid grid-cols-2 gap-3 p-4")}>
-                <Field label="Volume chargé (m³)" error={erreurs.volume_loaded} className={LIBELLE}><Input id="rotation-volume_loaded" aria-invalid={invalide("volume_loaded")} className={champVolume} inputMode="decimal" value={form.volume_loaded} onChange={(e) => { corriger("volume_loaded"); setForm({ ...form, volume_loaded: e.target.value }); }} /></Field>
+                <Field label="Volume chargé (m³)" error={erreurs.volume_loaded} className={LIBELLE}><Input id="rotation-volume_loaded" aria-invalid={invalide("volume_loaded")} className={champVolume} inputMode="decimal" value={form.volume_loaded} onChange={(e) => { corriger("volume_loaded"); retenir("volume_loaded"); setForm({ ...form, volume_loaded: e.target.value }); }} /></Field>
                 <Field label="Volume livré (m³)" error={erreurs.volume_delivered} className={LIBELLE}><Input id="rotation-volume_delivered" aria-invalid={invalide("volume_delivered")} className={cx(champVolume, "placeholder:font-sans placeholder:text-sm placeholder:font-normal")} inputMode="decimal" placeholder="Si déjà livré" value={form.volume_delivered} onChange={(e) => { corriger("volume_loaded"); corriger("volume_delivered"); setForm({ ...form, volume_delivered: e.target.value }); }} /></Field>
                 {(refs.measures ?? []).map((m) => (
                   <Field key={m.code} label={m.label} error={erreurs[`m:${m.code}`]} className={LIBELLE}><Input id={`rotation-m:${m.code}`} aria-invalid={invalide(`m:${m.code}`)} className={champ} inputMode="decimal" value={form.measures[m.code] ?? ""} onChange={(e) => { corriger(`m:${m.code}`); setForm({ ...form, measures: { ...form.measures, [m.code]: e.target.value } }); }} /></Field>
@@ -1021,7 +1133,7 @@ export function RotationsApp({ me }: { me: { id: number; name: string } }) {
                   {!retour && <p className="min-w-0 flex-1 text-muted">{etat.texte}</p>}
                 </div>
                 <div className="flex gap-2">
-                  {form.uuid && phase === "repos" && <Button size="lg" className="min-h-14 px-5 text-base" onClick={() => { enCorrection.current = null; setForm(blank()); setErreurs({}); }}>Annuler</Button>}
+                  {form.uuid && phase === "repos" && <Button size="lg" className="min-h-14 px-5 text-base" onClick={() => { enCorrection.current = null; setForm(blank()); setProposes(PROPOSES_NEUF); setReprise(null); setErreurs({}); }}>Annuler</Button>}
                   <button
                     type="button"
                     onClick={() => void save()}

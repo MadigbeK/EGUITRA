@@ -88,7 +88,7 @@ export function Repesee({ rotationId, motif, vehiculeId, onPesee }: RepeseeProps
           <Notice tone={surcharge ? "warn" : "ok"}>
             Pesée enregistrée{resultat.weigh_ticket ? `, ticket ${resultat.weigh_ticket}` : ""} : {tonnes(resultat.weight_net)} net
             {resultat.payload_tonnes ? ` pour une charge utile de ${tonnes(resultat.payload_tonnes)}` : ""}.{" "}
-            {surcharge ? `Encore ${tonnes(resultat.overload_tonnes)} de trop : délester de nouveau, puis peser.` : "La surcharge ne bloque plus le départ (V07) ; l'ancien ticket reste au journal."}
+            {surcharge ? `Encore ${tonnes(resultat.overload_tonnes)} de trop : délester de nouveau, puis peser.` : "La surcharge ne bloque plus le départ ; l'ancien ticket reste au journal."}
           </Notice>
         </div>
       )}

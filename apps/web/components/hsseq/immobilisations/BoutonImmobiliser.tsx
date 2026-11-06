@@ -62,7 +62,7 @@ function FenetreImmobilisation({ evenement, onClose, onImmobilise }: { evenement
   const [erreur, setErreur] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);
   // Le site de l'événement est celui de l'ensemble en cause : il dit si V09 y est désactivé.
-  const effet = effetVerrou(motifV09, v, evenement.site ?? null) ?? `Le verrou refuse tout départ de ${v.name} (motif V09) jusqu'à sa remise en service, dès que ce motif est actif.`;
+  const effet = effetVerrou(motifV09, v, evenement.site ?? null) ?? `Le verrou refuse tout départ de ${v.name} jusqu'à sa remise en service, dès que ce motif est actif.`;
 
   async function immobiliser() {
     setEnvoi(true);
@@ -130,7 +130,7 @@ export function ImmobilisationEvenement({ evenement }: { evenement: EvenementImm
     return (
       <p className="flex items-start gap-2.5 rounded-xl border border-line bg-panel-2 px-4 py-3 text-[13px] leading-relaxed text-ink-2">
         <Lock aria-hidden className="mt-0.5 h-4 w-4 flex-none text-muted" />
-        Criticité élevée : l&apos;immobilisation de {evenement.vehicle.name} le temps de l&apos;enquête est proposée au Responsable HSSEQ (motif V09).
+        Criticité élevée : l&apos;immobilisation de {evenement.vehicle.name} le temps de l&apos;enquête est proposée au Responsable HSSEQ.
       </p>
     );
   }
@@ -140,7 +140,7 @@ export function ImmobilisationEvenement({ evenement }: { evenement: EvenementImm
       <p className="min-w-0 flex-1">
         <span className="font-semibold">{evenement.vehicle?.name ?? "Véhicule"} immobilisé</span> depuis le {momentCk(i.since)}
         {i.imposed_by ? ` par ${i.imposed_by.name}` : ""}
-        {i.reason ? `, motif : « ${i.reason} »` : ""}. Il ne repart qu&apos;après sa remise en service par le Responsable HSSEQ (motif V09).
+        {i.reason ? `, motif : « ${i.reason} »` : ""}. Il ne repart qu&apos;après sa remise en service par le Responsable HSSEQ.
       </p>
       <Link href={`/hsseq/immobilisations?evenement=${evenement.id}`} className="text-[13px] font-semibold text-accent underline-offset-2 hover:underline">
         Immobilisations

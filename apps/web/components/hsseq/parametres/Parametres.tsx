@@ -31,7 +31,7 @@ export function ParametresHsseq() {
   const setOnglet = (o: Onglet) => router.replace(o === "sites" ? chemin : `${chemin}?onglet=${o}`, { scroll: false });
   return (
     <div>
-      <PageHeader title="Paramètres" subtitle="Sites et chefs de parc, grilles de contrôle par profil de véhicule, motifs du verrou de départ, habilitations exigées par profil, itinéraires, modèles du rapport mensuel, auditeurs externes, réglages de la société. Réservé à l'administration et au Responsable HSSEQ." />
+      <PageHeader title="Paramètres" subtitle="Réglez sites, grilles, motifs du verrou, habilitations et modèles ; réservé à l'administration et au Responsable HSSEQ." />
       <Tabs
         value={onglet}
         onChange={setOnglet}
