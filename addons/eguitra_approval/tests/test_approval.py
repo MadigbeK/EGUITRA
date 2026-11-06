@@ -111,8 +111,9 @@ class TestApproval(FinanceDataMixin, ApiCase):
 
     def test_pas_de_suppleance_si_le_seul_comptable_n_est_pas_auteur(self):
         self._seul_comptable()
-        bill = self._bill(10_000_000, user=self.dg)
-        bill.with_user(self.dg)._eguitra_post_or_submit()
+        administrateur = self._create_user("saisie.admin", "admin")
+        bill = self._bill(10_000_000, user=administrateur)
+        bill.with_user(administrateur)._eguitra_post_or_submit()
         request = self._request(bill)
         self.assertEqual(request.step_ids.mapped("profile"), ["finance"], "Le comptable contrôle la pièce d'un autre")
         request.with_user(self.comptable).action_approve()
