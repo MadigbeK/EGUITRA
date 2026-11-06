@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Circle, Clock, Download, FileText, FileUp, Info, Paperclip, Printer, X, type Icon } from "@/components/icons";
 import { Badge, Button, Card, Empty, ErrorBox, Field, FileButton, Input, Loading, Notice, ProgressBar, Segmented, Select, Tag, cx, demanderConfirmation, type Tone } from "@/components/ui";
 import { EnTete, FORMATS, dateHeure, quand, taille } from "@/components/portail/commun";
@@ -25,9 +26,10 @@ const ETAT_FICHIER: Record<Fichier["state"], { tone: Tone; label: string }> = {
   rejected: { tone: "danger", label: "À reprendre" },
 };
 
+/** « À déposer » : tout ce qui attend un envoi du porteur, pièces manquantes et pièces à reprendre. */
 const FILTRE: Record<Filtre, { test: (p: PieceAttendue) => boolean; vide: string }> = {
   toutes: { test: () => true, vide: "Le cabinet n'a pas encore établi la liste des pièces attendues pour votre dossier." },
-  deposer: { test: (p) => p.state === "missing", vide: "Aucune pièce à déposer : tout ce qui est attendu est entre les mains du cabinet." },
+  deposer: { test: (p) => p.state === "missing" || p.state === "rejected", vide: "Aucune pièce à déposer : tout ce qui est attendu est entre les mains du cabinet." },
   reprendre: { test: (p) => p.state === "rejected", vide: "Aucune pièce à reprendre : vos envois conviennent au cabinet." },
   validees: { test: (p) => p.state === "validated", vide: "Aucune pièce validée pour l'instant. Le cabinet valide chaque pièce après l'avoir vérifiée." },
 };
@@ -103,7 +105,22 @@ export default function PiecesPortail() {
   const chemin = dossier ? `/portail/dossiers/${dossier.id}/pieces` : null;
   const { data, error, mutate } = useApi<Pieces>(chemin);
   const { setRetour, bandeau } = useRetour();
-  const [filtre, setFiltre] = useState<Filtre>("toutes");
+  // Pièce désignée par l'adresse (une étape de l'accueil) : son filtre, puis mise en vue et soulignée.
+  const visee = Number(useSearchParams().get("piece")) || null;
+  // Sans choix du porteur, la page s'ouvre sur « À déposer » tant qu'il en reste, sinon sur toutes les pièces.
+  const [choix, setChoix] = useState<Filtre | null>(null);
+  const filtre: Filtre = useMemo(() => {
+    if (choix) return choix;
+    const attendues = data?.attendues ?? [];
+    const cible = visee ? attendues.find((p) => p.document_type_id === visee) : undefined;
+    if (cible) return FILTRE.deposer.test(cible) ? "deposer" : "toutes";
+    return attendues.some(FILTRE.deposer.test) ? "deposer" : "toutes";
+  }, [choix, data, visee]);
+  const pret = Boolean(data);
+  useEffect(() => {
+    if (!pret || !visee) return;
+    document.getElementById(`piece-${visee}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [pret, visee]);
   // Un seul dépôt à la fois : la fin d'un dépôt ne peut plus effacer l'indicateur d'un autre, ni un
   // nouveau clic créer une version en double. La référence bloque aussi deux choix de fichier rapprochés.
   const [envoi, setEnvoi] = useState<number | "autre" | null>(null);
@@ -224,8 +241,8 @@ export default function PiecesPortail() {
   return (
     <div className="space-y-6">
       <EnTete
-        surtitre="Data room"
-        titre="Pièces et data room"
+        surtitre="Mon projet"
+        titre="Mes documents"
         texte="Déposez ici les pièces que le cabinet attend. Chacune est vérifiée, puis validée ou renvoyée avec un commentaire."
         actions={
           <Button onClick={() => void listePdf()} loading={pdf}>
@@ -269,7 +286,7 @@ export default function PiecesPortail() {
           <Segmented
             label="Filtrer les pièces"
             value={filtre}
-            onChange={setFiltre}
+            onChange={setChoix}
             className="mb-5 max-w-full overflow-x-auto"
             options={[
               { key: "toutes", label: `Toutes (${data.attendues.length})` },
@@ -279,7 +296,10 @@ export default function PiecesPortail() {
             ]}
           />
           {groupes.length === 0 ? (
-            <Empty title={FILTRE[filtre].vide} />
+            <Empty
+              title={FILTRE[filtre].vide}
+              action={filtre !== "toutes" && data.attendues.length > 0 ? <Button onClick={() => setChoix("toutes")}>Voir toutes les pièces</Button> : undefined}
+            />
           ) : (
             <div className="space-y-6">
               {groupes.map((g) => (
@@ -300,9 +320,11 @@ export default function PiecesPortail() {
                       return (
                         <li
                           key={piece.document_type_id}
+                          id={`piece-${piece.document_type_id}`}
                           className={cx(
-                            "flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-start",
+                            "flex scroll-mt-24 flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-start",
                             piece.state === "rejected" ? "border-danger/25 bg-danger-doux/30" : "border-line",
+                            piece.document_type_id === visee && "ring-2 ring-accent-vif",
                           )}
                         >
                           <span aria-hidden className={cx("hidden h-9 w-9 flex-none place-items-center rounded-full sm:grid", e.pastille)}>

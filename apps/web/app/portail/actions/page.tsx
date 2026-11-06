@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Calendar, CheckCircle2, Clock, Pencil, Send } from "@/components/icons";
-import { Anneau, Badge, Button, Card, Empty, ErrorBox, FEUILLE, Loading, Modal, Notice, Textarea, cx } from "@/components/ui";
+import { Anneau, Badge, Button, Card, Empty, ErrorBox, FEUILLE, Loading, Modal, Notice, Textarea, classesBouton, cx } from "@/components/ui";
 import { EnTete, quand } from "@/components/portail/commun";
 import { usePortail } from "@/components/portail/PortailShell";
 import { PasDeDossier, jour, messageErreur, useRetour, erreurLisible } from "@/components/portail/projet/outils";
@@ -40,11 +41,11 @@ const COLONNES: Array<{ key: ActionRow["state"]; titre: string; trait: string; v
   { key: "done", titre: "Validées", trait: "bg-jade", vide: "Aucune action validée pour l'instant." },
 ];
 
-function CarteAction({ a, ferme, onCompteRendu }: { a: ActionRow; ferme: boolean; onCompteRendu: (a: ActionRow) => void }) {
+function CarteAction({ a, ferme, visee, onCompteRendu }: { a: ActionRow; ferme: boolean; visee?: boolean; onCompteRendu: (a: ActionRow) => void }) {
   const [ouvert, setOuvert] = useState(false);
   const longue = (a.description?.length ?? 0) > 180;
   return (
-    <article className={cx(FEUILLE, "p-4", a.overdue && "ring-1 ring-danger/35")}>
+    <article className={cx(FEUILLE, "p-4", visee ? "ring-2 ring-accent-vif" : a.overdue && "ring-1 ring-danger/35")}>
       {a.overdue && (
         <div className="mb-2">
           <Badge tone="danger">Échéance dépassée</Badge>
@@ -115,6 +116,13 @@ export default function PlanActions() {
   const [envoi, setEnvoi] = useState(false);
 
   const [brouillon, setBrouillon] = useState(false);
+  // Action désignée par l'adresse (une étape de l'accueil) : mise en vue et soulignée une fois la liste lue.
+  const visee = Number(useSearchParams().get("action")) || null;
+  const pret = Boolean(data);
+  useEffect(() => {
+    if (!pret || !visee) return;
+    document.getElementById(`action-${visee}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [pret, visee]);
 
   const ouvrir = useCallback((a: ActionRow) => {
     const garde = lireBrouillon(a.id);
@@ -174,7 +182,11 @@ export default function PlanActions() {
 
       {total === 0 ? (
         <Card>
-          <Empty title="Le cabinet ne vous a confié aucune action pour l'instant." hint="Votre consultant ajoutera ici les actions à mener pour faire avancer votre dossier. Vous serez prévenu à chaque nouvelle action." />
+          <Empty
+            title="Le cabinet ne vous a confié aucune action pour l'instant."
+            hint="Votre consultant ajoutera ici les actions à mener pour faire avancer votre dossier. Vous serez prévenu à chaque nouvelle action."
+            action={!ferme ? <Link href="/portail/messages" className={classesBouton()}>Écrire à votre consultant</Link> : undefined}
+          />
         </Card>
       ) : (
         <>
@@ -237,8 +249,8 @@ export default function PlanActions() {
                   {items.length ? (
                     <ul className="space-y-3">
                       {items.map((a) => (
-                        <li key={a.id}>
-                          <CarteAction a={a} ferme={ferme} onCompteRendu={ouvrir} />
+                        <li key={a.id} id={`action-${a.id}`} className="scroll-mt-24">
+                          <CarteAction a={a} ferme={ferme} visee={a.id === visee} onCompteRendu={ouvrir} />
                         </li>
                       ))}
                     </ul>
@@ -310,7 +322,7 @@ export default function PlanActions() {
                 <p className="mt-1.5 text-[12px] leading-snug text-muted">
                   Un justificatif à joindre ? Déposez-le dans{" "}
                   <Link href={`/portail/pieces?dossier=${dossier.id}`} target="_blank" rel="noopener" className="font-semibold text-accent underline underline-offset-2">
-                    Pièces et data room
+                    Mes documents
                     <span className="sr-only"> (s'ouvre dans un nouvel onglet)</span>
                   </Link>
                   , un nouvel onglet qui garde ce compte rendu ouvert, puis mentionnez-le ici. Votre texte est gardé même si vous fermez cette fenêtre.

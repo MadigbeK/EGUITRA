@@ -520,6 +520,27 @@ class TestPortail(ApiCase):
         self.assertNotIn(interne.id, ids, "Les actions du cabinet restent internes")
         self.assertNotIn(autre.id, ids, "Ni celles d'un autre dossier")
 
+    def test_toutes_les_prochaines_etapes_menent_a_leur_element(self):
+        """Accueil du porteur : toutes ses étapes sont servies (plus de coupure à huit), avec leur compte,
+        et chacune mène à l'élément concerné (l'action ou la pièce, désignée dans l'adresse)."""
+        Action = self.env["axispro.action"]
+        actions = Action.create([{"dossier_id": self.dossier_a.id, "name": f"Étape {i}", "assignee": "porteur"}
+                                 for i in range(12)])
+        status, tableau = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/tableau", token=self.porteur)
+        self.assertEqual(status, 200, tableau)
+        etapes = tableau["next_steps"]
+        self.assertEqual(len(etapes), tableau["next_steps_total"], "Toutes les étapes sont servies")
+        self.assertGreaterEqual(len(etapes), 13, "Douze actions et la pièce attendue, au-delà des huit d'avant")
+        liens = {s["link"] for s in etapes if s["kind"] == "action"}
+        for action in actions:
+            self.assertIn(f"/portail/actions?dossier={self.dossier_a.id}&action={action.id}", liens)
+        pieces = [s["link"] for s in etapes if s["kind"] == "piece"]
+        self.assertTrue(pieces and all(f"/portail/pieces?dossier={self.dossier_a.id}&piece=" in lien for lien in pieces),
+                        pieces)
+        _s, attendues = self.call("GET", f"/portail/dossiers/{self.dossier_a.id}/pieces", token=self.porteur)
+        types = {str(p["document_type_id"]) for p in attendues["attendues"]}
+        self.assertTrue(all(lien.rsplit("=", 1)[1] in types for lien in pieces), "La pièce désignée est bien attendue")
+
     def test_decision_notifiee_a_chaque_verrou(self):
         """Audit du noyau (I-P1) : la décision du comité est notifiée au porteur à chaque verrouillage,
         même identique à la précédente, et un ajournement l'est aussi ; une seule notification par verrou."""

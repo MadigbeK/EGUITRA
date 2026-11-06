@@ -65,7 +65,8 @@ function initiales(name: string) {
 
 /* ─── Menu ─────────────────────────────────────────────────────────────── */
 
-type Entree = { href: string; label: string; icon: Icon; badge?: (c: Espace["counts"]) => { n: number; tone: "accent" | "danger" } | null };
+/** `court` : libellé de la barre du téléphone, quand le libellé du menu y serait coupé. */
+type Entree = { href: string; label: string; court?: string; icon: Icon; badge?: (c: Espace["counts"]) => { n: number; tone: "accent" | "danger" } | null };
 
 const MENU: Array<{ titre: string; entrees: Entree[] }> = [
   {
@@ -73,9 +74,9 @@ const MENU: Array<{ titre: string; entrees: Entree[] }> = [
     entrees: [
       { href: "/portail", label: "Accueil", icon: LayoutDashboard },
       { href: "/portail/projet", label: "Mon projet", icon: FolderOpen },
-      { href: "/portail/pieces", label: "Pièces et data room", icon: FileStack },
+      { href: "/portail/pieces", label: "Mes documents", court: "Documents", icon: FileStack },
       {
-        href: "/portail/actions", label: "Plan d'actions", icon: ListChecks,
+        href: "/portail/actions", label: "Plan d'actions", court: "Actions", icon: ListChecks,
         badge: (c) => (c.tasks_overdue ? { n: c.tasks_overdue, tone: "danger" } : c.tasks_open ? { n: c.tasks_open, tone: "accent" } : null),
       },
     ],
@@ -109,8 +110,11 @@ const MENU: Array<{ titre: string; entrees: Entree[] }> = [
   },
 ];
 
-/** Barre d'onglets du téléphone : les cinq écrans les plus utiles. */
-const ONGLETS: Entree[] = [MENU[0]!.entrees[0]!, MENU[0]!.entrees[2]!, MENU[1]!.entrees[0]!, MENU[1]!.entrees[2]!, MENU[2]!.entrees[1]!];
+/**
+ * Barre d'onglets du téléphone : accueil, plan d'actions, documents et messages, puis « Menu » qui ouvre
+ * le tiroir (rendez-vous, agenda, conseils et le reste y restent).
+ */
+const ONGLETS: Entree[] = [MENU[0]!.entrees[0]!, MENU[0]!.entrees[3]!, MENU[0]!.entrees[2]!, MENU[1]!.entrees[0]!];
 
 function actif(pathname: string, href: string) {
   return href === "/portail" ? pathname === "/portail" : pathname === href || pathname.startsWith(`${href}/`);
@@ -495,7 +499,7 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
 
   return (
     <Contexte.Provider value={valeur}>
-      <div data-app="portail" data-societe="cabinet" className="min-h-screen bg-bg text-ink">
+      <div data-app="portail" data-societe="cabinet" data-compte={me.login} className="min-h-screen bg-bg text-ink">
         <VeilleInactivite app="portail" />
         {tiroir && (
           <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
@@ -564,12 +568,18 @@ export function PortailShell({ me, children }: { me: Me; children: ReactNode }) 
                 <li key={e.href}>
                   <Link href={e.href} aria-current={on ? "page" : undefined} className={cx("relative flex flex-col items-center gap-0.5 py-2 text-[10.5px] font-semibold", on ? "text-accent" : "text-muted")}>
                     <I className="h-5 w-5" />
-                    <span className="max-w-full truncate px-1">{e.label.split(" ")[0]}</span>
+                    <span className="max-w-full truncate px-1">{e.court ?? e.label}</span>
                     {badge && <span className="absolute right-[22%] top-1 h-2 w-2 rounded-full bg-danger" />}
                   </Link>
                 </li>
               );
             })}
+            <li>
+              <button type="button" onClick={() => setTiroir(true)} aria-expanded={tiroir} className="relative flex w-full flex-col items-center gap-0.5 py-2 text-[10.5px] font-semibold text-muted">
+                <Menu className="h-5 w-5" />
+                <span className="max-w-full truncate px-1">Menu</span>
+              </button>
+            </li>
           </ul>
         </nav>
       </div>

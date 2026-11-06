@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { AlertTriangle, ArrowRight, Calendar, Info, ShieldAlert, Users, Wallet } from "@/components/icons";
-import { AreaChart, Badge, Button, Card, Empty, ErrorBox, Kpi, RankBars, Repartition, Squelette, SERIES, type Tone } from "@/components/ui";
+import { AreaChart, Badge, Button, Card, Empty, ErrorBox, Kpi, RankBars, Repartition, Squelette, SERIES, classesBouton, type Tone } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDate, fmtDec, fmtGNF, fmtInt, fmtMonth, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import type { AlertSeverity, RhAlert, Summary } from "@/lib/rh-types";
@@ -61,7 +61,16 @@ function Contenu({ societe }: { societe: number | null }) {
         <Kpi
           label="Taux d'absence (30 jours)"
           value={fmtPct(data.absenteeism_rate)}
-          hint={pluriel(data.pending_leaves, "demande à valider", "demandes à valider")}
+          hint={
+            data.pending_leaves ? (
+              // Mène à l'onglet « À valider » des absences (onglet d'ouverture de la page).
+              <Link href="/rh/conges" className="font-semibold text-accent hover:underline">
+                {pluriel(data.pending_leaves, "demande à valider", "demandes à valider")}
+              </Link>
+            ) : (
+              pluriel(data.pending_leaves, "demande à valider", "demandes à valider")
+            )
+          }
           tone={data.absenteeism_rate !== null && data.absenteeism_rate > 5 ? "warn" : data.pending_leaves ? "accent" : "neutral"}
         />
       </div>
@@ -161,7 +170,7 @@ function Contenu({ societe }: { societe: number | null }) {
             <Chiffre icone={Users} label="Ancienneté moyenne" value={data.average_seniority === null ? "–" : `${fmtDec(data.average_seniority)} ${accord(data.average_seniority, "an")}`} />
             <Chiffre icone={Users} label="Âge moyen" value={data.average_age === null ? "–" : `${fmtDec(data.average_age)} ans`} />
             <Chiffre icone={Users} label="Part des femmes" value={fmtPct(data.women_share, 0)} />
-            <Chiffre icone={Calendar} label="Demandes d'absence à valider" value={String(data.pending_leaves)} />
+            <Chiffre icone={Calendar} label="Demandes d'absence à valider" value={String(data.pending_leaves)} href={data.pending_leaves ? "/rh/conges" : undefined} />
           </dl>
           {data.by_contract.length > 0 && (
             <div className="mt-5">
@@ -196,7 +205,15 @@ function Contenu({ societe }: { societe: number | null }) {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Effectif par département">
           {data.by_department.length === 0 ? (
-            <Empty title="Aucun département" hint="Créez les départements dans les paramètres RH." />
+            <Empty
+              title="Aucun département"
+              hint="Créez les départements dans les paramètres RH."
+              action={
+                <Link href="/rh/parametres" className={classesBouton()}>
+                  Ouvrir les paramètres RH
+                </Link>
+              }
+            />
           ) : (
             <RankBars items={data.by_department.map((d) => ({ key: d.name, label: d.name, value: d.headcount }))} format={(v) => `${v} pers.`} />
           )}
@@ -249,13 +266,22 @@ function AlerteLigne({ a }: { a: RhAlert }) {
   );
 }
 
-function Chiffre({ icone: I, label, value }: { icone: typeof Users; label: string; value: string }) {
+/** Chiffre du personnel ; `href` : la page où le traiter (demandes à valider). */
+function Chiffre({ icone: I, label, value, href }: { icone: typeof Users; label: string; value: string; href?: string }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="flex items-center gap-2 text-ink-2">
         <I className="h-4 w-4 text-accent" /> {label}
       </dt>
-      <dd className="font-semibold tabular text-ink">{value}</dd>
+      <dd className="font-semibold tabular text-ink">
+        {href ? (
+          <Link href={href} className="text-accent hover:underline" aria-label={`${label} : ${value}, les traiter`}>
+            {value}
+          </Link>
+        ) : (
+          value
+        )}
+      </dd>
     </div>
   );
 }

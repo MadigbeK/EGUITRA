@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Plus } from "@/components/icons";
 import { BadgeEtat } from "@/components/service-client/commun";
-import { Card, DataTable, Etat, PageHeader, Segmented, classesBouton } from "@/components/ui";
+import { Card, DataTable, Empty, Etat, PageHeader, Segmented, classesBouton } from "@/components/ui";
 import { useApi } from "@/lib/api-client";
 import { fmtDateTime } from "@/lib/format";
 import type { LigneClient } from "@/lib/service-client";
@@ -31,20 +31,32 @@ export default function MesDemandesClientPage() {
           <Segmented label="Demandes" value={vue} onChange={setVue} options={[{ key: "open", label: "En cours" }, { key: "closed", label: "Closes" }]} />
         </div>
         <Etat data={data} error={error} onRetry={() => void mutate()} label="Chargement de vos demandes…">
-          {(rows) => (
-            <DataTable
-              rows={rows}
-              rowKey={(r) => r.id}
-              onRowClick={(r) => router.push(`/espace-client/demandes/${r.id}`)}
-              empty={vue === "open" ? "Aucune demande en cours." : "Aucune demande close."}
-              columns={[
-                { key: "name", label: "Numéro", className: "whitespace-nowrap font-semibold tabular" },
-                { key: "subject", label: "Demande", render: (r) => <span className="block"><span className="block font-medium">{r.subject}</span><span className="block text-[12.5px] text-muted">{r.kind_label}{r.category ? ` · ${r.category}` : ""} · {r.company.name}</span></span> },
-                { key: "state", label: "État", render: (r) => <BadgeEtat etat={r.state} libelle={r.state_label} /> },
-                { key: "last_update", label: "Dernier échange", render: (r) => fmtDateTime(r.last_update) },
-              ]}
-            />
-          )}
+          {(rows) =>
+            rows.length === 0 && vue === "open" ? (
+              <Empty
+                title="Aucune demande en cours."
+                hint="Une question, une réclamation ? Déposez-la : elle reçoit aussitôt un numéro et le service client vous répond ici."
+                action={
+                  <Link href="/espace-client/nouvelle" className={classesBouton("primary")}>
+                    <Plus className="h-4 w-4" /> Nouvelle demande
+                  </Link>
+                }
+              />
+            ) : (
+              <DataTable
+                rows={rows}
+                rowKey={(r) => r.id}
+                onRowClick={(r) => router.push(`/espace-client/demandes/${r.id}`)}
+                empty={vue === "open" ? "Aucune demande en cours." : "Aucune demande close."}
+                columns={[
+                  { key: "name", label: "Numéro", className: "whitespace-nowrap font-semibold tabular" },
+                  { key: "subject", label: "Demande", render: (r) => <span className="block"><span className="block font-medium">{r.subject}</span><span className="block text-[12.5px] text-muted">{r.kind_label}{r.category ? ` · ${r.category}` : ""} · {r.company.name}</span></span> },
+                  { key: "state", label: "État", render: (r) => <BadgeEtat etat={r.state} libelle={r.state_label} /> },
+                  { key: "last_update", label: "Dernier échange", render: (r) => fmtDateTime(r.last_update) },
+                ]}
+              />
+            )
+          }
         </Etat>
       </Card>
     </div>

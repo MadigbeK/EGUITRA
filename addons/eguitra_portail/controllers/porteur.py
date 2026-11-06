@@ -30,6 +30,9 @@ MAX_DAILY_MEETING_REQUESTS = 10
 # Messages renvoyés par appel au fil : les plus récents d'abord, la page précédente sur demande.
 FIL_PAGE = 200
 NOTIFICATIONS_MAX = 200
+# Prochaines étapes de l'accueil : toutes jusqu'à ce plafond (l'écran en montre huit, puis la suite sur
+# demande) ; `next_steps_total` donne le compte complet.
+NEXT_STEPS_MAX = 100
 # Origine d'une action telle que le porteur la lit. Un écart de la grille du cabinet se présente comme une
 # demande du consultant, au même titre qu'une saisie libre : rien ne laisse deviner la grille ni ses
 # critères. La clé interne (gap, manual…) ne sort jamais.
@@ -211,16 +214,18 @@ class EguitraPortailPorteur(http.Controller):
                 lambda a: (a.due_date or today + timedelta(days=3650), a.id)):
             overdue = bool(task.due_date and task.due_date < today)
             soon = bool(task.due_date and task.due_date <= today + timedelta(days=7))
+            # Chaque étape mène à l'élément concerné : l'action ou la pièce est mise en vue sur sa page.
             steps.append({"kind": "action", "title": task.name, "detail": task.description or None,
-                          "due": task.due_date, "link": f"/portail/actions?dossier={dossier.id}",
+                          "due": task.due_date, "link": f"/portail/actions?dossier={dossier.id}&action={task.id}",
                           "urgency": "high" if overdue else "normal" if soon else "low"})
         for doc in docs:
+            link = f"/portail/pieces?dossier={dossier.id}&piece={doc['document_type_id']}"
             if doc["state"] == "rejected":
                 steps.append({"kind": "piece", "title": f"Pièce à reprendre : {doc['name']}", "detail": doc["guidance"],
-                              "due": None, "link": f"/portail/pieces?dossier={dossier.id}", "urgency": "high"})
+                              "due": None, "link": link, "urgency": "high"})
             elif doc["due"] and doc["required"] and doc["state"] == "missing":
                 steps.append({"kind": "piece", "title": f"Pièce attendue : {doc['name']}", "detail": doc["guidance"],
-                              "due": None, "link": f"/portail/pieces?dossier={dossier.id}", "urgency": "normal"})
+                              "due": None, "link": link, "urgency": "normal"})
         unread = request.env["portail.read.marker"].unread(me, dossier).get(dossier.id, 0)
         if unread:
             steps.append({"kind": "message", "title": f"{unread} message{'s' if unread > 1 else ''} du cabinet à lire",
@@ -261,7 +266,8 @@ class EguitraPortailPorteur(http.Controller):
             "dossier": dict(vues.dossier_ref(dossier, porteur=True), gates=vues.gates_of(dossier),
                             location=dossier.location or None),
             "preparation": vues.preparation(dossier, docs, tasks),
-            "next_steps": steps[:8],
+            "next_steps": steps[:NEXT_STEPS_MAX],
+            "next_steps_total": len(steps),
             "upcoming": upcoming[:6],
             "timeline": vues.timeline(dossier, limit=6),
             "announcements": [vues.announcement_row(a, reads.get(a.id)) for a in announcements[:3]],

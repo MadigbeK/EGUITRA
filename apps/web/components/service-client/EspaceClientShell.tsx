@@ -27,9 +27,10 @@ export function EspaceClientShell({ me, children }: { me: Me; children: ReactNod
   const liens = [
     { href: "/espace-client", label: "Mes demandes" },
     { href: "/espace-client/nouvelle", label: "Nouvelle demande" },
+    { href: "/compte/mot-de-passe", label: "Mot de passe" },
   ];
   return (
-    <div data-app="espace-client" className="min-h-screen bg-panel-2 text-ink">
+    <div data-app="espace-client" data-compte={me.login} className="min-h-screen bg-panel-2 text-ink">
       <VeilleInactivite app="espace-client" />
       <header className="border-b border-line bg-panel">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">

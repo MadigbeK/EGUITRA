@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { ChevronLeft, Paperclip, Send } from "@/components/icons";
 import { BadgeEtat, Etoiles, Fil } from "@/components/service-client/commun";
 import { Button, Card, Etat, Notice, Textarea } from "@/components/ui";
@@ -13,7 +13,15 @@ import { PIECES_ACCEPTEES, type FicheClient } from "@/lib/service-client";
 export default function DemandeClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data, error, mutate } = useApi<FicheClient>(`/espace-client/tickets/${id}`);
-  const maj = (f: FicheClient) => void mutate(f, { revalidate: false });
+  // Pièces jointes au dépôt non parvenues (« ?pieces=echec ») : la demande existe, le client les joint à nouveau.
+  const [piecesPerdues, setPiecesPerdues] = useState(false);
+  useEffect(() => {
+    setPiecesPerdues(new URLSearchParams(window.location.search).get("pieces") === "echec");
+  }, []);
+  const maj = (f: FicheClient) => {
+    setPiecesPerdues(false);
+    void mutate(f, { revalidate: false });
+  };
   return (
     <div>
       <Link href="/espace-client" className="mb-4 inline-flex items-center gap-1 text-[13px] font-semibold text-accent hover:underline">
@@ -34,6 +42,7 @@ export default function DemandeClientPage({ params }: { params: Promise<{ id: st
                 {d.link?.label && <span>· {d.link.type} {d.link.label}</span>}
               </div>
             </header>
+            {piecesPerdues && d.can.reply && <Notice tone="warn">Votre demande est bien déposée, mais les pièces jointes n&apos;ont pas pu être envoyées : joignez-les de nouveau ci-dessous, dans « Répondre ».</Notice>}
             {d.merged_into && <Notice tone="warn">Cette demande a été regroupée avec la demande {d.merged_into}, qui reprend tous vos échanges.</Notice>}
             {d.can.confirm && <Confirmer d={d} onFait={maj} />}
             {d.satisfaction.can_rate && <Avis d={d} onFait={maj} />}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ChevronLeft, Search } from "@/components/icons";
+import { ChevronDown, ChevronLeft, Search } from "@/components/icons";
 import { BadgeEtat } from "@/components/service-client/commun";
 import { Button, Card, Field, Input, Notice, PageHeader, Select, Textarea } from "@/components/ui";
 import { apiGet, apiSend, messageErreur, useApi } from "@/lib/api-client";
@@ -25,8 +25,9 @@ interface Recherche {
 }
 
 /**
- * Saisie pendant un appel, une visite ou un courrier : on cherche le client (nom, téléphone, courriel), ses
- * dossiers en cours s'affichent aussitôt ; on rejoint l'un d'eux ou on ouvre un nouveau dossier.
+ * Saisie pendant un appel, une visite ou un courrier : on cherche d'abord le client (nom, téléphone,
+ * courriel), ses dossiers en cours s'affichent aussitôt ; on rejoint l'un d'eux ou on ouvre un nouveau
+ * dossier. Priorité et équipe gardent leurs valeurs par défaut, repliées sous « Plus de détails ».
  */
 export default function NouveauDossierPage() {
   const router = useRouter();
@@ -74,45 +75,9 @@ export default function NouveauDossierPage() {
         <ChevronLeft className="h-4 w-4" /> Dossiers
       </Link>
       <PageHeader title="Nouveau dossier" subtitle="Pendant l'appel : retrouvez le client, voyez ses dossiers en cours, puis notez la demande et, s'il y a lieu, la réponse donnée sur-le-champ." />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <Card title="Le dossier">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Objet" className="sm:col-span-2">
-              <Input value={f.subject} onChange={set("subject")} maxLength={200} placeholder="Par exemple : livraison incomplète du 28 octobre" />
-            </Field>
-            <Field label="Canal d'arrivée">
-              <Select value={f.channel} onChange={set("channel")} options={CANAUX.map((c) => ({ value: c.value, label: c.label }))} />
-            </Field>
-            <Field label="Catégorie">
-              <Select value={f.category_id} onChange={set("category_id")} options={[{ value: "", label: "À choisir" }, ...(ctx?.categories ?? []).filter((c) => c.active).map((c) => ({ value: c.id, label: c.name }))]} />
-            </Field>
-            <Field label="Type" hint="Une catégorie de réclamation propose le type « Réclamation ».">
-              <Select value={f.kind} onChange={set("kind")} options={TYPES.map((t) => ({ value: t.value, label: t.label }))} />
-            </Field>
-            <Field label="Priorité" hint="Elle fixe les délais de première réponse et de résolution.">
-              <Select value={f.priority} onChange={set("priority")} options={PRIORITES.map((p) => ({ value: p.value, label: p.label }))} />
-            </Field>
-            <Field label="Description" className="sm:col-span-2">
-              <Textarea rows={5} value={f.description} onChange={set("description")} maxLength={10000} />
-            </Field>
-            <Field label="Responsable">
-              <Select value={f.user_id} onChange={set("user_id")} options={[{ value: "", label: "Aucun pour l'instant" }, ...(ctx?.assignees ?? []).map((u) => ({ value: u.id, label: u.name }))]} />
-            </Field>
-            <Field label="Équipe">
-              <Select value={f.team_id} onChange={set("team_id")} options={[{ value: "", label: "Celle de la catégorie" }, ...(ctx?.teams ?? []).filter((t) => t.active).map((t) => ({ value: t.id, label: t.name }))]} />
-            </Field>
-            <Field label="Réponse donnée pendant l'appel (facultatif)" className="sm:col-span-2" hint="Notée comme première réponse au client, communiquée de vive voix.">
-              <Textarea rows={3} value={f.answer} onChange={set("answer")} maxLength={10000} />
-            </Field>
-          </div>
-          {erreur && <p className="mt-4 text-[13px] font-semibold text-danger">{erreur}</p>}
-          <div className="mt-5 flex justify-end">
-            <Button variant="primary" loading={envoi} disabled={!f.subject.trim() || (!client && !f.contact_name.trim() && !f.contact_phone.trim() && !f.contact_email.trim())} onClick={enregistrer}>
-              Enregistrer le dossier
-            </Button>
-          </div>
-        </Card>
-        <div className="space-y-5">
+      {/* Le client d'abord : ses dossiers en cours s'affichent avant toute saisie (rejoindre plutôt que doubler). */}
+      <div className="space-y-5">
+        <div className="grid gap-5 lg:grid-cols-2">
           <Card title="Le client">
             <Field label="Rechercher" hint="Nom, téléphone ou courriel ; les tiers de la société et les contacts déjà connus.">
               <div className="relative">
@@ -134,7 +99,7 @@ export default function NouveauDossierPage() {
             ) : null}
             {trouves && (
               <div className="mt-4 space-y-3">
-                {trouves.partners.length === 0 && trouves.contacts.length === 0 && <p className="text-[13px] text-muted">Aucun client trouvé : saisissez le contact ci-dessous.</p>}
+                {trouves.partners.length === 0 && trouves.contacts.length === 0 && <p className="text-[13px] text-muted">Aucun client trouvé : saisissez le contact dans « Le contact ».</p>}
                 {trouves.partners.map((p) => (
                   <div key={p.id} className="rounded-xl border border-line p-3">
                     <div className="flex items-start justify-between gap-2">
@@ -180,6 +145,51 @@ export default function NouveauDossierPage() {
             </div>
           </Card>
         </div>
+        <Card title="Le dossier">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Objet" className="sm:col-span-2">
+              <Input value={f.subject} onChange={set("subject")} maxLength={200} placeholder="Par exemple : livraison incomplète du 28 octobre" />
+            </Field>
+            <Field label="Canal d'arrivée">
+              <Select value={f.channel} onChange={set("channel")} options={CANAUX.map((c) => ({ value: c.value, label: c.label }))} />
+            </Field>
+            <Field label="Catégorie">
+              <Select value={f.category_id} onChange={set("category_id")} options={[{ value: "", label: "À choisir" }, ...(ctx?.categories ?? []).filter((c) => c.active).map((c) => ({ value: c.id, label: c.name }))]} />
+            </Field>
+            <Field label="Type" hint="Une catégorie de réclamation propose le type « Réclamation ».">
+              <Select value={f.kind} onChange={set("kind")} options={TYPES.map((t) => ({ value: t.value, label: t.label }))} />
+            </Field>
+            <Field label="Description" className="sm:col-span-2">
+              <Textarea rows={5} value={f.description} onChange={set("description")} maxLength={10000} />
+            </Field>
+            <Field label="Responsable">
+              <Select value={f.user_id} onChange={set("user_id")} options={[{ value: "", label: "Aucun pour l'instant" }, ...(ctx?.assignees ?? []).map((u) => ({ value: u.id, label: u.name }))]} />
+            </Field>
+            <Field label="Réponse donnée pendant l'appel (facultatif)" className="sm:col-span-2" hint="Notée comme première réponse au client, communiquée de vive voix.">
+              <Textarea rows={3} value={f.answer} onChange={set("answer")} maxLength={10000} />
+            </Field>
+            {/* Priorité et équipe : valeurs par défaut (normale, celle de la catégorie), à changer au besoin. */}
+            <details className="group sm:col-span-2">
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[13px] font-semibold text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+                <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" /> Plus de détails : priorité ({PRIORITES.find((p) => p.value === f.priority)?.label.toLocaleLowerCase("fr") ?? f.priority}), équipe ({f.team_id ? (ctx?.teams ?? []).find((t) => String(t.id) === f.team_id)?.name ?? "choisie" : "celle de la catégorie"})
+              </summary>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <Field label="Priorité" hint="Elle fixe les délais de première réponse et de résolution.">
+                  <Select value={f.priority} onChange={set("priority")} options={PRIORITES.map((p) => ({ value: p.value, label: p.label }))} />
+                </Field>
+                <Field label="Équipe">
+                  <Select value={f.team_id} onChange={set("team_id")} options={[{ value: "", label: "Celle de la catégorie" }, ...(ctx?.teams ?? []).filter((t) => t.active).map((t) => ({ value: t.id, label: t.name }))]} />
+                </Field>
+              </div>
+            </details>
+          </div>
+          {erreur && <p className="mt-4 text-[13px] font-semibold text-danger">{erreur}</p>}
+          <div className="mt-5 flex justify-end">
+            <Button variant="primary" loading={envoi} disabled={!f.subject.trim() || (!client && !f.contact_name.trim() && !f.contact_phone.trim() && !f.contact_email.trim())} onClick={enregistrer}>
+              Enregistrer le dossier
+            </Button>
+          </div>
+        </Card>
       </div>
     </div>
   );

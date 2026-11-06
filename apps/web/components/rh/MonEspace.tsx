@@ -103,7 +103,15 @@ export function MonEspace() {
       <div className="grid gap-6 lg:grid-cols-12">
         <Card className="lg:col-span-7" title={<span className="flex items-center gap-2"><Calendar className="h-4 w-4 text-accent" /> Mes absences</span>}>
           {data.leaves.length === 0 ? (
-            <Empty title="Aucune absence" hint="Vos demandes apparaissent ici, avec leur état : à valider, approuvée, refusée." />
+            <Empty
+              title="Aucune absence"
+              hint="Vos demandes apparaissent ici, avec leur état : à valider, approuvée, refusée."
+              action={
+                <Button onClick={() => setDemande(true)}>
+                  <Plus className="h-4 w-4" /> Demander une absence
+                </Button>
+              }
+            />
           ) : (
             <ul className="divide-y divide-line/70">
               {data.leaves.map((l) => (
@@ -129,7 +137,6 @@ export function MonEspace() {
           )}
         </Card>
         <div className="space-y-6 lg:col-span-5">
-          <MesHabilitations qualifications={data.qualifications ?? []} fitness={data.fitness ?? null} />
           <Card title={<span className="flex items-center gap-2"><FileText className="h-4 w-4 text-accent" /> Mes bulletins de paie</span>}>
             {data.payslips.length === 0 ? (
               <p className="text-sm text-muted">Aucun bulletin validé pour l&apos;instant.</p>
@@ -155,6 +162,8 @@ export function MonEspace() {
               />
             )}
           </Card>
+          {/* Habilitations après les bulletins : sur téléphone, les bulletins suivent directement les absences. */}
+          <MesHabilitations qualifications={data.qualifications ?? []} fitness={data.fitness ?? null} />
           <Card title="Mon dossier">
             <dl>
               <Ligne label="Matricule">{e.matricule}</Ligne>

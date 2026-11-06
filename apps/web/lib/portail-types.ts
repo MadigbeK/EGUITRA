@@ -76,6 +76,8 @@ export interface Tableau {
   dossier: DossierRef & { gates: GateStep[]; location: string | null };
   preparation: Preparation;
   next_steps: NextStep[];
+  /** Nombre total d'étapes, la liste pouvant être plafonnée (absent d'une réponse antérieure). */
+  next_steps_total?: number;
   upcoming: Upcoming[];
   timeline: TimelineItem[];
   announcements: AnnouncementRow[];
