@@ -154,7 +154,7 @@ class TestApproval(FinanceDataMixin, ApiCase):
         status, detail = self.call("GET", f"/approvals/{req.id}", token=token)
         self.assertEqual(status, 200, detail)
         self.assertEqual([a["id"] for a in detail["attachments"]], [facture.id], detail)
-        self.assertEqual(detail["document_detail"]["lines"][0]["label"], self.acc_purchase.name)
+        self.assertEqual(detail["document_detail"]["lines"][0]["label"], self.acc_purchase.with_context(lang="fr_FR").name)
         status, contenu = self.call("GET", f"/approvals/{req.id}/attachments/{facture.id}", token=token)
         self.assertEqual((status, contenu), (200, "%PDF-1.4 facture du fournisseur"))
         status, body = self.call("GET", f"/approvals/{req.id}/attachments/{etrangere.id}", token=token)
