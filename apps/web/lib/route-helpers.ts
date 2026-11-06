@@ -6,7 +6,7 @@ import { MESSAGE_INDISPONIBLE } from "./session";
 /**
  * Refuse les requêtes venant d'un autre site (protection CSRF).
  * - Lecture (GET, HEAD) : refusée quand le navigateur la dit venue d'un autre site (Sec-Fetch-Site
- *   « cross-site », ou « same-site » : un autre sous-domaine, tel un autre nom en sslip.io). Les cookies
+ *   « cross-site », ou « same-site » : un autre sous-domaine, telle la recette vue de la production). Les cookies
  *   SameSite=Lax accompagnent une navigation venue d'ailleurs : un lien piégé vers la passerelle
  *   aurait sinon été relayé sous l'identité de l'utilisateur, et certaines lectures écrivent (une
  *   actualité marquée vue). Les appels des écrans, téléchargements compris, et ceux de Rotations sont

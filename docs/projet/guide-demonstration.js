@@ -2,7 +2,7 @@
 //   npm install pptxgenjs (dossier temporaire), puis : node guide-demonstration.js <adresse de la recette> <fichier.pptx>
 // L'adresse de la recette n'est jamais écrite dans le dépôt : elle est passée en argument.
 const pptxgen = require("pptxgenjs");
-const URL = process.argv[2] || "https://recette.<adresse>.sslip.io";
+const URL = process.argv[2] || "https://recette.nimova.cloud";
 const OUT = process.argv[3] || "Guide_demonstration.pptx";
 
 const C = { forest: "142F29", green: "22634C", mint: "A5E6C2", gold: "D3AA5B", cream: "F9F8F5",
@@ -417,7 +417,7 @@ stepSlide(14, "Administration et sûreté", "3 minutes · menu Administration", 
   title(s, "La suite et les décisions", "5 minutes · conclure par ce qu'on attend du DG");
   const rows = [
     ["Identité NIMOVA", "Appliquée à tous les écrans avant la recette.", "Valider l'identité"],
-    ["Nom de domaine", "nimovagroup.com (nimova.com est déjà pris).", "Enregistrer le domaine"],
+    ["Nom de domaine", "nimova.cloud, en service depuis le 6 novembre 2026.", "Communiquer les adresses"],
     ["Reprise 2026", "Classeur et relevés bancaires repris, balances comparées.", "Remettre le classeur"],
     ["Utilisateurs", "Comptes créés par profil et par société.", "Liste des utilisateurs"],
     ["Plan de comptes", "Validation des états avec l'expert-comptable.", "Contact de l'expert"],

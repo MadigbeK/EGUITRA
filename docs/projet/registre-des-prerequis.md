@@ -44,7 +44,7 @@ OTF-EGUITRA-2026-37 du 29 septembre 2026 ; support de la réunion de cadrage du 
 | P8 | Liste des utilisateurs par profil, avec courriel et téléphone | 13/10/2026 | cadrage du 13/10 ; questionnaires finance (q. 37) et AxisPro (q. 24) | reçu | 21/10/2026 | Sept comptes créés en production (`ETAT.md`, chapitre 6). |
 | P9 | Grille AxisPro et liste des pièces de la data room | 13/10/2026 | cadrage du 13/10 ; questionnaire AxisPro (q. 1) | reçu | 22/10/2026 | Outil de scoring du cabinet, version 3 (104 critères, 39 pièces), en vigueur en production le 22/10/2026. |
 | P10 | Dossiers AxisPro en cours | 13/10/2026 | cadrage du 13/10 ; questionnaire AxisPro (q. 6) | en attente | | |
-| P11 | Accès aux noms de domaine | 13/10/2026 | cadrage du 13/10 ; `ETAT.md` (14/10) | en attente | | nimova.gn commandé le 21/10/2026 chez Afribone, finalisation en attente ; production servie sur des adresses provisoires. |
+| P11 | Accès aux noms de domaine | 13/10/2026 | cadrage du 13/10 ; `ETAT.md` (14/10) | reçu | 06/11/2026 | Domaine officiel nimova.cloud, enregistré le 06/11/2026 chez OVH, en service le jour même (remplace nimova.gn, commandé le 21/10/2026 chez Afribone). |
 | P12 | Jour et heure du comité de pilotage hebdomadaire et du point quotidien | 13/10/2026 | cadrage du 13/10 (« Organisation ») | à confirmer | à confirmer | Non consignés dans le dépôt. |
 
 ## 2. Validations et décisions demandées

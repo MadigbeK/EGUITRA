@@ -62,7 +62,7 @@ THEMES = [
     ("Portail des porteurs", [
         ("Le porteur voit l'avancement de son dossier, les pièces demandées, ses actions et ses échanges, jamais le score ni les notes internes. Faut-il lui montrer davantage, ou moins ?",
          DIR, ""),
-        ("Le portail doit-il porter l'adresse du cabinet (mbaxisproconsulting.com) ou celle de NIMOVA (nimova.gn) ?",
+        ("Le portail doit-il porter l'adresse du cabinet (mbaxisproconsulting.com) ou celle de NIMOVA (nimova.cloud) ?",
          DIR, ""),
         ("Le porteur et le consultant doivent-ils recevoir un courriel à chaque nouveau message, pièce ou action ? Avec quelle adresse d'envoi ?",
          DIR, ""),

@@ -151,7 +151,7 @@ Le détail est dans `infra/README.md` et `infra/backup/README.md`. État au 25 o
 | Mises à jour de sécurité | système : chaque nuit, sans redémarrage (`setup-vps.sh`) ; images : `infra/maj-securite.sh`, chaque mois, recette puis production, annoncée 48 heures à l'avance, compte rendu du mois | outillées ; la supervision rappelle la mise à jour des images au-delà de 35 jours |
 | Double authentification | paramètre `eguitra_api.mfa_required` | outillée ; suspendue en production depuis le 21 octobre 2026 à la demande du gérant, à rétablir avant la reprise des données réelles (paramètre à 1, puis redémarrage du noyau) ; suspendue aussi en recette |
 | Courriel sortant | `infra/mail-server.sh` | pas de serveur d'envoi fourni : les relances s'impriment |
-| Noms de domaine | `infra/domaines.sh` | adresses provisoires en `sslip.io` ; nimova.gn commandé le 21 octobre 2026, en attente de finalisation |
+| Noms de domaine | `infra/domaines.sh` | `nimova.cloud`, en service depuis le 6 novembre 2026 (zone DNS chez OVH) |
 | Réversibilité | `infra/export-reversibilite.sh` | outillée depuis le 25 octobre 2026 (chapitre 9) |
 
 Précaution : toujours redémarrer le noyau après l'installation ou la mise à jour de modules (le

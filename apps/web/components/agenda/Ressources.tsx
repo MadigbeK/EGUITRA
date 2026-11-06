@@ -89,7 +89,7 @@ export function Ressources() {
               <p className="text-[12.5px] text-muted">Fermée par défaut. Ouverte, elle permet à chacun de publier un lien de réservation pour des personnes extérieures : créneaux libres seulement, domaines autorisés, confirmation par courriel, débit limité par adresse.</p>
               {!r.mail_server && <Notice tone="warn">Aucun serveur de courrier n&apos;est paramétré : la confirmation par courriel est impossible, la prise de rendez-vous reste fermée.</Notice>}
               <Field label="Adresse publique du site" hint="https://domaine, sans chemin : les liens de confirmation y renvoient.">
-                <Input value={url ?? r.public_url ?? ""} onChange={(e) => setUrl(e.target.value)} placeholder="https://rdv.nimova.gn" />
+                <Input value={url ?? r.public_url ?? ""} onChange={(e) => setUrl(e.target.value)} placeholder="https://rdv.nimova.cloud" />
               </Field>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => void agir(() => apiSend("PATCH", "/agenda/admin/settings", { public_url: url ?? r.public_url ?? "" }), "Adresse enregistrée.")}>Enregistrer l&apos;adresse</Button>

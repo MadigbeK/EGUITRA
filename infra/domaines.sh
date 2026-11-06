@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Bascule sur les noms de domaine définitifs : contrôle des enregistrements DNS, inscription des noms
 # dans infra/.env, recréation du proxy (certificats Let's Encrypt obtenus seuls), contrôle HTTPS.
-#   infra/domaines.sh verifier nimova.gn                       noms attendus et leur adresse, rien ne change
-#   infra/domaines.sh appliquer nimova.gn [nom-du-portail]     bascule (le portail : portail.<domaine> par défaut)
+#   infra/domaines.sh verifier nimova.cloud                     noms attendus et leur adresse, rien ne change
+#   infra/domaines.sh appliquer nimova.cloud [nom-du-portail]  bascule (le portail : portail.<domaine> par défaut)
 # Noms : finance, axispro, portail, recette et noyau sous le domaine. Le noyau ne répond qu'aux adresses
 # ADMIN_IPS (403 ailleurs, y compris depuis le serveur lui-même : c'est le signe que le proxy le sert).
 set -euo pipefail

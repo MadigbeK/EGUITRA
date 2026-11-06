@@ -344,8 +344,7 @@ procès-verbal de mise en production (modèles dans `docs/projet/`).
    du compte 162.
 3. Seuils d'approbation et d'alerte (point 7).
 4. Charte graphique de MB AxisPro Consulting ; celle d'EGUITRA GROUP SARLU est reçue et appliquée.
-5. Noms de domaine définitifs : nimova.gn, commandé le 21 octobre 2026, attend sa finalisation ; la
-   production est servie d'ici là sur des adresses provisoires.
+5. Noms de domaine définitifs : nimova.cloud, enregistré et mis en service le 6 novembre 2026 (reçu).
 6. Classeur 2026 définitif, relevés bancaires 2026, modèles de déclarations fiscales, export complet
    de Datakö Fleet.
 7. Identité des sociétés (raison sociale, adresse, NIF, RCCM), reprise sur les factures.

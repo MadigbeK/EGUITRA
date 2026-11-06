@@ -167,17 +167,18 @@ au client par un moyen sûr, puis l'effacer du serveur.
 
 - Recette : paramètre système `eguitra_api.environment_label` = `recette` ; l'application
   d'authentification du téléphone affiche alors « EGUITRA recette », distinct de la production.
-- Recette ouverte sur Internet en HTTPS avant l'achat du domaine (16 octobre 2026) : nom provisoire
+- Avant l'achat du domaine, la recette était ouverte (16 octobre 2026) sous un nom provisoire
   `recette.<adresse IP, points remplacés par des tirets>.sslip.io` (service DNS public qui renvoie
   l'adresse contenue dans le nom), dans `RECETTE_DOMAIN` de `infra/.env` ; certificat Let's Encrypt
   obtenu par Caddy (`docker compose --profile proxy up -d caddy`). Les domaines non renseignés prennent
   un nom en `.localhost` (jamais joignable) : la production reste fermée tant qu'ils ne sont pas définis.
-- Bascule sur le domaine définitif (`nimova.gn`, commandé le 21 octobre 2026, DNS gérés par le
-  registraire) :
-  1. chez le registraire, enregistrements A vers l'adresse du serveur pour `finance`, `axispro`,
+- Domaine officiel : `nimova.cloud`, enregistré le 6 novembre 2026 chez OVH (zone DNS gérée dans
+  l'espace client OVH), en service depuis ce jour : `finance`, `axispro`, `portail`, `recette` et
+  `noyau`. `nimova.cloud` et `www` gardent la page d'attente d'OVH. Pour rejouer une bascule :
+  1. dans la zone DNS, enregistrements A vers l'adresse du serveur pour `finance`, `axispro`,
      `portail` (ou le nom choisi pour le portail), `recette` et `noyau` ;
-  2. `infra/domaines.sh verifier nimova.gn` : chaque nom doit pointer vers le serveur ;
-  3. `infra/domaines.sh appliquer nimova.gn [nom-du-portail]` : copie de `.env`, noms inscrits, proxy
+  2. `infra/domaines.sh verifier nimova.cloud` : chaque nom doit pointer vers le serveur ;
+  3. `infra/domaines.sh appliquer nimova.cloud [nom-du-portail]` : copie de `.env`, noms inscrits, proxy
      recréé, certificats obtenus, chaque adresse contrôlée en HTTPS (le noyau répond 403 hors des
      adresses `ADMIN_IPS`) ; l'ancien nom de la recette en `sslip.io` cesse de répondre ;
   4. vérifier `ACME_EMAIL` (adresse réelle) et `ADMIN_IPS` (adresses de l'équipe technique) dans

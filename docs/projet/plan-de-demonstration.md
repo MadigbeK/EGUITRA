@@ -93,8 +93,8 @@ résultat environ 0,87 Md, trésorerie environ 0,99 Md, créances environ 1,26 M
   supervision toutes les 5 minutes.
 
 ### 11. Suite et décisions (5 min)
-- Identité NIMOVA : appliquée à tous les écrans avant la recette ; domaine nimovagroup.com à
-  enregistrer au nom du client (nimova.com est déjà pris).
+- Identité NIMOVA : appliquée à tous les écrans avant la recette ; domaine officiel
+  nimova.cloud, en service depuis le 6 novembre 2026.
 - Reprise de l'exercice 2026 dès réception du classeur et des relevés bancaires ; grille AxisPro
   officielle ; liste des utilisateurs ; validation du plan de comptes par l'expert-comptable.
 - La note NIMOVA va au-delà du contrat (stocks et carburant, maintenance, ressources humaines,
