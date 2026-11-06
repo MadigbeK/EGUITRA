@@ -15,13 +15,19 @@ const ONGLETS: readonly string[] = ["pont", "structure", "budget", "metiers"];
 
 /** Libellés courts des marches du pont pour l'axe du graphique (le libellé complet reste dans la bulle et le tableau). */
 const COURT_PONT: Record<string, string> = {
-  ebe_previous: "EBE N-1",
-  ebe: "EBE N",
+  ebe_previous: "Exercice précédent",
+  ebe: "Exercice en cours",
   "transport.volume": "Volume transport",
   "transport.price": "Prix transport",
   "transport.mix": "Mix des routes",
   "transport.costs": "Coûts transport",
   other: "Hors activités",
+};
+/** Marches du pont nommées en clair (le noyau écrit « EBE N-1 »…). */
+const LIBELLE_PONT: Record<string, string> = {
+  ebe_previous: "Excédent brut d'exploitation de l'exercice précédent",
+  ebe: "Excédent brut d'exploitation de l'exercice en cours",
+  other: "Hors activités et hors excédent brut d'exploitation",
 };
 
 /** D'où vient la marge : pont d'EBE, structure de coûts, écarts budgétaires, chantiers et biens. */
@@ -55,7 +61,7 @@ function Corps() {
   const activiteVisee = activite ? (totaux.find((t) => String(t.activity_id) === activite) ?? null) : null;
   const marcheVisee = activite ? ((d?.bridge ?? []).find((b) => b.key === `activity.${activite}`) ?? null) : null;
   useDefiler(activiteVisee ? `activite-${activiteVisee.activity_id}` : marcheVisee ? "pont" : null, !!d && onglet === "pont", tour, activiteVisee ? "center" : "start");
-  const bridge = (d?.bridge ?? []).map((b) => ({ ...b, court: COURT_PONT[b.key] ?? (b.key.startsWith("activity.") && b.label.length > 12 ? b.label.split(" ")[0] : undefined) }));
+  const bridge = (d?.bridge ?? []).map((b) => ({ ...b, label: LIBELLE_PONT[b.key] ?? b.label, court: COURT_PONT[b.key] ?? (b.key.startsWith("activity.") && b.label.length > 12 ? b.label.split(" ")[0] : undefined) }));
   const debut = bridge.find((b) => b.kind === "total");
   const fin = [...bridge].reverse().find((b) => b.kind === "total");
   const effets = bridge.filter((b) => b.kind !== "total");
@@ -65,7 +71,7 @@ function Corps() {
     <>
       {debut && fin ? (
         <>
-          L&apos;EBE passe de {fmtShort(debut.value)} à <strong className="font-semibold text-ink">{gnfOu(fin.value)}</strong>
+          L&apos;excédent brut d&apos;exploitation passe de {fmtShort(debut.value)} à <strong className="font-semibold text-ink">{gnfOu(fin.value)}</strong>
           {debut.value ? ` (${fin.value >= debut.value ? "+" : ""}${fmtPct(((fin.value - debut.value) / Math.abs(debut.value)) * 100)})` : " (pas de période de comparaison)"}
           {plusFort && plusFort.value !== 0 && (
             <>
@@ -76,7 +82,7 @@ function Corps() {
           .
         </>
       ) : (
-        <>Pas assez d&apos;écritures pour construire le pont d&apos;EBE.</>
+        <>Pas assez d&apos;écritures pour comparer l&apos;excédent brut d&apos;exploitation d&apos;un exercice à l&apos;autre.</>
       )}
       {sc && sc.breakeven_monthly !== null && (
         <>
@@ -103,7 +109,7 @@ function Corps() {
           {activiteVisee || marcheVisee ? (
             <>
               Activité <strong className="font-semibold">« {activiteVisee?.name ?? marcheVisee?.label} »</strong> mise en évidence
-              {marcheVisee && activiteVisee ? " : sa marche du pont d'EBE et ses totaux des douze derniers mois." : marcheVisee ? " : sa marche du pont d'EBE." : " : ses totaux des douze derniers mois."}
+              {marcheVisee && activiteVisee ? " : sa marche du graphique d'un exercice à l'autre et ses totaux des douze derniers mois." : marcheVisee ? " : sa marche du graphique d'un exercice à l'autre." : " : ses totaux des douze derniers mois."}
             </>
           ) : (
             <>L&apos;activité visée n&apos;a ni produit ni charge imputés sur la période affichée.</>
@@ -118,7 +124,7 @@ function Corps() {
             value={onglet}
             onChange={setOnglet}
             tabs={[
-              { key: "pont", label: "Pont d'EBE" },
+              { key: "pont", label: "Excédent brut d'exploitation" },
               { key: "structure", label: "Structure de coûts" },
               { key: "budget", label: "Budget et écarts", count: lignesBudget.filter((b) => (b.risk_probability_pct ?? 0) >= 50).length || undefined },
               { key: "metiers", label: "BTP et immobilier" },
@@ -126,8 +132,8 @@ function Corps() {
           />
           {onglet === "pont" && (
             <div className="grid gap-5 xl:grid-cols-12">
-              <Card title={<span id="pont">Pont d&apos;EBE, d&apos;un exercice à l&apos;autre</span>} className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Volume, prix et mix du transport, puis les autres métiers</span>}>
-                {bridge.length ? <Cascade label="Pont d'EBE entre les deux périodes" steps={bridge} hauteur={330} surligne={marcheVisee?.key} /> : <Vide titre="Pas de pont d'EBE" hint="Il faut des écritures validées sur les deux périodes." />}
+              <Card title={<span id="pont">Excédent brut d&apos;exploitation, d&apos;un exercice à l&apos;autre</span>} className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Volume, prix et mix du transport, puis les autres métiers</span>}>
+                {bridge.length ? <Cascade label="Excédent brut d'exploitation entre les deux périodes" steps={bridge} hauteur={330} surligne={marcheVisee?.key} /> : <Vide titre="Pas de comparaison entre les deux périodes" hint="Il faut des écritures validées sur les deux périodes." />}
                 {te && (
                   <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                     <Chiffre label="Effet volume" value={`${te.volume >= 0 ? "+" : "−"}${gnfOu(Math.abs(te.volume))}`} hint={`${fmtM3(te.volume_m3)} contre ${fmtM3(te.volume_m3_previous)}`} />
@@ -192,7 +198,7 @@ function Corps() {
                       <Chiffre label="Taux de charges variables" value={pctOu(sc.variable_rate, 0)} hint={sc.variable_rate !== null ? `Marge sur coûts variables ${fmtPct(100 - sc.variable_rate, 0)}` : undefined} />
                       <Chiffre label="Point mort mensuel" value={gnfOu(sc.breakeven_monthly)} hint="Fixes / (1 − taux variable)" grand />
                       <Chiffre label="Marge de sécurité" value={pctOu(sc.safety_margin_pct)} tone={sc.safety_margin_pct === null ? undefined : sc.safety_margin_pct < 20 ? "danger" : sc.safety_margin_pct < 30 ? "warn" : "ok"} hint={sc.average_revenue !== null ? `CA mensuel moyen ${gnfOu(sc.average_revenue)}` : undefined} grand />
-                      <Chiffre label="Levier opérationnel" value={fmtRatio(sc.operating_leverage)} hint="Variation d'EBE pour 1\u00a0% de CA" />
+                      <Chiffre label="Levier opérationnel" value={fmtRatio(sc.operating_leverage)} hint="Variation de l'excédent brut d'exploitation pour 1\u00a0% de chiffre d'affaires" />
                       <Chiffre label="Qualité de l'ajustement (R²)" value={fmtRatio(sc.r2)} hint={sc.reliable ? "Relation fiable" : "Relation lâche : lire avec prudence"} />
                     </div>
                     <p className="mt-4 text-[12.5px] leading-relaxed text-muted">{sc.method || "Chaque point est un mois ; la droite sépare ce qui est fixe (son ordonnée) de ce qui suit le chiffre d'affaires (sa pente). Là où elle croise la diagonale, l'entreprise ne gagne ni ne perd : c'est le point mort."}</p>
@@ -371,7 +377,7 @@ function NuageRegression({ sc }: { sc: CostStructure }) {
               <div aria-hidden className="pointer-events-none absolute z-20 rounded-xl border border-line bg-panel px-3 py-2 text-[12.5px] shadow-[var(--ombre-flottante)]" style={{ left: Math.min(W - 180, x(choisi.revenue) + 12), top: Math.max(0, y(choisi.charges) - 56) }}>
                 <div className="font-semibold text-muted">{moisCourt(choisi.month, true)}{choisi.excluded ? " (exclu)" : ""}</div>
                 <div className="tabular text-ink">CA {fmtShort(choisi.revenue)} · charges {fmtShort(choisi.charges)}</div>
-                <div className={cx("font-semibold tabular", choisi.revenue - choisi.charges < 0 ? "text-danger" : "text-ok-texte")}>EBE {gnfOu(choisi.revenue - choisi.charges)}</div>
+                <div className={cx("font-semibold tabular", choisi.revenue - choisi.charges < 0 ? "text-danger" : "text-ok-texte")}>Excédent brut d&apos;exploitation {gnfOu(choisi.revenue - choisi.charges)}</div>
               </div>
             )}
           </>

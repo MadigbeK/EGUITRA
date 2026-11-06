@@ -14,7 +14,7 @@ trésorerie, états, clôtures, fiscalité, pilotage), qui ne vous est pas ouver
 | Écran | Ce que vous y faites |
 |---|---|
 | Pilotage > Engagements de dépense | Demander l'accord avant de commander, devis joint. |
-| Comptabilité > Achats et dépenses | Saisir la facture ou l'avoir du fournisseur, joindre la pièce, soumettre. C'est votre écran d'accueil. |
+| Comptabilité > Achats et dépenses | Saisir la facture ou l'avoir du fournisseur, joindre le justificatif, envoyer pour approbation. C'est votre écran d'accueil. |
 | Comptabilité > Fournisseurs | Créer et tenir les fiches des fournisseurs. |
 | Pilotage > Mes demandes | Suivre vos pièces et engagements soumis : en validation, refusés, approuvés. |
 | Pilotage > Guide des achats | Ce guide. |
@@ -30,7 +30,7 @@ sélecteur en haut de l'écran : catégories, fournisseurs proposés et pièces 
    livraison ou d'exécution prévue, justification.
 2. « Enregistrer en brouillon », puis ouvrir l'engagement et « Joindre le devis » (PDF, JPEG, PNG,
    Word ou Excel, 20 Mo au plus).
-3. « Soumettre à l'approbation » : l'engagement part au circuit (la finance, puis la direction
+3. « Envoyer pour approbation » : l'engagement part au circuit (la finance, puis la direction
    au-delà de 50 M GNF). Tant qu'il est en brouillon ou refusé, il se corrige ; soumis ou approuvé,
    il ne se modifie plus : l'annuler et en créer un autre.
 4. Approuvé, il devient « Engagé » : vous pouvez commander. Les factures du fournisseur rattachées à
@@ -38,9 +38,9 @@ sélecteur en haut de l'écran : catégories, fournisseurs proposés et pièces 
 
 Seules la finance et la direction soldent un engagement (plus aucune facture ne s'y rattache).
 
-## À réception de la facture : la pièce d'achat
+## À réception de la facture : la facture fournisseur
 
-1. « Nouvelle pièce d'achat » : fournisseur, date de la pièce, référence du fournisseur (son numéro
+1. « Nouvelle facture fournisseur » : fournisseur, date de la pièce, référence du fournisseur (son numéro
    de facture), contrat ou bon de commande, devise si la facture n'est pas en GNF. L'échéance se
    calcule selon les conditions du fournisseur.
 2. Si le fournisseur a un engagement approuvé, il est proposé : le choisir. Dans la limite du reste à
@@ -50,7 +50,7 @@ Seules la finance et la direction soldent un engagement (plus aucune facture ne 
    d'achat seulement). Sous la ligne, les axes analytiques (activité, centre de coût, chantier,
    ensemble routier…) : les renseigner quand vous les connaissez ; laissés vides, ils suivent les
    imputations automatiques.
-4. « Enregistrer en brouillon » ou « Enregistrer et soumettre ».
+4. « Enregistrer » ou « Envoyer pour approbation ». Le justificatif peut se joindre dès cette fenêtre.
 5. Ouvrir la pièce et « Joindre un justificatif » : la facture numérisée (PDF, JPEG, PNG, Word ou
    Excel, 15 Mo au plus). Une pièce sans justificatif sera renvoyée par la finance.
 
@@ -60,17 +60,17 @@ quantité, livraison) se signale à la finance, qui déclare le litige.
 
 ## Un avoir du fournisseur
 
-« Avoir » en tête de l'écran Achats et dépenses : même saisie qu'une pièce d'achat (catégorie de la
+« Avoir » en tête de l'écran Achats et dépenses : même saisie qu'une facture fournisseur (catégorie de la
 dépense annulée), référence de l'avoir du fournisseur, justificatif joint, puis soumission.
 
-## Soumettre, corriger, suivre
+## Envoyer, corriger, suivre
 
-- « Soumettre au circuit » sur un brouillon : la pièce part à la finance (et à la direction au-delà
+- « Envoyer pour approbation » sur un brouillon : la pièce part à la finance (et à la direction au-delà
   de 50 M GNF). Elle reste en brouillon, marquée « En validation » avec l'étape en cours ; elle est
   comptabilisée à la dernière approbation. Une pièce couverte par un engagement approuvé est
   comptabilisée dès la soumission.
 - Refusée : le motif apparaît dans « Mes demandes ». Ouvrir la pièce, « Modifier », corriger, puis
-  « Enregistrer et soumettre ». Toute modification d'une pièce soumise demande une nouvelle
+  « Envoyer pour approbation ». Toute modification d'une pièce soumise demande une nouvelle
   soumission : l'approbateur valide toujours ce qu'il voit.
 - Un brouillon saisi par erreur : « Supprimer le brouillon ». Une pièce déjà comptabilisée ne se
   supprime pas : demander à la finance de l'annuler ou de passer un avoir.

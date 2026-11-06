@@ -36,14 +36,14 @@ function ListesEnEchec({ erreur, onRetry }: { erreur: unknown; onRetry: () => vo
 }
 
 /**
- * Imputations automatiques de la société de travail : règles analytiques (préfixe de compte, tiers),
+ * Règles d'imputation de la société de travail : règles analytiques (préfixe de compte, tiers),
  * imputation obligatoire d'un axe. Les règles ne renseignent que les axes laissés vides à la saisie.
  */
 export default function ImputationsPage() {
   const [tab, setTab] = useState<Tab>("regles");
   return (
     <div>
-      <PageHeader title="Imputations automatiques" subtitle="Ce que la plateforme déduit à la saisie : axes analytiques par compte ou par tiers, axes obligatoires." />
+      <PageHeader title="Règles d'imputation" subtitle="Ce que la plateforme déduit à la saisie : axes analytiques par compte ou par tiers, axes obligatoires." />
       <Tabs
         tabs={[
           { key: "regles", label: "Règles analytiques" },
@@ -71,7 +71,7 @@ function Rules() {
   return (
     <div className="space-y-4">
       <Card
-        title="Règles d'imputation"
+        title="Règles analytiques"
         padded={false}
         actions={
           ecriture ? (
@@ -335,7 +335,7 @@ function CategoryForm({ category, onClose, onSaved }: { category: ExpenseCategor
           <Select value={form.nature} onChange={(e) => setForm({ ...form, nature: e.target.value })} options={NATURES} />
         </Field>
         {capex && (
-          <Field label="Catégorie d'immobilisation" hint="L'immobilisation est créée à la validation de la pièce d'achat.">
+          <Field label="Catégorie d'immobilisation" hint="L'immobilisation est créée à la validation de la facture fournisseur.">
             <Select value={form.asset_profile_id} onChange={(e) => setForm({ ...form, asset_profile_id: e.target.value })} placeholder="Choisir…" options={(profiles ?? []).map((p) => ({ value: p.id, label: `${p.name} (${p.account_asset})` }))} />
           </Field>
         )}
@@ -612,7 +612,7 @@ function PaymentModes() {
   );
 }
 
-const DOMAIN_LABELS: Record<string, string> = { invoice: "Factures", bill: "Pièces d'achat", general: "Opérations diverses" };
+const DOMAIN_LABELS: Record<string, string> = { invoice: "Factures", bill: "Factures fournisseurs", general: "Opérations diverses" };
 
 function Requirements() {
   const { data, error, mutate } = useApi<Requirement[]>("/finance/analytic-requirements");

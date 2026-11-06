@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Input, Kpi, Loading, PageHeader, Tabs, tonEtat } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Input, Kpi, Loading, PageHeader, Tabs, tonEtat } from "@/components/ui";
 import { MoveDetailModal } from "./MoveDetailModal";
 import { ECRITURE_FINANCE, PagesListe, SAISIE_PIECES, aujourdhui } from "./communPieces";
 import { MoveForm } from "./MoveForm";
@@ -24,7 +24,7 @@ const VIEWS: Array<{ key: View; label: string }> = [
 /** Profil Achats : ses pièces se suivent par état (brouillon, soumise, comptabilisée), sans encours ni litiges. */
 const VIEWS_ACHATS: Array<{ key: View; label: string }> = [
   { key: "all", label: "Toutes" },
-  { key: "draft", label: "Brouillons et soumises" },
+  { key: "draft", label: "Brouillons et en approbation" },
   { key: "posted", label: "Comptabilisées" },
 ];
 
@@ -129,9 +129,9 @@ function montant(m: MoveSummary, v: number | null) {
 }
 
 /**
- * Liste des factures de vente ou des pièces d'achat, avec saisie et fiche détaillée. Le profil Achats seul
- * n'y voit que ses pièces d'achat et avoirs fournisseurs, sans encours ni litiges : il les saisit par
- * catégorie, les soumet au circuit et suit leur état.
+ * Liste des factures de vente ou des factures fournisseurs, avec saisie et fiche détaillée. Le profil Achats
+ * seul n'y voit que ses factures et avoirs fournisseurs, sans encours ni litiges : il les saisit par
+ * catégorie, les envoie pour approbation et suit leur état. ?vue= ouvre une vue (Brouillons, Échues).
  */
 export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
   const sale = kind === "sales";
@@ -139,6 +139,13 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
   // POST /finance/moves : les ventes par la finance et l'administration, les achats aussi par le profil Achats.
   const saisie = useAutorise(sale ? ECRITURE_FINANCE : SAISIE_PIECES);
   const [view, setView] = useState<View>("all");
+  // Vue demandée par un lien (?vue=draft depuis un contrôle de clôture, ?vue=overdue depuis une alerte),
+  // une fois la session lue : le profil Achats seul n'a que ses vues.
+  useEffect(() => {
+    if (!pret && !sale) return;
+    const demandee = new URLSearchParams(window.location.search).get("vue");
+    if ((achats ? VIEWS_ACHATS : VIEWS).some((v) => v.key === demandee)) setView(demandee as View);
+  }, [pret, achats, sale]);
   const [search, setSearch] = useState("");
   // Rang de la première pièce affichée ; revient à 0 quand le filtre ou la recherche change.
   const [offset, setOffset] = useState(0);
@@ -161,15 +168,15 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
           sale
             ? "Factures et avoirs clients. La TVA et le compte client sont déduits à la saisie."
             : achats
-              ? "Pièces d'achat et avoirs fournisseurs : chaque ligne se saisit par catégorie de dépense (elle fixe le compte et la TVA), le justificatif joint, puis la pièce se soumet au circuit d'approbation."
-              : "Pièces d'achat et avoirs fournisseurs, soumis au circuit d'approbation selon les seuils."
+              ? "Factures et avoirs des fournisseurs : chaque ligne se saisit par catégorie de dépense (elle fixe le compte et la TVA), le justificatif se joint dès la saisie, puis la facture part pour approbation."
+              : "Factures et avoirs des fournisseurs, envoyés pour approbation selon les seuils."
         }
         actions={
           saisie && (
             <>
               <Button onClick={() => setCreating(sale ? "out_refund" : "in_refund")}>Avoir</Button>
               <Button variant="primary" onClick={() => setCreating(sale ? "out_invoice" : "in_invoice")}>
-                <Plus className="h-4 w-4" /> {sale ? "Nouvelle facture" : "Nouvelle pièce d'achat"}
+                <Plus className="h-4 w-4" /> {sale ? "Nouvelle facture" : "Nouvelle facture fournisseur"}
               </Button>
             </>
           )
@@ -177,7 +184,7 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
       />
       {achats ? (
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Kpi label="Brouillons et soumises" value={String(draftData?.total_count ?? "–")} hint="À compléter, à soumettre ou en validation" />
+          <Kpi label="Brouillons et en approbation" value={String(draftData?.total_count ?? "–")} hint="À compléter, à envoyer ou en approbation" />
           <Kpi label="Comptabilisées" value={String(postedData?.total_count ?? "–")} hint="Approuvées et passées en comptabilité" />
           <Kpi label="Pièces affichées" value={String(data?.total_count ?? "–")} hint={<>Total TTC <span className="whitespace-nowrap">{fmtGNF(data?.totals?.amount_total)}</span></>} />
         </div>
@@ -203,12 +210,25 @@ export function MovesPage({ kind }: { kind: "sales" | "purchases" }) {
         {/* En échec sans données, l'erreur seule : « Aucune facture » ferait croire la liste vide. */}
         {!data ? (
           !error && isLoading && <Loading />
+        ) : data.items.length === 0 && view === "all" && !search && offset === 0 ? (
+          // Aucune pièce du tout : l'action naturelle, pour qui peut saisir.
+          <Empty
+            title={sale ? "Aucune facture pour l'instant" : "Aucune facture fournisseur pour l'instant"}
+            hint={sale ? "La TVA et le compte du client sont déduits à la saisie." : "Choisissez le fournisseur et la catégorie de chaque ligne, joignez la facture : le reste est déduit."}
+            action={
+              saisie ? (
+                <Button variant="primary" onClick={() => setCreating(sale ? "out_invoice" : "in_invoice")}>
+                  <Plus className="h-4 w-4" /> {sale ? "Saisir une facture" : "Saisir une facture fournisseur"}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <DataTable
             rows={data?.items ?? []}
             rowKey={(m) => m.id}
             onRowClick={(m) => setSelected(m.id)}
-            empty={sale ? "Aucune facture pour ce filtre." : "Aucune pièce d'achat pour ce filtre."}
+            empty={sale ? "Aucune facture pour ce filtre." : "Aucune facture fournisseur pour ce filtre."}
             columns={[
               { key: "name", label: "Numéro", render: (m) => <span className="whitespace-nowrap font-mono text-xs">{m.name ?? "Brouillon"}</span> },
               { key: "invoice_date", label: "Date", render: (m) => fmtDate(m.invoice_date ?? m.date) },

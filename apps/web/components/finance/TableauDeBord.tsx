@@ -2,16 +2,20 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
-import { ArrowUpRight, Printer } from "@/components/icons";
+import { ArrowUpRight, Check, Printer } from "@/components/icons";
 import { Ondes, Rosace } from "@/components/guilloche";
-import { AreaChart, Button, Card, classesBouton, Compteur, DataTable, Donut, ErrorBox, SERIES, Gauge, Input, Kpi, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
+import { AreaChart, Button, Card, classesBouton, Compteur, DataTable, Donut, ErrorBox, SERIES, Gauge, Input, Kpi, Notice, PageHeader, RankBars, Squelette, cx } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
+import { RequestModal, confirmerApprobation, type Req } from "@/components/finance/Approbations";
 import { CarteBfr, CourbeTresorerie, Decisions, QuestionsDirigeant } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
-import { useApi } from "@/lib/api-client";
+import { Sigle } from "@/components/finance/communPieces";
+import { apiGet, apiSend, useApi, useAutorise } from "@/lib/api-client";
+import { messageErreur, useEnvoi } from "@/lib/envoi";
 import { autresTresorerie, type Dashboard, type KpiSeries } from "@/lib/finance-types";
 import { INSECABLE, fmtDate, fmtFixe, fmtGNF, fmtInt, fmtJours, fmtMonth, fmtPct, fmtRatio, fmtShort, pluriel } from "@/lib/format";
 import { aujourdhui } from "@/lib/jour";
+import type { Profile } from "@/lib/types";
 
 /** Ancienneté des créances : jade pour le non échu, puis une rampe d'alerte de plus en plus sombre. */
 const AGING: Array<[keyof Dashboard["receivables"]["aging"], string, string]> = [
@@ -185,6 +189,7 @@ export function DirectorDashboard() {
           </>
         }
       />
+      <AApprouver />
       {error && (
         <div className={cx(d && "mb-5")}>
           <ErrorBox error={error} onRetry={() => mutate()} titre={echec ? echecCalcul(echec, scope, demande) : undefined} />
@@ -198,6 +203,94 @@ export function DirectorDashboard() {
           <DashboardBody d={d} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Profils de la corbeille (GET /approvals/inbox : FOLLOWERS, addons/eguitra_approval/controllers/approvals.py). */
+const CORBEILLE: Profile[] = ["admin", "direction", "finance", "exploitation", "chantiers", "immobilier", "cabinet", "achats"];
+/** Demandes montrées en tête du tableau de bord : les plus anciennes d'abord (ordre de la corbeille). */
+const EN_TETE = 5;
+
+/**
+ * À approuver, en tête du tableau de bord : les cinq demandes les plus anciennes que l'utilisateur peut
+ * trancher. « Voir » ouvre la demande (pièces, justificatifs, circuit). « Approuver » relit la demande et
+ * ses étapes, demande confirmation, puis passe par la même route que l'écran À approuver : le circuit, les
+ * seuils et les quatre yeux restent ceux du noyau. Rien ne s'affiche quand il n'y a rien à approuver.
+ */
+function AApprouver() {
+  const autorise = useAutorise(CORBEILLE);
+  const { data, mutate } = useApi<Req[]>(autorise ? "/approvals/inbox" : null);
+  const [ouverte, setOuverte] = useState<number | null>(null);
+  const [lecture, setLecture] = useState<number | null>(null);
+  const envoi = useEnvoi();
+
+  async function approuver(id: number) {
+    setLecture(id);
+    envoi.setMessage(null);
+    let r: Req;
+    try {
+      r = await apiGet<Req>(`/approvals/${id}`);
+    } catch (e) {
+      envoi.setMessage({ tone: "danger", text: messageErreur(e, "Demande illisible.") });
+      return;
+    } finally {
+      setLecture(null);
+    }
+    if (!r.can_decide) {
+      envoi.setMessage({ tone: "danger", text: `« ${r.name} » ne vous revient plus : elle a été tranchée, ou son étape attend une autre personne.` });
+      void mutate();
+      return;
+    }
+    if (!(await confirmerApprobation(r, true))) return;
+    if (await envoi.run(`approuver-${id}`, () => apiSend("POST", `/approvals/${id}/approve`, { comment: "" }), `« ${r.name} » approuvée.`, "Décision impossible.")) void mutate();
+  }
+
+  const demandes = data ?? [];
+  // La demande ouverte reste à l'écran même si sa décision vide la liste.
+  if (!demandes.length && !envoi.message && ouverte === null) return null;
+  return (
+    <div className="no-print mb-5 space-y-3">
+      {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
+      {demandes.length > 0 && (
+        <Card
+          title={`À approuver (${demandes.length})`}
+          padded={false}
+          actions={
+            <Link href="/finance/approbations" className="inline-flex items-center gap-1 rounded-lg text-[13px] font-semibold text-accent hover:underline">
+              Tout voir <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          }
+        >
+          <ul className="divide-y divide-line">
+            {demandes.slice(0, EN_TETE).map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3">
+                <div className="min-w-0 flex-1 basis-56">
+                  <div className="text-[13.5px] font-semibold leading-snug text-ink">{r.name}</div>
+                  <div className="text-[12.5px] leading-snug text-muted">
+                    {r.partner ?? "Sans fournisseur"} · demandée par {r.requested_by} le {fmtDate(r.requested_at)}
+                  </div>
+                </div>
+                <div className="whitespace-nowrap font-semibold tabular text-ink">{fmtGNF(r.amount)}</div>
+                <div className="flex gap-2">
+                  <Button size="sm" disabled={!!envoi.busy} onClick={() => setOuverte(r.id)}>
+                    Voir
+                  </Button>
+                  <Button size="sm" variant="primary" loading={lecture === r.id || envoi.busy === `approuver-${r.id}`} disabled={!!envoi.busy || lecture !== null} onClick={() => void approuver(r.id)}>
+                    <Check className="h-4 w-4" /> Approuver
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {demandes.length > EN_TETE && (
+            <p className="border-t border-line px-5 py-2.5 text-[12.5px] text-muted">
+              Et {pluriel(demandes.length - EN_TETE, "autre demande", "autres demandes")} dans « Tout voir ».
+            </p>
+          )}
+        </Card>
+      )}
+      {ouverte !== null && <RequestModal id={ouverte} onClose={() => setOuverte(null)} onDecided={() => void mutate()} />}
     </div>
   );
 }
@@ -405,36 +498,42 @@ function DashboardBody({ d }: { d: Dashboard }) {
             hint={budgetCa ? `Budget ${fmtShort(budgetCa.budget)} · écart ${fmtPct(budgetCa.gap_pct)}` : "Aucun budget de produits"}
             serie={cumulExercice(d.revenue_by_month, debutExercice)}
           />
-          {/* EBE mensuel cumulé depuis l'ouverture de l'exercice : la gravure finit sur l'EBE de l'exercice affiché. */}
-          <Kpi
-            label="Excédent brut d'exploitation"
-            value={fmtShort(d.ebe_fy)}
-            tone={d.ebe_fy < 0 ? "danger" : "neutral"}
-            hint={`Marge EBE ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`}
-            serie={series ? cumulExercice(series.months.map((month, i) => ({ month, amount: series.ebe[i] ?? 0 })), debutExercice) : undefined}
-          />
+          {/* Excédent brut d'exploitation mensuel cumulé depuis l'ouverture de l'exercice : la gravure finit sur le chiffre de l'exercice affiché. */}
+          <Sigle sigle="EBE">
+            <Kpi
+              label="Excédent brut d'exploitation"
+              value={fmtShort(d.ebe_fy)}
+              tone={d.ebe_fy < 0 ? "danger" : "neutral"}
+              hint={`Soit ${fmtPct(d.margins.ebe_pct)} du chiffre d'affaires`}
+              serie={series ? cumulExercice(series.months.map((month, i) => ({ month, amount: series.ebe[i] ?? 0 })), debutExercice) : undefined}
+            />
+          </Sigle>
           {/* Un résultat positif ne porte pas de sceau : il n'y a rien à surveiller. */}
           <Kpi
             label="Résultat net de l'exercice"
             value={fmtShort(d.net_result_fy)}
             tone={d.net_result_fy < 0 ? "danger" : "neutral"}
-            hint={`Marge nette ${fmtPct(d.margins.net_pct)} · après IFRS 9 : ${fmtShort(d.net_result_fy - ecl)}`}
+            hint={`Marge nette ${fmtPct(d.margins.net_pct)} · après pertes attendues sur les créances : ${fmtShort(d.net_result_fy - ecl)}`}
             serie={cumulExercice(d.result_by_month, debutExercice)}
           />
-          <Kpi
-            label="Délai de recouvrement (DSO)"
-            value={fmtJours(wc.dso)}
-            tone={wc.dso !== null && th.dso_target_days ? (wc.dso > th.dso_target_days ? "danger" : "ok") : "neutral"}
-            hint={th.dso_target_days ? `Cible ${fmtJours(th.dso_target_days)} · créances échues ${fmtPct(wc.overdue_share_pct)}` : "Cible de recouvrement non fixée"}
-            serie={serieCle(series, "dso")}
-          />
-          <Kpi
-            label="Couverture de la dette (DSCR)"
-            value={fmtRatio(d.dscr)}
-            tone={d.dscr === null || !dscrMin ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
-            hint={dscrMin ? `Minimum fixé : ${fmtRatio(dscrMin)}` : "Minimum : seuil non fixé"}
-            serie={serieCle(series, "dscr")}
-          />
+          <Sigle sigle="DSO">
+            <Kpi
+              label="Délai moyen d'encaissement des clients (jours)"
+              value={fmtJours(wc.dso)}
+              tone={wc.dso !== null && th.dso_target_days ? (wc.dso > th.dso_target_days ? "danger" : "ok") : "neutral"}
+              hint={th.dso_target_days ? `Cible ${fmtJours(th.dso_target_days)} · créances échues ${fmtPct(wc.overdue_share_pct)}` : "Cible d'encaissement non fixée"}
+              serie={serieCle(series, "dso")}
+            />
+          </Sigle>
+          <Sigle sigle="DSCR">
+            <Kpi
+              label="Capacité à rembourser la dette"
+              value={fmtRatio(d.dscr)}
+              tone={d.dscr === null || !dscrMin ? "neutral" : d.dscr < dscrMin ? "danger" : "ok"}
+              hint={dscrMin ? `Minimum fixé : ${fmtRatio(dscrMin)}` : "Minimum : seuil non fixé"}
+              serie={serieCle(series, "dscr")}
+            />
+          </Sigle>
         </div>
       </div>
 
@@ -456,13 +555,15 @@ function DashboardBody({ d }: { d: Dashboard }) {
         ) : (
           <Kpi label="Réalisé contre budget cumulé" value="–" hint="Aucun budget pour l'exercice (Activités et budget)" />
         )}
-        <Kpi label="Besoin en fonds de roulement" value={fmtShort(wc.bfr)} hint={`Cycle ${fmtJours(wc.cycle)} · DPO ${fmtJours(wc.dpo)}`} serie={serieCle(series, "bfr")} />
+        <Sigle sigle="BFR">
+          <Kpi label="Besoin de financement de l'activité" value={fmtShort(wc.bfr)} hint={`Cycle ${fmtJours(wc.cycle)} · paiement des fournisseurs ${fmtJours(wc.dpo)}`} serie={serieCle(series, "bfr")} />
+        </Sigle>
         {/* La dette ne passe au rouge qu'avec des échéances impayées : leur montant est écrit. */}
         <Kpi
           label="Dette financière"
           value={fmtShort(d.debt.accounting_outstanding ?? d.debt.outstanding)}
           tone={d.debt.overdue > 0 ? "danger" : ecartEcheancier ? "warn" : "neutral"}
-          hint={phrase([d.debt.overdue > 0 ? `dont ${fmtShort(d.debt.overdue)} échus` : null, `dette nette ${fmtShort(d.debt.net_debt)}`, `gearing ${fmtRatio(d.debt.gearing)}`, ecartEcheancier ? `écart échéancier ${fmtShort(d.debt.schedule_gap)}` : null])}
+          hint={phrase([d.debt.overdue > 0 ? `dont ${fmtShort(d.debt.overdue)} échus` : null, `dette nette ${fmtShort(d.debt.net_debt)}`, `dette nette sur capitaux propres ${fmtRatio(d.debt.gearing)}`, ecartEcheancier ? `écart échéancier ${fmtShort(d.debt.schedule_gap)}` : null])}
           serie={serieCle(series, "debt")}
         />
       </div>
@@ -540,7 +641,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
         </Card>
       </div>
 
-      <Card title="Besoin en fonds de roulement et délais" actions={<span className="text-[12.5px] text-muted">Du {fmtDate(wc.date_from)} au {fmtDate(wc.date_to)} ({wc.days} jours)</span>}>
+      <Card title="Besoin de financement de l'activité et délais" actions={<span className="text-[12.5px] text-muted">Du {fmtDate(wc.date_from)} au {fmtDate(wc.date_to)} ({wc.days} jours)</span>}>
         <CarteBfr wc={wc} thresholds={th} />
       </Card>
 
@@ -548,10 +649,10 @@ function DashboardBody({ d }: { d: Dashboard }) {
         <Card title="Ancienneté des créances clients" className="xl:col-span-5">
           <Donut parts={AGING.map(([key, label, color]) => ({ key, label, value: aging[key], color }))} format={(v) => fmtShort(v)} centre={{ titre: "Encours clients", valeur: fmtShort(d.receivables.total) }} />
           <p className="mt-3 text-[12.5px] leading-snug text-muted">
-            {fmtShort(aging.plus_90)} GNF dorment depuis plus de 90 jours ({pluriel(d.receivables.aging_count?.plus_90 ?? 0, "pièce")}). Perte attendue IFRS 9 : {fmtShort(ecl)} GNF{d.expected_credit_loss.rate_pct !== null ? `, soit ${fmtPct(d.expected_credit_loss.rate_pct)} de l'encours` : ""}.
+            {fmtShort(aging.plus_90)} GNF dorment depuis plus de 90 jours ({pluriel(d.receivables.aging_count?.plus_90 ?? 0, "pièce")}). Perte attendue sur ces créances (norme internationale IFRS 9) : {fmtShort(ecl)} GNF{d.expected_credit_loss.rate_pct !== null ? `, soit ${fmtPct(d.expected_credit_loss.rate_pct)} de l'encours` : ""}.
           </p>
         </Card>
-        <Card title="Couverture de la dette" className="xl:col-span-3">
+        <Card title="Capacité à rembourser la dette" className="xl:col-span-3">
           <Gauge
             value={d.dscr === null ? null : Math.round(d.dscr * 100) / 100}
             max={maxDscr}
@@ -565,7 +666,7 @@ function DashboardBody({ d }: { d: Dashboard }) {
                   ]
                 : [{ jusqua: maxDscr, couleur: ETATS.neutre, label: "Seuil non fixé" }]
             }
-            sousTitre={`DSCR sur 12 mois : EBE divisé par le service de la dette, ${dscrMin ? `${fmtRatio(dscrMin)} au moins (seuil fixé)` : "minimum non fixé (Administration > Seuils et taux)"}`}
+            sousTitre={`Sur 12 mois : excédent brut d'exploitation divisé par les remboursements et intérêts de la dette, ${dscrMin ? `${fmtRatio(dscrMin)} au moins (seuil fixé)` : "minimum non fixé (Administration > Seuils et taux)"}`}
             vide="Aucun service de dette sur 12 mois"
           />
         </Card>

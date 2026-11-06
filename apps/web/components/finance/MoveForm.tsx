@@ -1,12 +1,12 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2 } from "@/components/icons";
-import { Button, Field, Input, Modal, Notice, Select, Textarea, cx } from "@/components/ui";
+import { ChevronRight, Plus, Trash2, X } from "@/components/icons";
+import { Button, Field, FileButton, Input, Modal, Notice, Select, Textarea, cx } from "@/components/ui";
 import { PartnerPicker } from "./PartnerPicker";
-import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
-import { CHAMP_INVALIDE, aujourdhui, enSaisie, montantDevise, taux } from "./communPieces";
-import { apiSend, useAchatsSeul, useApi, useSaisieLibre, ApiError } from "@/lib/api-client";
+import { AnalyticFields, analyticLabel, fromDistribution, toDistribution, useAxes, type AxisChoice } from "./AnalyticFields";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, aujourdhui, ecrireMemoire, enSaisie, lireMemoire, montantDevise, taux } from "./communPieces";
+import { apiSend, apiUpload, useAchatsSeul, useApi, useAutorise, useSaisieLibre, ApiError } from "@/lib/api-client";
 import type { Account, ExpenseCategory, MoveDetail, Partner, Tax } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 
@@ -31,7 +31,14 @@ interface LineDraft {
   original?: Record<string, number>;
   /** Ligne du brouillon d'où vient cette ligne : le noyau lui garde ce que l'écran ne connaît pas (rotation…). */
   source_id?: number;
+  /** Détails comptables (compte, TVA, retenue, axes) dépliés ou repliés par l'utilisateur ; jamais envoyé au noyau. */
+  details?: boolean;
 }
+
+/** Détails comptables dépliés à la dernière saisie (profils de la finance), mémorisé dans ce navigateur. */
+const CLE_DETAILS = "nimova.finance.details-comptables";
+/** Justificatifs acceptés par le noyau (format reconnu au contenu, 15 Mo au plus). */
+const FORMATS_JUSTIFICATIF = ".pdf,.jpg,.jpeg,.png,.docx,.xlsx";
 
 const emptyLine = (kind: LineKind = "product"): LineDraft => ({ kind, name: "", uom_id: "", quantity: "1", price_unit: "", account_id: "", tax_id: "", category_id: "", axes: {}, withholding: "" });
 
@@ -68,12 +75,15 @@ function linesOf(move: MoveDetail): LineDraft[] {
 }
 
 /**
- * Saisie d'une facture de vente ou d'une pièce d'achat ; contreparties, TVA et échéance sont déduites.
- * Une pièce d'achat se saisit par catégorie de dépense (compte, TVA et compte de tiers en découlent).
- * Le choix du compte d'une ligne n'apparaît qu'avec le droit « Saisie libre des comptes ».
- * Chaque ligne s'impute sur les axes de la société de travail (activité, centre de coût et axes des
- * métiers) ; les axes laissés vides suivent les imputations automatiques. Avec `move`, le brouillon est
- * relu puis modifié (et soumis à nouveau, après un refus par exemple).
+ * Saisie d'une facture de vente ou d'une facture fournisseur ; contreparties, TVA et échéance sont déduites.
+ * Une ligne d'achat se saisit par catégorie de dépense (compte, TVA et compte de tiers en découlent).
+ * La ligne montre Libellé, Catégorie (ou Unité), Quantité et Prix ; compte, TVA, retenue et axes analytiques
+ * se replient sous « Détails comptables », que la catégorie et les règles d'imputation remplissent. Ils se
+ * déplient d'office quand un champ reste à compléter, après un refus du noyau, ou pour les profils de la
+ * finance qui les ont dépliés la dernière fois. Le choix du compte n'apparaît qu'avec le droit « Saisie libre
+ * des comptes ». Le justificatif d'un achat se joint dans la fenêtre : il part juste après l'enregistrement,
+ * avant l'envoi pour approbation. Avec `move`, le brouillon est relu puis modifié (et envoyé à nouveau,
+ * après un refus par exemple).
  */
 export function MoveForm({
   open,
@@ -127,6 +137,18 @@ export function MoveForm({
   const [lines, setLines] = useState<LineDraft[]>(() => (move ? linesOf(move) : [emptyLine()]));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Justificatif choisi dans la fenêtre (achats), envoyé juste après l'enregistrement de la pièce.
+  const [justificatif, setJustificatif] = useState<File | null>(null);
+  // Pièce créée par cette fenêtre dont le justificatif ou l'envoi a échoué : un nouvel essai la modifie
+  // au lieu d'en créer une seconde.
+  const [brouillon, setBrouillon] = useState<MoveDetail | null>(null);
+  // Détails comptables : tous dépliés après un refus du noyau ; sinon selon la ligne ou la mémoire.
+  const [toutDeplier, setToutDeplier] = useState(false);
+  const comptable = useAutorise(ECRITURE_FINANCE);
+  const [detailsMemo, setDetailsMemo] = useState(false);
+  useEffect(() => {
+    if (open && comptable) setDetailsMemo(lireMemoire(CLE_DETAILS) === "1");
+  }, [open, comptable]);
 
   // Brouillon relu : les axes de chaque ligne s'affichent une fois ceux de la société chargés.
   const [axesRelus, setAxesRelus] = useState(!move);
@@ -190,6 +212,38 @@ export function MoveForm({
     return "Compte par défaut";
   }
 
+  /**
+   * Détails comptables à compléter : une ligne d'achat sans catégorie ni compte, saisie avec le droit de
+   * choisir le compte (sans ce droit, la catégorie, visible sur la ligne, est exigée).
+   */
+  const aCompleter = (l: LineDraft) => l.kind === "product" && !sale && libre && !l.category_id && !l.account_id;
+  const deplie = (l: LineDraft) => aCompleter(l) || (l.details ?? (toutDeplier || detailsMemo));
+
+  function basculer(i: number) {
+    const l = lines[i];
+    if (!l) return;
+    const ouvert = !deplie(l);
+    update(i, { details: ouvert });
+    // Profils de la finance : la prochaine saisie s'ouvre comme celle-ci.
+    if (comptable) ecrireMemoire(CLE_DETAILS, ouvert ? "1" : "0");
+  }
+
+  /** Détails comptables d'une ligne repliée, en une phrase : compte, TVA, retenue, axes. */
+  function resume(l: LineDraft): string {
+    const choisi = libre && l.account_id ? accounts?.find((a) => String(a.id) === l.account_id) : undefined;
+    const compte = choisi ? `Compte ${choisi.code} ${choisi.name}` : accountPlaceholder(l);
+    const tax = effectiveTax(l);
+    const tva = tax === "none" ? "sans TVA" : `TVA ${taux(taxes.find((t) => String(t.id) === tax)?.amount ?? 0)}`;
+    const retenues = lineWithholdings(l);
+    const retenue = withholdings.length === 0 ? null : retenues.length ? `retenue ${retenues.map((t) => taux(Math.abs(t.amount))).join(", ")}` : "sans retenue";
+    const imputes = (axes ?? []).flatMap((a) => {
+      const compteAxe = a.accounts.find((x) => String(x.id) === l.axes[a.key]);
+      return compteAxe ? [analyticLabel(compteAxe)] : [];
+    });
+    const analytique = imputes.length ? imputes.join(", ") : l.original ? "répartition du brouillon" : "axes selon les règles d'imputation";
+    return [compte, tva, retenue, analytique].filter(Boolean).join(" · ");
+  }
+
   /** Lignes envoyées au noyau (création comme modification). */
   const payloadLines = () =>
     lines.map((l) => {
@@ -210,8 +264,20 @@ export function MoveForm({
       };
     });
 
-  /** Modification du brouillon, puis soumission (ou validation) si demandée. */
-  async function save(post: boolean, draft: MoveDetail, tiers: { id: number }) {
+  /** Justificatif joint dans la fenêtre : envoyé à la pièce enregistrée (route des pièces jointes), une fois. */
+  async function joindre(id: number) {
+    if (!justificatif) return;
+    const form = new FormData();
+    form.append("file", justificatif);
+    await apiUpload(`/finance/moves/${id}/attachments`, form);
+    setJustificatif(null);
+  }
+
+  /**
+   * Modification du brouillon, justificatif joint, puis envoi pour approbation (ou validation) si demandé.
+   * etape : où en est l'enregistrement, pour dire ce qui a échoué.
+   */
+  async function save(post: boolean, draft: MoveDetail, tiers: { id: number }, etape: { v: string }) {
     let saved = await apiSend<MoveDetail>("PATCH", `/finance/moves/${draft.id}`, {
       partner_id: tiers.id,
       invoice_date: invoiceDate,
@@ -224,6 +290,9 @@ export function MoveForm({
       ...(moveType === "in_invoice" ? { commitment_id: commitmentId ? Number(commitmentId) : null } : {}),
       lines: payloadLines(),
     });
+    etape.v = "justificatif";
+    await joindre(draft.id);
+    etape.v = "envoi";
     if (post) saved = await apiSend<MoveDetail>("POST", `/finance/moves/${draft.id}/post`);
     return saved;
   }
@@ -247,12 +316,17 @@ export function MoveForm({
     if (!sale && !libre && chiffrees.some((l) => !l.category_id)) return setError("Choisissez la catégorie de dépense de chaque ligne : le compte en découle.");
     if (dispute && !disputeReason.trim()) return setError("Indiquez le motif du litige.");
     setBusy(true);
+    const etape = { v: "piece" };
     try {
-      if (move) {
-        onCreated(await save(post, move, partner));
+      // Brouillon relu, ou pièce déjà créée par cette fenêtre (justificatif ou envoi en échec) : modifiée.
+      const existante = move ?? brouillon;
+      if (existante) {
+        onCreated(await save(post, existante, partner, etape));
         return;
       }
-      const created = await apiSend<MoveDetail>("POST", "/finance/moves", {
+      // Avec un justificatif, la pièce naît en brouillon : le justificatif la rejoint avant l'envoi pour
+      // approbation, et l'approbateur le voit dès sa demande.
+      let created = await apiSend<MoveDetail>("POST", "/finance/moves", {
         move_type: moveType,
         partner_id: partner.id,
         invoice_date: invoiceDate,
@@ -265,9 +339,17 @@ export function MoveForm({
         commitment_id: commitmentId ? Number(commitmentId) : undefined,
         dispute: dispute || undefined,
         dispute_reason: dispute ? disputeReason.trim() : undefined,
-        post,
+        post: post && !justificatif,
         lines: payloadLines(),
       });
+      if (justificatif) {
+        setBrouillon(created);
+        etape.v = "justificatif";
+        await joindre(created.id);
+        etape.v = "envoi";
+        if (post) created = await apiSend<MoveDetail>("POST", `/finance/moves/${created.id}/post`);
+      }
+      setBrouillon(null);
       onCreated(created);
       setPartner(null);
       setLines([emptyLine()]);
@@ -278,35 +360,46 @@ export function MoveForm({
       setDispute(false);
       setDisputeReason("");
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Enregistrement impossible.");
+      const motif = e instanceof ApiError ? e.message : null;
+      // Refus du noyau sur la pièce ou son envoi : un champ des détails comptables peut être en cause.
+      if (motif && etape.v !== "justificatif") {
+        setToutDeplier(true);
+        setLines((ls) => ls.map((l) => ({ ...l, details: undefined })));
+      }
+      if (etape.v === "justificatif") setError(`Pièce enregistrée en brouillon, mais le justificatif n'a pas été joint${motif ? ` : ${motif}` : "."} Réessayez, ou changez de fichier.`);
+      else if (etape.v === "envoi") setError(`Pièce enregistrée en brouillon, mais non envoyée${motif ? ` : ${motif}` : "."}`);
+      else setError(motif ?? "Enregistrement impossible.");
     } finally {
       setBusy(false);
     }
   }
 
   const title = move
-    ? `Modifier ${move.move_type.endsWith("_refund") ? "l'avoir" : move.move_type.startsWith("in_") ? "la pièce d'achat" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
-    : { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle pièce d'achat", in_refund: "Nouvel avoir fournisseur" }[moveType];
+    ? `Modifier ${move.move_type.endsWith("_refund") ? "l'avoir" : move.move_type.startsWith("in_") ? "la facture fournisseur" : "la facture"}${move.ref ? ` ${move.ref}` : ""}`
+    : { out_invoice: "Nouvelle facture de vente", out_refund: "Nouvel avoir client", in_invoice: "Nouvelle facture fournisseur", in_refund: "Nouvel avoir fournisseur" }[moveType];
   const taxOptions = [{ value: "none", label: "Sans TVA" }, ...(taxes ?? []).map((t) => ({ value: t.id, label: t.name || taux(t.amount) }))];
-  // Vente : colonne Unité ; achat : colonne Catégorie.
-  const columns = 7 + (withholdings.length > 0 ? 1 : 0);
+  // Libellé, Unité (vente) ou Catégorie (achat), Quantité, Prix, suppression ; le reste sous « Détails comptables ».
+  const columns = 5;
+
+  // Fermée après la création d'un brouillon (justificatif ou envoi en échec) : la pièce existe, elle s'ouvre.
+  const fermer = () => (brouillon ? onCreated(brouillon) : onClose());
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={fermer}
       title={title}
       wide
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
-            Annuler
+          <Button variant="ghost" onClick={fermer}>
+            {brouillon ? "Fermer" : "Annuler"}
           </Button>
           <Button onClick={() => submit(false)} loading={busy} disabled={saisieIllisible}>
-            {move ? "Enregistrer" : "Enregistrer en brouillon"}
+            Enregistrer
           </Button>
           <Button variant="primary" onClick={() => submit(true)} loading={busy} disabled={saisieIllisible}>
-            {sale ? "Enregistrer et valider" : "Enregistrer et soumettre"}
+            {sale ? "Enregistrer et valider" : "Envoyer pour approbation"}
           </Button>
         </>
       }
@@ -329,7 +422,7 @@ export function MoveForm({
           <Field label="Date de la pièce" error={invoiceDate ? undefined : "Indiquez la date de la pièce."}>
             <Input type="date" required aria-invalid={!invoiceDate} className={CHAMP_INVALIDE} value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
           </Field>
-          <Field label="Échéance" hint="Vide : selon les conditions du tiers">
+          <Field label="Échéance" hint={`Vide : selon les conditions du ${sale ? "client" : "fournisseur"}`}>
             <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </Field>
           {sale ? (
@@ -383,11 +476,8 @@ export function MoveForm({
               <tr>
                 <th scope="col" className="px-2 py-2 text-left">Libellé</th>
                 {sale ? <th scope="col" className="w-32 px-2 py-2 text-left">Unité</th> : <th scope="col" className="w-48 px-2 py-2 text-left">Catégorie</th>}
-                <th scope="col" className="w-20 px-2 py-2 text-right">Qté</th>
+                <th scope="col" className="w-24 px-2 py-2 text-right">Quantité</th>
                 <th scope="col" className="w-36 px-2 py-2 text-right">Prix unitaire HT</th>
-                <th scope="col" className="w-56 px-2 py-2 text-left">Compte</th>
-                <th scope="col" className="w-28 px-2 py-2 text-left">TVA</th>
-                {withholdings.length > 0 && <th scope="col" className="w-40 px-2 py-2 text-left">Retenue</th>}
                 <th scope="col" className="w-8">
                   <span className="sr-only">Supprimer</span>
                 </th>
@@ -453,32 +543,6 @@ export function MoveForm({
                         aria-describedby={nombresIllisibles(l).length ? `ligne-${i}-nombres` : undefined}
                       />
                     </td>
-                    <td className="px-2 pt-1.5">
-                      {libre ? (
-                        <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} aria-label={`Compte, ligne ${i + 1}`} />
-                      ) : (
-                        <span className="block truncate px-1 py-2 text-[12.5px] text-muted" title="Choix du compte : droit « Saisie libre des comptes »">
-                          {accountPlaceholder(l)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 pt-1.5">
-                      <Select value={effectiveTax(l)} disabled={exempt} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxOptions} aria-label={`TVA, ligne ${i + 1}`} />
-                    </td>
-                    {withholdings.length > 0 && (
-                      <td className="px-2 pt-1.5">
-                        <Select
-                          value={l.withholding}
-                          onChange={(e) => update(i, { withholding: e.target.value })}
-                          aria-label={`Retenue, ligne ${i + 1}`}
-                          options={[
-                            { value: "", label: partnerDefaults.length ? `Du tiers (${partnerDefaults.map((t) => taux(Math.abs(t.amount))).join(", ")})` : "Aucune (tiers)" },
-                            { value: "none", label: "Aucune" },
-                            ...withholdings.map((t) => ({ value: t.id, label: `${t.name} (${taux(Math.abs(t.amount))})` })),
-                          ]}
-                        />
-                      </td>
-                    )}
                     <td className="px-1 pt-1.5">
                       {lines.length > 1 && (
                         <button type="button" className="text-muted hover:text-danger" onClick={() => setLines((ls) => ls.filter((_, j) => j !== i))} aria-label={`Supprimer la ligne ${i + 1}`}>
@@ -494,7 +558,59 @@ export function MoveForm({
                           {AIDE_NOMBRE.replace(" :", ` (${nombresIllisibles(l).join(" et ")}) :`)}
                         </p>
                       )}
-                      <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => update(i, { axes: next, original: undefined })} />
+                      <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
+                        <button
+                          type="button"
+                          className="inline-flex shrink-0 items-center gap-1 font-medium text-accent hover:underline disabled:no-underline disabled:opacity-80"
+                          onClick={() => basculer(i)}
+                          disabled={aCompleter(l)}
+                          aria-expanded={deplie(l)}
+                          aria-controls={`ligne-${i}-details`}
+                        >
+                          <ChevronRight className={cx("h-3.5 w-3.5 transition-transform", deplie(l) && "rotate-90")} /> Détails comptables
+                        </button>
+                        {aCompleter(l) ? (
+                          <span className="text-muted">Sans catégorie : choisissez le compte.</span>
+                        ) : (
+                          !deplie(l) && <span className="min-w-0 truncate text-muted" title={resume(l)}>{resume(l)}</span>
+                        )}
+                      </div>
+                      {deplie(l) && (
+                        <div id={`ligne-${i}-details`} className="mt-2 space-y-2">
+                          <div className={cx("grid grid-cols-1 gap-2", withholdings.length > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2")}>
+                            <div className="grid min-w-0 gap-1">
+                              <span className="text-[12px] text-muted">Compte</span>
+                              {libre ? (
+                                <Select value={l.account_id} onChange={(e) => update(i, { account_id: e.target.value })} placeholder={accountPlaceholder(l)} options={(accounts ?? []).map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} aria-label={`Compte, ligne ${i + 1}`} />
+                              ) : (
+                                <span className="block truncate px-1 py-2 text-[12.5px] text-muted" title="Choix du compte : droit « Saisie libre des comptes »">
+                                  {accountPlaceholder(l)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid min-w-0 gap-1">
+                              <span className="text-[12px] text-muted">TVA</span>
+                              <Select value={effectiveTax(l)} disabled={exempt} onChange={(e) => update(i, { tax_id: e.target.value })} options={taxOptions} aria-label={`TVA, ligne ${i + 1}`} />
+                            </div>
+                            {withholdings.length > 0 && (
+                              <div className="grid min-w-0 gap-1">
+                                <span className="text-[12px] text-muted">Retenue à la source</span>
+                                <Select
+                                  value={l.withholding}
+                                  onChange={(e) => update(i, { withholding: e.target.value })}
+                                  aria-label={`Retenue, ligne ${i + 1}`}
+                                  options={[
+                                    { value: "", label: partnerDefaults.length ? `Du ${sale ? "client" : "fournisseur"} (${partnerDefaults.map((t) => taux(Math.abs(t.amount))).join(", ")})` : "Aucune par défaut" },
+                                    { value: "none", label: "Aucune" },
+                                    ...withholdings.map((t) => ({ value: t.id, label: `${t.name} (${taux(Math.abs(t.amount))})` })),
+                                  ]}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <AnalyticFields compact axes={axes} value={l.axes} onChange={(next) => update(i, { axes: next, original: undefined })} />
+                        </div>
+                      )}
                     </td>
                   </tr>
                 </Fragment>
@@ -534,7 +650,24 @@ export function MoveForm({
             <dd className="text-right font-mono font-semibold">{montantDevise(totals.ttc, devise)}</dd>
           </dl>
         </div>
-        <p className="text-xs text-muted">Les axes laissés vides suivent les imputations automatiques de la société (préfixe de compte, tiers).</p>
+        <p className="text-xs text-muted">Les axes laissés vides suivent les règles d'imputation de la société (préfixe de compte, fournisseur ou client).</p>
+        {!sale && (
+          <div className="space-y-1.5">
+            <span className="block text-[13px] font-medium">Justificatif (facture, devis, bon de livraison)</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <FileButton small label={justificatif ? "Changer de fichier" : "Joindre le justificatif"} accept={FORMATS_JUSTIFICATIF} onFile={setJustificatif} />
+              {justificatif && (
+                <span className="inline-flex min-w-0 items-center gap-1 text-sm">
+                  <span className="truncate">{justificatif.name}</span>
+                  <button type="button" className="text-muted hover:text-danger" onClick={() => setJustificatif(null)} aria-label={`Retirer ${justificatif.name}`}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted">Envoyé avec la pièce : l&apos;approbateur le voit. PDF, image, Word ou Excel, 15 Mo au plus.</p>
+          </div>
+        )}
         <Field label="Note interne">
           <Textarea value={narration} onChange={(e) => setNarration(e.target.value)} />
         </Field>

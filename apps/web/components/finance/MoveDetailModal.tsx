@@ -1,14 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, Paperclip, Pencil, RotateCcw, Send, Trash2, Undo2, Wallet, XCircle } from "@/components/icons";
 import { Badge, Button, DataTable, ErrorBox, Field, FileButton, Input, Loading, Modal, Notice, Select, cx, demanderConfirmation } from "@/components/ui";
 import { AnalyticTags } from "./AnalyticFields";
-import { CHAMP_INVALIDE, ECRITURE_FINANCE, SAISIE_PIECES, aujourdhui, montantDevise, nombreDevise, taux, useTelechargement } from "./communPieces";
+import { CHAMP_INVALIDE, ECRITURE_FINANCE, SAISIE_PIECES, aujourdhui, ecrireMemoire, lireMemoire, montantDevise, nombreDevise, taux, useTelechargement } from "./communPieces";
 import { MoveForm } from "./MoveForm";
 import { ApiError, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
 import { MOVE_STATES, PAYMENT_STATES, type Journal, type MoveDetail } from "@/lib/finance-types";
 import { AIDE_NOMBRE, fmtDate, fmtDec, fmtGNF, fmtInt, lireNombre, nombreIllisible } from "@/lib/format";
+import type { Me } from "@/lib/types";
+
+/** Dernier compte de trésorerie et dernier mode de paiement d'un règlement, mémorisés dans ce navigateur. */
+function lireReglement(cle: string): { journal?: string; mode?: string } {
+  try {
+    const v = JSON.parse(lireMemoire(cle) ?? "{}") as unknown;
+    return v && typeof v === "object" ? (v as { journal?: string; mode?: string }) : {};
+  } catch {
+    return {};
+  }
+}
 
 /** Ligne chiffrée de la pièce (et non rubrique ni note). */
 const chiffree = (l: MoveDetail["lines"][number]) => !l.display_type || l.display_type === "product";
@@ -74,6 +85,20 @@ export function MoveDetailModal({
   const [disputing, setDisputing] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const { data: modes } = useApi<Array<{ id: number; name: string }>>(paying ? "/finance/payment-modes" : null);
+  // Règlement : proposés d'office, le dernier compte de trésorerie et le dernier mode de paiement de cet
+  // utilisateur (mémoire de ce navigateur), sinon le seul compte s'il n'y en a qu'un. Une fois par ouverture
+  // du règlement, les listes lues : un choix vidé ensuite n'est pas rempli à nouveau.
+  const { data: me } = useApi<Me>("/auth/me");
+  const memoire = me ? `nimova.finance.reglement.${me.id}` : null;
+  const [propose, setPropose] = useState(false);
+  useEffect(() => {
+    if (!paying || propose || !journals || !modes || !memoire) return;
+    const dernier = lireReglement(memoire);
+    const compte = journals.find((j) => String(j.id) === dernier.journal) ?? (journals.length === 1 ? journals[0] : undefined);
+    if (compte && !journalId) setJournalId(String(compte.id));
+    if (dernier.mode && !modeId && modes.some((m) => String(m.id) === dernier.mode)) setModeId(dernier.mode);
+    setPropose(true);
+  }, [paying, propose, journals, modes, memoire, journalId, modeId]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   // Pièces jointes et PDF : en chargement pendant le téléchargement, l'échec affiché.
@@ -136,11 +161,14 @@ export function MoveDetailModal({
         }),
       (r) =>
         r.payment_status === "submitted"
-          ? { tone: "accent", text: "Règlement soumis au circuit d'approbation : il n'est ni comptabilisé ni lettré avant la dernière approbation." }
+          ? { tone: "accent", text: "Règlement envoyé pour approbation : il n'est ni comptabilisé ni lettré avant la dernière approbation." }
           : { tone: "ok", text: "Règlement enregistré." },
     );
     if (ok) {
+      // Le compte et le mode de ce règlement seront proposés au suivant.
+      if (memoire) ecrireMemoire(memoire, JSON.stringify({ journal: journalId, mode: modeId }));
       setPaying(false);
+      setPropose(false);
       setAmount("");
     }
   }
@@ -383,8 +411,19 @@ export function MoveDetailModal({
 
           <div className="flex flex-wrap gap-2 border-t border-line pt-4">
             {saisie && move.can_post && (
-              <Button variant="primary" loading={busy === "post"} onClick={() => act("post", () => apiSend("POST", `/finance/moves/${move.id}/post`))}>
-                <Send className="h-4 w-4" /> {achats ? "Soumettre au circuit" : move.move_type.startsWith("in_") ? "Soumettre / valider" : "Valider"}
+              <Button
+                variant="primary"
+                loading={busy === "post"}
+                onClick={() =>
+                  act("post", () => apiSend<MoveDetail>("POST", `/finance/moves/${move.id}/post`), (r) =>
+                    // Pièce d'achat : sous les seuils, ou couverte par un engagement approuvé, elle est comptabilisée d'office.
+                    r.state === "posted"
+                      ? { tone: "ok", text: achats || move.move_type.startsWith("in_") ? "Pièce comptabilisée : aucune approbation n'était requise." : "Pièce validée." }
+                      : { tone: "accent", text: `Pièce envoyée pour approbation${r.approval?.pending_with ? ` : elle attend ${r.approval.pending_with}` : ""}.` },
+                  )
+                }
+              >
+                <Send className="h-4 w-4" /> {achats || move.move_type.startsWith("in_") ? "Envoyer pour approbation" : "Valider"}
               </Button>
             )}
             {saisie && modifiable && (od ? editionOd : true) && (

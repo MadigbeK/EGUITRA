@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Onglets de Ventes et d'Achats et dépenses (Finance) : les factures et les pièces d'achat de toujours, puis
+ * Onglets de Ventes et d'Achats et dépenses (Finance) : les factures clients et fournisseurs de toujours, puis
  * les offres, les commandes, le catalogue et le tableau de bord des achats et des ventes. Chaque onglet
  * n'apparaît qu'aux profils que ses routes acceptent.
  */
@@ -31,7 +31,7 @@ const ONGLETS: Record<"ventes" | "achats", { racine: string; titre: string; ongl
     racine: "/finance/achats",
     titre: "Achats et dépenses",
     onglets: [
-      { href: "/finance/achats", label: "Pièces d'achat", profils: [...VENTES_LECTURE, "achats"] },
+      { href: "/finance/achats", label: "Factures fournisseurs", profils: [...VENTES_LECTURE, "achats"] },
       { href: "/finance/achats/commandes", label: "Bons de commande", profils: ACHATS_TOUS },
       { href: "/finance/achats/catalogue", label: "Catalogue", profils: ACHATS_PIECE },
       { href: "/finance/achats/tableau", label: "Tableau de bord", profils: ACHATS_COMPLET },

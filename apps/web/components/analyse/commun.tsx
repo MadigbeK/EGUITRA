@@ -313,7 +313,7 @@ export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; ch
   if (cible && !echec) {
     return (
       <div className="space-y-4">
-        <p role="status" className="text-sm text-muted">Ouverture dans les livres de {cible.name}…</p>
+        <p role="status" className="text-sm text-muted">Ouverture pour {cible.name}…</p>
         <AttenteSection />
       </div>
     );
@@ -324,7 +324,7 @@ export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; ch
       <Notice tone="accent">
         <p className="font-semibold">Cette analyse concerne {nom}.</p>
         <p className="mt-1">
-          Vous travaillez dans les livres de {contexte.company.name}. {contexte.can_switch ? "Choisissez l'autre société dans la barre du haut, à droite, pour ouvrir cette section, ou " : "Votre compte n'est pas ouvert à cette société ; "}
+          Vous travaillez pour {contexte.company.name}. {contexte.can_switch ? "Choisissez l'autre société dans la barre du haut, à droite, pour ouvrir cette section, ou " : "Votre compte n'est pas ouvert à cette société ; "}
           <Link href="/analyse" className="font-semibold text-accent underline underline-offset-2">
             revenez au cockpit
           </Link>
@@ -895,6 +895,19 @@ export function Constats({ insights, titre = "Constats remarquables", colonnes =
 
 const STATUT: Record<Kpi["status"], Tone> = { good: "ok", warn: "warn", bad: "danger", neutral: "neutral" };
 
+/** Indicateurs nommés en clair, par clé ; le sigle reste en infobulle pour qui le connaît. Sans entrée : le libellé du noyau. */
+const EN_CLAIR: Record<string, { label: string; sigle: string }> = {
+  ebe: { label: "Excédent brut d'exploitation", sigle: "EBE" },
+  ebe_margin: { label: "Taux d'excédent brut d'exploitation", sigle: "EBE" },
+  bfr: { label: "Besoin de financement de l'activité", sigle: "BFR" },
+  bfr_days: { label: "Besoin de financement de l'activité, en jours de chiffre d'affaires", sigle: "BFR" },
+  dso: { label: "Délai moyen d'encaissement des clients (jours)", sigle: "DSO" },
+  dpo: { label: "Délai moyen de paiement des fournisseurs (jours)", sigle: "DPO" },
+  dio: { label: "Rotation des stocks (jours)", sigle: "DIO" },
+  dscr: { label: "Capacité à rembourser la dette", sigle: "DSCR" },
+};
+export const libelleClair = (cle: string, label: string) => EN_CLAIR[cle]?.label ?? label;
+
 /** Carte de chiffre clé du contrat : valeur, variation N-1, cible, tendance 12 mois, définition au survol. */
 export function KpiContrat({ kpi }: { kpi: Kpi }) {
   const cible = kpi.target !== null ? `cible ${fmtValeur(kpi.target, kpi.unit)}` : null;
@@ -906,8 +919,8 @@ export function KpiContrat({ kpi }: { kpi: Kpi }) {
   const enPoints = kpi.unit === "pct" || kpi.unit === "score";
   const variation = enPoints ? (kpi.value !== null && kpi.previous !== null ? kpi.value - kpi.previous : null) : kpi.delta_pct;
   return (
-    <div title={kpi.definition} className={cx("min-w-0", tendance.length > 1 && cx(FEUILLE, "kpi-avec-tendance overflow-hidden"))}>
-      <KpiCarte label={kpi.label} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={variation} deltaUnite={enPoints ? "pts" : "pct"} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
+    <div title={EN_CLAIR[kpi.key] ? `Sigle : ${EN_CLAIR[kpi.key]!.sigle}. ${kpi.definition}` : kpi.definition} className={cx("min-w-0", tendance.length > 1 && cx(FEUILLE, "kpi-avec-tendance overflow-hidden"))}>
+      <KpiCarte label={libelleClair(kpi.key, kpi.label)} value={kpi.value === null ? "–" : fmtValeur(kpi.value, kpi.unit)} tone={statut} delta={variation} deltaUnite={enPoints ? "pts" : "pct"} inverse={kpi.inverse} hint={[ref, cible].filter(Boolean).join(" · ") || (kpi.value === null ? "Non calculable sur la période" : kpi.definition)} />
       {tendance.length > 1 && (
         <div className="px-5 pb-3">
           <Sparkline values={tendance} color={statut === "danger" ? COULEUR.mauvais : statut === "warn" ? COULEUR.alerte : COULEUR.accent} height={32} />

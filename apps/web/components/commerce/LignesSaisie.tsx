@@ -79,13 +79,15 @@ export function totalHt(lignes: LigneSaisie[], remiseGenerale = ""): number {
     .reduce((s, l) => s + (lireNombre(l.quantity) ?? 0) * (lireNombre(l.price_unit) ?? 0) * (1 - (lireNombre(l.discount) ?? generale) / 100), 0);
 }
 
-export function LignesSaisie({ kind, lignes, onChange, refs, catalogue, remiseGenerale }: {
+export function LignesSaisie({ kind, lignes, onChange, refs, catalogue, remiseGenerale, categorieProposee }: {
   kind: "sale" | "purchase";
   lignes: LigneSaisie[];
   onChange: (l: LigneSaisie[]) => void;
   refs?: Referentiels;
   catalogue?: Article[];
   remiseGenerale?: string;
+  /** Bon de commande : catégorie proposée aux nouvelles lignes libres (la dernière prise chez ce fournisseur). */
+  categorieProposee?: string;
 }) {
   const taxes = kind === "sale" ? refs?.sale_taxes ?? [] : refs?.purchase_taxes ?? [];
   const articles = (catalogue ?? []).filter((a) => a.active && (kind === "sale" ? a.sale_ok : a.purchase_ok));
@@ -152,7 +154,7 @@ export function LignesSaisie({ kind, lignes, onChange, refs, catalogue, remiseGe
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => onChange([...lignes, nouvelleLigne()])}><Plus className="h-4 w-4" /> Ligne</Button>
+          <Button size="sm" onClick={() => onChange([...lignes, { ...nouvelleLigne(), category_id: kind === "purchase" ? categorieProposee ?? "" : "" }])}><Plus className="h-4 w-4" /> Ligne</Button>
           <Button size="sm" onClick={() => onChange([...lignes, nouvelleLigne("line_section")])}><Plus className="h-4 w-4" /> Rubrique</Button>
           <Button size="sm" onClick={() => onChange([...lignes, nouvelleLigne("line_note")])}><Plus className="h-4 w-4" /> Note</Button>
         </div>

@@ -81,7 +81,7 @@ export default function ReglagesCommercePage() {
                 <Field label="Relance de l'auteur avant expiration (jours)" hint="0 : pas de relance. Par courriel, si le serveur de courrier est paramétré."><Input inputMode="numeric" value={f.reminder_days ?? ""} onChange={(e) => setF({ ...f, reminder_days: e.target.value })} /></Field>
               </div>
             </Card>
-            <Card title="Rapprochement des pièces d'achat avec les commandes">
+            <Card title="Rapprochement des factures fournisseurs avec les commandes">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <Field label="Tolérance sur les quantités (%)" hint="Facturé admis au-delà du reçu."><Input inputMode="decimal" value={f.match_qty_tolerance ?? ""} onChange={(e) => setF({ ...f, match_qty_tolerance: e.target.value })} /></Field>
                 <Field label="Tolérance sur les prix (%)" hint="Prix facturé admis au-delà du prix commandé."><Input inputMode="decimal" value={f.match_price_tolerance ?? ""} onChange={(e) => setF({ ...f, match_price_tolerance: e.target.value })} /></Field>

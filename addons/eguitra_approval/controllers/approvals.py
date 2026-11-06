@@ -31,6 +31,41 @@ def _req(request_id):
     return rec
 
 
+def _documents(rec):
+    """Documents dont la demande montre les justificatifs : la pièce soumise et, pour un règlement, les
+    factures qu'il solde (la facture du fournisseur, que l'approbateur vérifie avant de payer). Avec le module
+    des achats : pour une facture rattachée à un bon de commande, le bon (devis, proforma) et ses réceptions
+    (bons de livraison) ; pour un engagement, les devis fournisseurs comparés."""
+    record = rec._record()
+    if not record:
+        return {}
+    documents = {record._name: [record.id]}
+    if record._name == "account.payment" and "invoice_ids" in record._fields and record.invoice_ids:
+        documents.setdefault("account.move", []).extend(record.invoice_ids.ids)
+    if record._name == "account.move" and "eguitra_purchase_order_id" in record._fields:
+        order = record.sudo().eguitra_purchase_order_id
+        if order:
+            documents.setdefault(order._name, []).append(order.id)
+            receipts = order.eguitra_receipt_ids
+            if receipts:
+                documents.setdefault(receipts._name, []).extend(receipts.ids)
+    if "eguitra_quote_ids" in record._fields:
+        quotes = record.sudo().eguitra_quote_ids
+        if quotes:
+            documents.setdefault(quotes._name, []).extend(quotes.ids)
+    return documents
+
+
+def _attachments(rec):
+    """Pièces jointes des documents de la demande (facture, devis, proforma, bon de livraison) : lues avec
+    les droits de la demande, comme son détail ; qui voit la demande en voit les justificatifs."""
+    Attachment = request.env["ir.attachment"].sudo()
+    found = Attachment
+    for model, ids in _documents(rec).items():
+        found |= Attachment.search([("res_model", "=", model), ("res_id", "in", ids)], order="id")
+    return found
+
+
 def _row(rec, detail=False):
     profiles = dict(rec._fields["pending_profile"].selection)
     data = {
@@ -55,11 +90,15 @@ def _row(rec, detail=False):
             for s in rec.step_ids
         ]
         record = rec._record()
+        # label : la catégorie de dépense ou le libellé du compte, en clair pour l'approbateur ; le code
+        # du compte reste dans account.
         if rec.res_model == "account.move" and record:
             data["document_detail"] = {
                 "name": record.name if record.name != "/" else None, "ref": record.ref or None,
                 "date": record.invoice_date or record.date, "state": record.state,
-                "lines": [{"name": l.name, "account": l.account_id.code, "amount": l.price_subtotal or l.debit}
+                "lines": [{"name": l.name, "account": l.account_id.code,
+                           "label": l.eguitra_expense_category_id.name or l.account_id.name or None,
+                           "amount": l.price_subtotal or l.debit}
                           for l in (record.invoice_line_ids or record.line_ids.filtered("debit"))],
             }
         elif rec.res_model == "eguitra.commitment" and record:
@@ -67,6 +106,7 @@ def _row(rec, detail=False):
                                        "object": record.object, "note": record.note or None,
                                        "account": record.account_id.code or None,
                                        "lines": [{"name": record.object, "account": record.account_id.code,
+                                                  "label": record.account_id.name or None,
                                                   "amount": record.amount}]}
         elif rec.res_model == "account.payment" and record:
             data["document_detail"] = {"name": record.name, "date": record.date, "state": record.state,
@@ -76,6 +116,9 @@ def _row(rec, detail=False):
             detail = rec._document_detail()
             if detail:
                 data["document_detail"] = detail
+        data["attachments"] = [
+            {"id": a.id, "name": a.name, "mimetype": a.mimetype, "size": a.file_size} for a in _attachments(rec)
+        ]
     return data
 
 
@@ -112,6 +155,19 @@ class EguitraApprovals(http.Controller):
     @api_route("/approvals/<int:request_id>", profiles=FOLLOWERS)
     def get(self, request_id, **_kw):
         return _row(_req(request_id), detail=True)
+
+    @api_route("/approvals/<int:request_id>/attachments/<int:attachment_id>", profiles=FOLLOWERS)
+    def attachment(self, request_id, attachment_id, **_kw):
+        """Pièce jointe d'un document de la demande, en lecture seule : refusée (introuvable) hors des
+        justificatifs de la demande, ou si la demande n'est pas visible du compte."""
+        attachment = _attachments(_req(request_id)).filtered(lambda a: a.id == attachment_id)
+        if not attachment:
+            raise ApiError(404, "not_found", "Pièce jointe introuvable.")
+        return request.make_response(attachment.raw or b"", headers=[
+            ("Content-Type", attachment.mimetype or "application/octet-stream"),
+            ("Content-Disposition", http.content_disposition(attachment.name or "piece-jointe")),
+            ("X-Content-Type-Options", "nosniff"),
+        ])
 
     @api_route("/approvals/<int:request_id>/approve", methods=("POST",), profiles=INTERNAL)
     def approve(self, request_id, **_kw):

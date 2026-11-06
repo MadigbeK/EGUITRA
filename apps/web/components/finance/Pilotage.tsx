@@ -2,9 +2,9 @@
 
 /**
  * Briques du pilotage financier, communes au tableau de bord, au rapport mensuel, aux alertes et à
- * l'écran Activités et budget : gravités et valeurs des alertes, questions du dirigeant, ce qui
- * demande une décision, courbe et tableau des flux mensuels de trésorerie, besoin en fonds de
- * roulement.
+ * l'écran Activités et budget : gravités et valeurs des alertes, écran où corriger chaque contrôle et
+ * chaque alerte, questions du dirigeant, ce qui demande une décision, courbe et tableau des flux
+ * mensuels de trésorerie, besoin de financement de l'activité.
  */
 
 import Link from "next/link";
@@ -60,18 +60,72 @@ function chiffresAlerte(a: Alert): { valeur: string | null; seuil: string | null
   };
 }
 
+/* ─── Écran où corriger ────────────────────────────────────────────────── */
+
+/** Écran où se corrige un contrôle ou une alerte ; le libellé du lien dit ce qu'on y fait. */
+export interface Ecran {
+  href: string;
+  libelle: string;
+}
+
+/**
+ * Contrôles de clôture (mois, exercice, intégrité) et règles d'alerte, par code : l'écran qui corrige.
+ * Un code absent (mois pas encore terminé, mois précédents à clôturer, résultat nul) n'a pas d'écran :
+ * il se règle avec le temps ou sur l'écran des clôtures lui-même. Une alerte d'un autre module (transport)
+ * garde le lien que le noyau lui donne. Les écrans lisent ?vue= (pièces) et ?onglet= (Activités et budget).
+ */
+export const ECRANS: Record<string, Ecran> = {
+  // Contrôles de clôture.
+  draft_moves: { href: "/finance/achats?vue=draft", libelle: "Corriger : factures fournisseurs en brouillon" },
+  move_balance: { href: "/finance/ecritures", libelle: "Corriger : écritures comptables" },
+  ledger_balance: { href: "/finance/etats", libelle: "Ouvrir la balance" },
+  balance_sheet: { href: "/finance/etats", libelle: "Ouvrir le bilan" },
+  transit_account: { href: "/finance/tresorerie", libelle: "Corriger : virements internes" },
+  bank_reconciliation: { href: "/finance/tresorerie", libelle: "Corriger : relevés à rapprocher" },
+  bank_statement_balance: { href: "/finance/tresorerie/rapprochement", libelle: "Ouvrir l'état de rapprochement" },
+  bank_statement_imported: { href: "/finance/tresorerie", libelle: "Corriger : importer le relevé du mois" },
+  statement_mapping: { href: "/finance/plan-comptable", libelle: "Corriger : plan comptable" },
+  reference_consistency: { href: "/finance/tiers", libelle: "Corriger : clients et fournisseurs" },
+  analytic_consistency: { href: "/finance/admin/axes", libelle: "Corriger : centres de coût et activités" },
+  blocking_alerts: { href: "/finance/alertes", libelle: "Ouvrir les alertes" },
+  depreciation_posted: { href: "/finance/immobilisations", libelle: "Corriger : dotations aux amortissements" },
+  fully_depreciated: { href: "/finance/immobilisations", libelle: "Ouvrir les immobilisations" },
+  manual_allocations: { href: "/finance/ecritures", libelle: "Corriger : écritures comptables" },
+  // Règles d'alerte.
+  cash_min: { href: "/finance/pilotage?onglet=tresorerie", libelle: "Ouvrir la trésorerie prévue" },
+  cash_account_negative: { href: "/finance/tresorerie", libelle: "Ouvrir la trésorerie" },
+  receivable_overdue_days: { href: "/finance/relances", libelle: "Relancer les clients" },
+  receivable_overdue_amount: { href: "/finance/relances", libelle: "Relancer les clients" },
+  receivable_overdue_share_pct: { href: "/finance/relances", libelle: "Relancer les clients" },
+  dso_target_days: { href: "/finance/relances", libelle: "Relancer les clients" },
+  client_concentration_pct: { href: "/finance/tiers", libelle: "Ouvrir les clients" },
+  payable_overdue_amount: { href: "/finance/achats?vue=overdue", libelle: "Ouvrir les factures fournisseurs échues" },
+  dscr_min: { href: "/finance/dette", libelle: "Ouvrir la dette" },
+  net_result_negative: { href: "/finance/etats", libelle: "Ouvrir le compte de résultat" },
+  close_delay_days: { href: "/finance/clotures", libelle: "Clôturer le mois" },
+  budget_overrun_pct: { href: "/finance/pilotage?onglet=budget", libelle: "Ouvrir le budget et ses écarts" },
+  approval_delay_days: { href: "/finance/approbations", libelle: "Ouvrir les demandes à approuver" },
+  settings: { href: "/finance/admin/parametres", libelle: "Fixer les seuils" },
+};
+
+/** Écran d'un code, à défaut le lien donné par le noyau (« Ouvrir »), sinon aucun. */
+export function ecran(code: string, lien?: string | null): Ecran | null {
+  return ECRANS[code] ?? (lien ? { href: lien, libelle: "Ouvrir" } : null);
+}
+
 /**
  * Une alerte, en trois colonnes : le constat (titre, domaine et message, action recommandée), le
  * montant en jeu lisible avec son seuil dessous, la gravité. Au téléphone, montant et gravité
- * passent sous le constat. Le lien mène à l'écran où agir.
+ * passent sous le constat. Le lien, écrit en toutes lettres, mène à l'écran où agir.
  */
 export function AlerteLigne({ a, groupe }: { a: Alert; groupe?: boolean }) {
   const g = gravite(a.severity);
   const ok = a.status !== "alert";
   const { valeur: brute, seuil } = chiffresAlerte(a);
   const valeur = brute === "–" ? null : brute;
+  const cible = ecran(a.code, a.link);
   const corps = (
-    <div className={cx("flex items-start gap-3 rounded-xl px-2 py-2.5 transition-colors", a.link && "group-hover:bg-panel-2")}>
+    <div className={cx("flex items-start gap-3 rounded-xl px-2 py-2.5 transition-colors", cible && "group-hover:bg-panel-2")}>
       <IconTile icon={g.icon} teinte={ok ? "jade" : g.teinte} className="h-9 w-9 rounded-[10px]" />
       <div className="grid min-w-0 flex-1 gap-x-4 gap-y-1.5 sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0">
@@ -88,6 +142,12 @@ export function AlerteLigne({ a, groupe }: { a: Alert; groupe?: boolean }) {
               {a.action}
             </div>
           )}
+          {cible && (
+            <div className="no-print mt-1 inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent group-hover:underline">
+              {ok ? "Ouvrir" : cible.libelle}
+              <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:flex-nowrap sm:items-start">
           {(valeur || seuil) && (
@@ -99,11 +159,10 @@ export function AlerteLigne({ a, groupe }: { a: Alert; groupe?: boolean }) {
           <span className="sm:mt-px">{ok ? <Badge tone={a.status === "na" ? "neutral" : "ok"}>{a.status === "na" ? "Sans objet" : "Conforme"}</Badge> : <Badge tone={g.tone}>{g.label}</Badge>}</span>
         </div>
       </div>
-      {a.link && <ChevronRight className="no-print mt-2 h-4 w-4 flex-none text-line-strong transition-transform group-hover:translate-x-0.5 group-hover:text-accent" />}
     </div>
   );
-  return a.link ? (
-    <Link href={a.link} className="group block rounded-xl">
+  return cible ? (
+    <Link href={cible.href} className="group block rounded-xl">
       {corps}
     </Link>
   ) : (
@@ -326,9 +385,9 @@ export function Prevision({ forecast, seuil }: { forecast: CashForecast; seuil: 
 
 /* ─── Besoin en fonds de roulement ─────────────────────────────────────── */
 
-function Chiffre({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: "danger" | "warn" | "ok" }) {
+function Chiffre({ label, value, hint, tone, sigle }: { label: string; value: ReactNode; hint?: ReactNode; tone?: "danger" | "warn" | "ok"; sigle?: string }) {
   return (
-    <div className="min-w-0 rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
+    <div className="min-w-0 rounded-xl border border-line bg-panel-2/60 px-3.5 py-3" title={sigle ? `Sigle : ${sigle}` : undefined}>
       <div className="text-[12px] font-medium text-muted">{label}</div>
       <div className={cx("mt-1 font-display text-[19px] font-bold tabular leading-tight", tone === "danger" ? "text-danger" : tone === "warn" ? "text-warn" : "text-ink")}>{value}</div>
       {hint && <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-muted">{hint}</div>}
@@ -337,8 +396,9 @@ function Chiffre({ label, value, hint, tone }: { label: string; value: ReactNode
 }
 
 /**
- * BFR et délais : DSO face à la cible, DPO, DIO, cycle, part échue, concentration. Un seuil null (laissé
- * à 0 : règle éteinte) ne juge pas la valeur : « seuil non fixé ».
+ * Besoin de financement de l'activité (BFR) et délais : encaissement des clients (DSO) face à la cible,
+ * paiement des fournisseurs (DPO), stock (DIO), cycle, part échue, concentration. Libellés en clair, le
+ * sigle en infobulle. Un seuil null (laissé à 0 : règle éteinte) ne juge pas la valeur : « seuil non fixé ».
  */
 export function CarteBfr({ wc, thresholds }: { wc: WorkingCapital; thresholds: Thresholds }) {
   const cible = thresholds.dso_target_days;
@@ -346,10 +406,10 @@ export function CarteBfr({ wc, thresholds }: { wc: WorkingCapital; thresholds: T
   const concMax = thresholds.client_concentration_pct;
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-      <Chiffre label="BFR" value={`${fmtShort(wc.bfr)}`} hint={`SYSCOHADA : ${fmtShort(wc.bfr_syscohada)}`} />
-      <Chiffre label="Cycle d'exploitation" value={fmtJours(wc.cycle)} hint="DSO + DIO - DPO" />
-      <Chiffre label="DSO (recouvrement)" value={fmtJours(wc.dso)} hint={cible ? `Cible ${fmtJours(cible)} · 12 mois ${fmtJours(wc.dso_12m)}` : `12 mois glissants ${fmtJours(wc.dso_12m)}`} tone={wc.dso !== null && cible ? (wc.dso > cible ? "danger" : "ok") : undefined} />
-      <Chiffre label="DPO (fournisseurs)" value={fmtJours(wc.dpo)} hint={wc.dio !== null && wc.stocks ? `DIO ${fmtJours(wc.dio)}` : "Sans stock"} />
+      <Chiffre label="Besoin de financement de l'activité" sigle="BFR" value={`${fmtShort(wc.bfr)}`} hint={`Au bilan comptable : ${fmtShort(wc.bfr_syscohada)}`} />
+      <Chiffre label="Cycle d'exploitation" value={fmtJours(wc.cycle)} hint="Délai clients, plus stock, moins délai fournisseurs" />
+      <Chiffre label="Délai moyen d'encaissement des clients (jours)" sigle="DSO" value={fmtJours(wc.dso)} hint={cible ? `Cible ${fmtJours(cible)} · 12 mois ${fmtJours(wc.dso_12m)}` : `12 mois glissants ${fmtJours(wc.dso_12m)}`} tone={wc.dso !== null && cible ? (wc.dso > cible ? "danger" : "ok") : undefined} />
+      <Chiffre label="Délai moyen de paiement des fournisseurs (jours)" sigle="DPO" value={fmtJours(wc.dpo)} hint={wc.dio !== null && wc.stocks ? `Stock : ${fmtJours(wc.dio)} d'achats` : "Sans stock"} />
       <Chiffre label="Créances échues" value={fmtPct(wc.overdue_share_pct)} hint={`${fmtShort(wc.receivables_overdue)} sur ${fmtShort(wc.receivables)}${INSECABLE}GNF · ${partMax ? `seuil ${fmtPct(partMax, 0)}` : "seuil non fixé"}`} tone={wc.overdue_share_pct !== null && partMax && wc.overdue_share_pct > partMax ? "danger" : undefined} />
       <Chiffre label="Dettes fournisseurs échues" value={`${fmtShort(wc.payables_overdue)}`} hint={`sur ${fmtShort(wc.payables)}${INSECABLE}GNF`} tone={wc.payables_overdue > 0.5 ? "warn" : undefined} />
       <Chiffre label="Premier client" value={fmtPct(wc.concentration.pct)} hint={`${wc.concentration.partner ?? "du chiffre d'affaires"} · ${concMax ? `seuil ${fmtPct(concMax, 0)}` : "seuil non fixé"}`} tone={wc.concentration.pct !== null && concMax && wc.concentration.pct > concMax ? "warn" : undefined} />

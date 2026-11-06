@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle2, Download, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
+import { CheckCircle2, ChevronRight, Download, Lock, LockOpen, ShieldAlert, TriangleAlert } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Modal, Notice, PageHeader, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { ClotureExercice } from "@/components/finance/ClotureExercice";
 import { Comparatifs } from "@/components/finance/Comparatifs";
+import { ECRANS } from "@/components/finance/Pilotage";
 import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
 import { anneeEnCours } from "@/lib/jour";
@@ -131,40 +133,76 @@ const CHAIN = {
   no_data: { tone: "neutral" as const, label: "Aucune" },
 };
 
-/** Contrôles permanents du mois écoulé et vérification des empreintes des écritures verrouillées. */
+/**
+ * Preuves de clôture, repliées : empreintes des écritures verrouillées, sceaux des mois clôturés. Elles
+ * servent à l'auditeur et au commissaire aux comptes ; le contrôle quotidien n'en a pas besoin.
+ */
+function Preuves({ resume, children }: { resume?: string; children: ReactNode }) {
+  return (
+    <details className="group rounded-xl border border-line">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold text-ink-2 hover:bg-panel-2 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90" />
+        Preuves de clôture
+        {resume && <span className="font-normal text-muted">{resume}</span>}
+      </summary>
+      <div className="space-y-3 px-3 pb-3 pt-1">{children}</div>
+    </details>
+  );
+}
+
+/** Lien vers l'écran qui corrige un contrôle en échec (table des écrans, components/finance/Pilotage.tsx). */
+function Corriger({ code }: { code: string }) {
+  const cible = ECRANS[code];
+  if (!cible) return null;
+  return (
+    <Link href={cible.href} className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
+      {cible.libelle} <ChevronRight className="h-3.5 w-3.5" />
+    </Link>
+  );
+}
+
+/** Contrôles permanents du mois écoulé ; vérification des empreintes et des sceaux repliée en preuves. */
 function Integrity() {
   const { data, error, mutate } = useApi<{ period: string; checks: Check[]; hash_chains: Chain[] | null; seals?: SealCheck[] }>("/finance/integrity");
   return (
     <div className="mt-6">
-      <Card title="Contrôles d'intégrité">
+      <Card title="Contrôles du mois écoulé">
         <Etat data={data} error={error} onRetry={() => mutate()} label="Contrôles et recalcul des empreintes…">
-          {(d) => (
-            <div className="space-y-4">
-              <p className="text-sm text-muted">Contrôles permanents du mois écoulé ({mois(d.period)}), puis recalcul de l&apos;empreinte de chaque écriture verrouillée : une écriture modifiée hors de la plateforme serait signalée.</p>
-              <CheckList checks={d.checks} />
-              {d.hash_chains === null ? (
-                <Notice tone="accent">La vérification des empreintes est réservée aux profils de la finance.</Notice>
-              ) : d.hash_chains.length === 0 ? (
-                <Notice tone="accent">Aucune écriture encore chaînée : la première clôture mensuelle verrouille et chaîne les écritures du mois.</Notice>
-              ) : (
-                <DataTable dense rows={d.hash_chains} rowKey={(c) => c.journal} columns={[
-                  { key: "journal", label: "Journal", render: (c) => c.journal },
-                  { key: "status", label: "Écritures", render: (c) => <Badge tone={CHAIN[c.status]?.tone ?? "neutral"}>{CHAIN[c.status]?.label ?? c.status}</Badge> },
-                  { key: "first", label: "Première pièce", render: (c) => c.first ?? "–" },
-                  { key: "last", label: "Dernière pièce", render: (c) => (c.last ? `${c.last}${c.last_date ? ` du ${fmtDate(c.last_date)}` : ""}` : "–") },
-                  { key: "message", label: "", render: (c) => (c.status === "corrupted" ? <span className="text-danger">{c.message}</span> : null) },
-                ]} />
-              )}
-              {d.seals && d.seals.length > 0 && (
-                <DataTable dense rows={d.seals} rowKey={(s) => s.period} columns={[
-                  { key: "period", label: "Mois clôturé", render: (s) => mois(s.period) },
-                  { key: "status", label: "Sceau recalculé", render: (s) => <Badge tone={s.status === "ok" ? "ok" : "danger"}>{s.status === "ok" ? "Identique au PV" : "Altération"}</Badge> },
-                  { key: "seal", label: "Sceau du PV", render: (s) => <span className="font-mono text-[11px]">{s.seal ? `${s.seal.slice(0, 16)}…` : "–"}</span> },
-                  { key: "differences", label: "", render: (s) => (s.status === "altered" ? <span className="text-danger">{(s.differences ?? []).join(" ; ")}</span> : null) },
-                ]} />
-              )}
-            </div>
-          )}
+          {(d) => {
+            // Une altération ne reste pas cachée sous les preuves repliées : elle s'annonce au-dessus.
+            const altere = (d.hash_chains ?? []).some((c) => c.status === "corrupted") || (d.seals ?? []).some((s) => s.status === "altered");
+            return (
+              <div className="space-y-4">
+                <p className="text-sm text-muted">Contrôles permanents du mois écoulé ({mois(d.period)}). Chaque contrôle en échec mène à l&apos;écran qui le corrige.</p>
+                <CheckList checks={d.checks} />
+                {altere && <Notice tone="danger">Une écriture verrouillée ou un mois clôturé a été modifié hors de la plateforme : voir les preuves de clôture.</Notice>}
+                <Preuves resume={altere ? "· altération signalée" : "· empreintes des écritures et sceaux des mois clôturés"}>
+                  <p className="text-[12.5px] text-muted">Recalcul de l&apos;empreinte de chaque écriture verrouillée et du sceau (SHA-256) de chaque mois clôturé : une écriture modifiée hors de la plateforme serait signalée.</p>
+                  {d.hash_chains === null ? (
+                    <Notice tone="accent">La vérification des empreintes est réservée aux profils de la finance.</Notice>
+                  ) : d.hash_chains.length === 0 ? (
+                    <Notice tone="accent">Aucune écriture encore chaînée : la première clôture mensuelle verrouille et chaîne les écritures du mois.</Notice>
+                  ) : (
+                    <DataTable dense rows={d.hash_chains} rowKey={(c) => c.journal} columns={[
+                      { key: "journal", label: "Journal", render: (c) => c.journal },
+                      { key: "status", label: "Écritures", render: (c) => <Badge tone={CHAIN[c.status]?.tone ?? "neutral"}>{CHAIN[c.status]?.label ?? c.status}</Badge> },
+                      { key: "first", label: "Première pièce", render: (c) => c.first ?? "–" },
+                      { key: "last", label: "Dernière pièce", render: (c) => (c.last ? `${c.last}${c.last_date ? ` du ${fmtDate(c.last_date)}` : ""}` : "–") },
+                      { key: "message", label: "", render: (c) => (c.status === "corrupted" ? <span className="text-danger">{c.message}</span> : null) },
+                    ]} />
+                  )}
+                  {d.seals && d.seals.length > 0 && (
+                    <DataTable dense rows={d.seals} rowKey={(s) => s.period} columns={[
+                      { key: "period", label: "Mois clôturé", render: (s) => mois(s.period) },
+                      { key: "status", label: "Sceau recalculé", render: (s) => <Badge tone={s.status === "ok" ? "ok" : "danger"}>{s.status === "ok" ? "Identique au procès-verbal" : "Altération"}</Badge> },
+                      { key: "seal", label: "Sceau du procès-verbal", render: (s) => <span className="font-mono text-[11px]">{s.seal ? `${s.seal.slice(0, 16)}…` : "–"}</span> },
+                      { key: "differences", label: "", render: (s) => (s.status === "altered" ? <span className="text-danger">{(s.differences ?? []).join(" ; ")}</span> : null) },
+                    ]} />
+                  )}
+                </Preuves>
+              </div>
+            );
+          }}
         </Etat>
       </Card>
     </div>
@@ -183,6 +221,7 @@ function CheckList({ checks }: { checks: Check[] }) {
             <div className="flex-1">
               <div className="text-sm text-ink">{c.label}</div>
               {c.detail && <div className="text-xs text-muted">{c.detail}</div>}
+              {c.status !== "ok" && <Corriger code={c.code} />}
             </div>
             <Badge tone={c.status === "ok" ? "ok" : c.status === "warning" ? "warn" : "danger"}>{s.label}</Badge>
           </li>
@@ -263,7 +302,7 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
           <>
             {month.seal && (
               <Button loading={envoi.busy === "pv"} disabled={!!envoi.busy} onClick={() => envoi.telecharger("pv", `/finance/closing/pv?period=${month.period}`, `PV-cloture-${month.period.slice(0, 7)}.pdf`)}>
-                <Download className="h-4 w-4" /> PV de clôture
+                <Download className="h-4 w-4" /> Procès-verbal de clôture
               </Button>
             )}
             {reouverture && (
@@ -281,9 +320,11 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
           <>
             <Notice tone="ok">Mois clôturé par {month.closed_by} le {fmtDateTime(month.closed_at)}. Les écritures sont verrouillées et chaînées.</Notice>
             {month.seal && (
-              <Field label="Sceau de la période (SHA-256)" hint="Imprimé sur le PV de clôture, à conserver hors du système ; recalculé dans les contrôles d'intégrité.">
-                <div className="break-all rounded-lg bg-panel-2 px-3 py-2 font-mono text-xs">{month.seal}</div>
-              </Field>
+              <Preuves>
+                <Field label="Sceau de la période (SHA-256)" hint="Imprimé sur le procès-verbal de clôture, à conserver hors du système ; recalculé dans les contrôles du mois écoulé.">
+                  <div className="break-all rounded-lg bg-panel-2 px-3 py-2 font-mono text-xs">{month.seal}</div>
+                </Field>
+              </Preuves>
             )}
             {month.snapshot && (
               <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-4">
@@ -324,7 +365,7 @@ function MonthModal({ month, onClose, onChanged }: { month: Month; onClose: () =
           <p className="text-sm text-muted">
             La clôture vérifie les équilibres, le compte de passage, les brouillons, le rapprochement bancaire et l&apos;ordre des mois ; elle est refusée tant qu&apos;un contrôle bloquant échoue.
             Elle comptabilise ensuite les dotations du mois, liquide la TVA (pièce datée du dernier jour du mois), passe les factures à établir (extournées le 1er du mois suivant),
-            puis verrouille, chaîne et scelle la période ; le PV de clôture porte le sceau.{!cloture && " La clôture elle-même est faite par la finance ; les contrôles se lancent d'ici."}
+            puis verrouille, chaîne et scelle la période ; le procès-verbal de clôture porte le sceau.{!cloture && " La clôture elle-même est faite par la finance ; les contrôles se lancent d'ici."}
           </p>
         )}
         {checks && <CheckList checks={checks} />}
@@ -383,7 +424,7 @@ function RepriseValidation() {
         <div className="flex flex-wrap gap-2">
           {data?.loaded && (
             <Button loading={envoi.busy === "annexe"} disabled={!!envoi.busy} onClick={() => envoi.telecharger("annexe", "/finance/reprise/validation.xlsx", "validation_reprise.xlsx")}>
-              <Download className="h-4 w-4" /> Annexe du PV
+              <Download className="h-4 w-4" /> Annexe du procès-verbal
             </Button>
           )}
           {references && (envoi.busy === "references" ? (

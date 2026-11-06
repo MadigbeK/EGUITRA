@@ -9,7 +9,7 @@ import { ScopeToggle } from "@/components/finance/ScopeToggle";
 import { useApi } from "@/lib/api-client";
 import type { Alert, CashAccount, CashForecast, Dashboard, DebtSummary, MonthlyCash, Ref, Thresholds, TransportKpis, WorkingCapital } from "@/lib/finance-types";
 import { fmtDate, fmtGNF, fmtInt, fmtJours, fmtMonth, fmtPct, fmtRatio, fmtShort, fmtVolume } from "@/lib/format";
-import { aujourdhui } from "@/components/finance/communPieces";
+import { Sigle, aujourdhui } from "@/components/finance/communPieces";
 
 interface Report {
   month: string;
@@ -130,12 +130,12 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Kpi label="Chiffre d'affaires du mois" value={fmtShort(k.revenue_month)} delta={variation} hint={variation === null ? "Mois précédent sans chiffre d'affaires" : "sur le mois précédent"} tone="accent" />
         <Kpi label="Chiffre d'affaires cumulé" value={fmtShort(k.revenue_fy)} />
-        <Kpi label="Résultat net cumulé" value={fmtShort(k.net_result_fy)} hint={`EBE ${fmtShort(k.ebe_fy)}`} tone={k.net_result_fy >= 0 ? "ok" : "danger"} />
+        <Kpi label="Résultat net cumulé" value={fmtShort(k.net_result_fy)} hint={`Excédent brut d'exploitation ${fmtShort(k.ebe_fy)}`} tone={k.net_result_fy >= 0 ? "ok" : "danger"} />
         <Kpi label="Trésorerie fin de mois" value={fmtShort(k.cash)} hint={`Cash net du mois ${fmtShort(k.cash_net_month)}`} tone={k.cash_net_month < 0 ? "warn" : "accent"} />
         <Kpi label="Encours clients" value={fmtShort(k.receivables)} hint={`dont échu ${fmtShort(k.receivables_overdue)}`} tone={k.receivables_overdue ? "warn" : "neutral"} />
-        <Kpi label="Délai de recouvrement" value={jours(k.dso)} hint={k.dso_target_days ? `Cible ${fmtJours(k.dso_target_days)}` : "Cible non fixée"} tone={k.dso !== null && k.dso_target_days ? (k.dso > k.dso_target_days ? "danger" : "ok") : "neutral"} />
+        <Sigle sigle="DSO"><Kpi label="Délai moyen d'encaissement des clients (jours)" value={jours(k.dso)} hint={k.dso_target_days ? `Cible ${fmtJours(k.dso_target_days)}` : "Cible non fixée"} tone={k.dso !== null && k.dso_target_days ? (k.dso > k.dso_target_days ? "danger" : "ok") : "neutral"} /></Sigle>
         <Kpi label="Dette financière" value={fmtShort(r.debt.accounting_outstanding ?? r.debt.outstanding)} hint={r.debt.next_due_date ? `Prochaine échéance ${fmtDate(r.debt.next_due_date)}` : undefined} />
-        <Kpi label="DSCR" value={ratio(k.dscr)} hint={`EBE 12 mois / service de la dette, ${dscrMin ? `minimum ${ratio(dscrMin)}` : "minimum : seuil non fixé"}`} tone={k.dscr === null || !dscrMin ? "neutral" : k.dscr < dscrMin ? "danger" : "ok"} />
+        <Sigle sigle="DSCR"><Kpi label="Capacité à rembourser la dette" value={ratio(k.dscr)} hint={`Excédent brut d'exploitation sur 12 mois / remboursements et intérêts, ${dscrMin ? `minimum ${ratio(dscrMin)}` : "minimum : seuil non fixé"}`} tone={k.dscr === null || !dscrMin ? "neutral" : k.dscr < dscrMin ? "danger" : "ok"} /></Sigle>
       </div>
 
       <Card title="Lecture de la période">
@@ -183,7 +183,7 @@ function Corps({ r, groupe }: { r: Report; groupe: boolean }) {
             ["Cash net du mois", fmtInt(k.cash_net_month), k.cash_net_month < 0],
             ["Dette financière (comptes 16 et 17)", fmtInt(r.debt.accounting_outstanding ?? r.debt.outstanding)],
             ["Service de la dette de l'exercice", fmtInt(k.debt_service_fy)],
-            ["Couverture du service de la dette (DSCR)", dscrMin ? ratio(k.dscr) : <>{ratio(k.dscr)}{NON_FIXE}</>, k.dscr !== null && !!dscrMin && k.dscr < dscrMin],
+            ["Capacité à rembourser la dette", dscrMin ? ratio(k.dscr) : <>{ratio(k.dscr)}{NON_FIXE}</>, k.dscr !== null && !!dscrMin && k.dscr < dscrMin],
           ]}
         />
         <Synthese

@@ -9,7 +9,7 @@ import { useApi } from "@/lib/api-client";
 import type { ForecastBlock, GroupePrevisions, Landing, WaterfallStep } from "@/lib/analyse-types";
 import { fmtGNF } from "@/lib/format";
 
-/** Atterrissage de l'exercice : éventails CA et EBE, probabilité d'atteindre le budget, simulateur. */
+/** Atterrissage de l'exercice : éventails du chiffre d'affaires et de l'excédent brut d'exploitation, probabilité d'atteindre le budget, simulateur. */
 export function Previsions() {
   return (
     <FournisseurTheme>
@@ -36,7 +36,7 @@ function Corps() {
   const reponse = d && l && (
     <>
       Le chiffre d&apos;affaires de l&apos;exercice atterrirait à <strong className="font-semibold text-ink">{gnfOu(l.revenue.estimate)}</strong> (entre {fmtShort(l.revenue.low)} et {fmtShort(l.revenue.high)})
-      {l.revenue.budget ? <>, {(ecart(l.revenue) ?? 0) >= 0 ? "+" : ""}{fmtPct(ecart(l.revenue) ?? 0)} par rapport au budget, probabilité de l&apos;atteindre {pctOu(l.revenue.probability_pct, 0)}</> : l.revenue.previous_year ? <>, {(l.revenue.vs_previous_pct ?? 0) >= 0 ? "+" : ""}{fmtPct(l.revenue.vs_previous_pct ?? 0)} sur l&apos;exercice précédent</> : null}, et l&apos;EBE à {gnfOu(l.ebe.estimate)}
+      {l.revenue.budget ? <>, {(ecart(l.revenue) ?? 0) >= 0 ? "+" : ""}{fmtPct(ecart(l.revenue) ?? 0)} par rapport au budget, probabilité de l&apos;atteindre {pctOu(l.revenue.probability_pct, 0)}</> : l.revenue.previous_year ? <>, {(l.revenue.vs_previous_pct ?? 0) >= 0 ? "+" : ""}{fmtPct(l.revenue.vs_previous_pct ?? 0)} sur l&apos;exercice précédent</> : null}, et l&apos;excédent brut d&apos;exploitation à {gnfOu(l.ebe.estimate)}
       {l.ebe.budget ? <> ({(ecart(l.ebe) ?? 0) >= 0 ? "+" : ""}{fmtPct(ecart(l.ebe) ?? 0)} ; probabilité {pctOu(l.ebe.probability_pct, 0)})</> : null}.
       {!l.revenue.budget && " Aucun budget saisi : la probabilité d'atteinte n'est pas calculable."} Il reste {l.months_remaining} mois pour agir : le simulateur ci-dessous chiffre les leviers.
     </>
@@ -50,13 +50,13 @@ function Corps() {
         <div className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-12">
             <BlocPrevision titre="Chiffre d'affaires mensuel" bloc={d.revenue} budget={l.revenue.budget} couleur="var(--g-jade)" />
-            <BlocPrevision titre="EBE mensuel" bloc={d.ebe} budget={l.ebe.budget} couleur="var(--g-ambre)" />
+            <BlocPrevision titre="Excédent brut d'exploitation mensuel" bloc={d.ebe} budget={l.ebe.budget} couleur="var(--g-ambre)" />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Atterrissage titre="Chiffre d'affaires" cible={l.revenue} />
-            <Atterrissage titre="EBE" cible={l.ebe} />
-            <Chiffre label="Réalisé à date" value={gnfOu(l.revenue.actual_to_date)} hint={`EBE ${gnfOu(l.ebe.actual_to_date)} · reste à venir ${gnfOu(l.revenue.forecast_remaining)} de CA`} grand />
+            <Atterrissage titre="Excédent brut d'exploitation" cible={l.ebe} />
+            <Chiffre label="Réalisé à date" value={gnfOu(l.revenue.actual_to_date)} hint={`Excédent brut d'exploitation ${gnfOu(l.ebe.actual_to_date)} · reste à venir ${gnfOu(l.revenue.forecast_remaining)} de chiffre d'affaires`} grand />
             <Chiffre label="Mois restants" value={String(l.months_remaining)} hint={`${d.method}`} grand />
           </div>
 
@@ -73,7 +73,7 @@ function BlocPrevision({ titre, bloc, budget, couleur }: { titre: string; bloc: 
   const serie = bloc.series ?? [];
   const rupture = bloc.cusum?.change && bloc.cusum.index !== null ? serie[bloc.cusum.index]?.month : undefined;
   return (
-    <Card title={titre} className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">{methodePrevision(bloc.method)}{bloc.mape !== null ? ` · MAPE ${fmtPct(bloc.mape)}` : ""} · {bloc.history_months} mois d&apos;historique</span>}>
+    <Card title={titre} className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">{methodePrevision(bloc.method)}{bloc.mape !== null ? ` · erreur moyenne ${fmtPct(bloc.mape)}` : ""} · {bloc.history_months} mois d&apos;historique</span>}>
       {serie.length ? (
         <>
           <Eventail label={`${titre} : historique, prévision et bande p10-p90`} points={serie.map((p) => ({ label: moisCourt(p.month, true), actual: p.actual, forecast: p.forecast, low: p.low, high: p.high }))} cible={budget ? budget / 12 : null} cibleLabel="Budget / 12" couleur={couleur} hauteur={270} />
@@ -121,7 +121,7 @@ function Atterrissage({ titre, cible }: { titre: string; cible: Landing }) {
 }
 
 /**
- * Simulateur : quatre curseurs (tarif, volume, carburant, masse salariale) en pourcentage ; l'EBE
+ * Simulateur : quatre curseurs (tarif, volume, carburant, masse salariale) en pourcentage ; l'excédent brut d'exploitation
  * annuel et l'atterrissage de l'exercice se recalculent à l'écran à partir des élasticités calculées
  * au noyau sur la structure de coûts, et la cascade montre la contribution de chaque levier.
  */
@@ -136,10 +136,10 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
   const ebe = base + delta;
   const restant = d.landing.months_remaining;
   const atterrissage = d.landing.ebe.estimate + delta * (restant / 12);
-  const steps: WaterfallStep[] = [
-    { key: "base", label: "EBE 12 mois", value: base, kind: "total" },
+  const steps: Array<WaterfallStep & { court?: string }> = [
+    { key: "base", label: "Excédent brut d'exploitation sur 12 mois", court: "Base 12 mois", value: base, kind: "total" },
     ...effets.filter((e) => Math.abs(e.effet) > 0).map((e) => ({ key: e.key, label: e.label, value: e.effet, kind: (e.effet >= 0 ? "plus" : "minus") as WaterfallStep["kind"] })),
-    { key: "simule", label: "EBE simulé", value: ebe, kind: "total" },
+    { key: "simule", label: "Excédent brut d'exploitation simulé", court: "Simulé", value: ebe, kind: "total" },
   ];
   const scenarios: Array<{ label: string; v: Partial<typeof valeurs> }> = [
     { label: "Tarif +3\u00a0%", v: { tariff: 3 } },
@@ -149,7 +149,7 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
   ].filter((s) => Object.keys(s.v).every((k) => leviers.some((lv) => lv.key === k)));
   const sb = d.sensitivity_base;
   return (
-    <Card title={<span id="simulateur">Simulateur : et si…</span>} actions={<span className="text-[12.5px] text-muted">{sb?.unit ?? "GNF d'EBE annuel pour une hausse de 1\u00a0%"}</span>}>
+    <Card title={<span id="simulateur">Simulateur : et si…</span>} actions={<span className="text-[12.5px] text-muted">{(sb?.unit ?? "GNF d'EBE annuel pour une hausse de 1\u00a0%").replace("EBE", "excédent brut d'exploitation")}</span>}>
       {!sb || base === 0 ? (
         <Vide titre="Simulateur indisponible" hint="Il faut douze mois de chiffre d'affaires et de charges pour calculer les élasticités." />
       ) : (
@@ -175,7 +175,7 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
                     <span>{lv.aide}</span>
                     <span className="tabular">
                       1&nbsp;% = {sens >= 0 ? "+" : "−"}
-                      {gnfOu(Math.abs(sens))} d&apos;EBE
+                      {gnfOu(Math.abs(sens))} d&apos;excédent brut d&apos;exploitation
                     </span>
                   </div>
                 </div>
@@ -195,14 +195,14 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
           <div className="xl:col-span-7">
             <div className="grid grid-cols-3 gap-2.5">
               <div className="rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
-                <div className="text-[12px] font-medium text-muted">EBE 12 mois simulé</div>
+                <div className="text-[12px] font-medium text-muted">Excédent brut d&apos;exploitation sur 12 mois, simulé</div>
                 <div className={cx("mt-1 font-display text-[24px] font-bold leading-tight tabular", ebe < 0 ? "text-danger" : "text-ink")}>
                   <Valeur value={gnfOu(ebe)} />
                 </div>
                 <div className="text-[11.5px] text-muted">base {gnfOu(base)}</div>
               </div>
               <div className="rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
-                <div className="text-[12px] font-medium text-muted">Effet annuel sur l&apos;EBE</div>
+                <div className="text-[12px] font-medium text-muted">Effet annuel sur l&apos;excédent brut d&apos;exploitation</div>
                 <div className={cx("mt-1 font-display text-[24px] font-bold leading-tight tabular", delta < 0 ? "text-danger" : delta > 0 ? "text-ok-texte" : "text-ink")}>
                   {delta >= 0 ? "+" : "−"}
                   {fmtShort(Math.abs(delta))}
@@ -210,13 +210,13 @@ function Simulateur({ d }: { d: GroupePrevisions }) {
                 <div className="text-[11.5px] text-muted">{base ? `${delta >= 0 ? "+" : ""}${fmtPct((delta / base) * 100)}` : "–"}</div>
               </div>
               <div className="rounded-xl border border-line bg-panel-2/60 px-3.5 py-3">
-                <div className="text-[12px] font-medium text-muted">Atterrissage EBE simulé</div>
+                <div className="text-[12px] font-medium text-muted">Atterrissage simulé de l&apos;excédent brut d&apos;exploitation</div>
                 <div className={cx("mt-1 font-display text-[24px] font-bold leading-tight tabular", atterrissage < 0 ? "text-danger" : "text-ink")}>{gnfOu(atterrissage)}</div>
                 <div className="text-[11.5px] text-muted">{restant > 1 ? `effet appliqué aux ${restant} mois restants` : restant === 1 ? "effet appliqué au dernier mois de l'exercice" : "exercice achevé : aucun mois restant"}</div>
               </div>
             </div>
             <div className="mt-4">
-              <Cascade label="Cascade de l'EBE simulé : base, leviers, résultat" steps={steps} hauteur={260} format={(v) => fmtGNF(v)} />
+              <Cascade label="Cascade de l'excédent brut d'exploitation simulé : base, leviers, résultat" steps={steps} hauteur={260} format={(v) => fmtGNF(v)} />
             </div>
             <p className="mt-2 text-[12px] leading-snug text-muted">Les effets s&apos;additionnent linéairement autour de la structure des douze derniers mois : valable pour des variations de quelques pour cent, pas pour un changement de modèle. Référence : CA du transport {gnfOu(sb.transport_revenue_12m ?? null)} (tarif et volume), carburant {gnfOu(sb.fuel_12m)}, masse salariale de toutes les activités {gnfOu(sb.payroll_12m)}{sb.variable_rate_pct !== null ? `, part variable du transport ${pctOu(sb.variable_rate_pct, 0)}${sb.variable_source ? ` (${sb.variable_source})` : ""}` : ""}.</p>
           </div>

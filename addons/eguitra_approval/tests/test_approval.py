@@ -134,6 +134,75 @@ class TestApproval(FinanceDataMixin, ApiCase):
         status, done = self.call("POST", f"/approvals/{req.id}/approve", {"comment": "Accord"}, token=token_dg)
         self.assertEqual((status, done["state"]), (200, "approved"), done)
 
+    def test_justificatifs_dans_la_demande(self):
+        """L'approbateur ouvre la facture jointe depuis la demande, et lit la catégorie ou le libellé du compte
+        en clair ; une pièce étrangère à la demande, ou une demande qu'il ne voit pas, reste introuvable."""
+        bill = self._bill(10_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        req = self._request(bill)
+        Attachment = self.env["ir.attachment"].sudo()
+        facture = Attachment.create({
+            "name": "facture.pdf", "raw": b"%PDF-1.4 facture du fournisseur", "mimetype": "application/pdf",
+            "res_model": "account.move", "res_id": bill.id,
+        })
+        autre = self._bill(1_000_000)
+        etrangere = Attachment.create({
+            "name": "autre.pdf", "raw": b"%PDF-1.4 autre facture", "mimetype": "application/pdf",
+            "res_model": "account.move", "res_id": autre.id,
+        })
+        token = self.open_session("chef.comptable")["access_token"]
+        status, detail = self.call("GET", f"/approvals/{req.id}", token=token)
+        self.assertEqual(status, 200, detail)
+        self.assertEqual([a["id"] for a in detail["attachments"]], [facture.id], detail)
+        self.assertEqual(detail["document_detail"]["lines"][0]["label"], self.acc_purchase.name)
+        status, contenu = self.call("GET", f"/approvals/{req.id}/attachments/{facture.id}", token=token)
+        self.assertEqual((status, contenu), (200, "%PDF-1.4 facture du fournisseur"))
+        status, body = self.call("GET", f"/approvals/{req.id}/attachments/{etrangere.id}", token=token)
+        self.assertEqual(status, 404, body)
+        # La direction voit toutes les demandes de ses sociétés : elle ouvre aussi le justificatif.
+        token_dg = self.open_session("dg")["access_token"]
+        status, _contenu = self.call("GET", f"/approvals/{req.id}/attachments/{facture.id}", token=token_dg)
+        self.assertEqual(status, 200)
+        # Un chef de chantier ne voit ni la demande, ni ses justificatifs.
+        token_chantier = self.open_session("chef.chantier")["access_token"]
+        status, body = self.call("GET", f"/approvals/{req.id}/attachments/{facture.id}", token=token_chantier)
+        self.assertEqual(status, 404, body)
+
+    def test_justificatifs_du_bon_de_commande(self):
+        """Avec le module des achats, la demande d'une facture rattachée à un bon montre aussi le devis du bon et
+        le bon de livraison de ses réceptions ; rien d'un autre bon."""
+        if "eguitra_purchase_order_id" not in self.env["account.move"]._fields:
+            self.skipTest("Module des achats absent de cette base.")
+        bill = self._bill(10_000_000)
+        bill.with_user(self.comptable)._eguitra_post_or_submit()
+        req = self._request(bill)
+        Order = self.env["purchase.order"].sudo()
+        order = Order.create({"partner_id": bill.partner_id.id, "company_id": bill.company_id.id})
+        autre = Order.create({"partner_id": bill.partner_id.id, "company_id": bill.company_id.id})
+        bill.sudo().eguitra_purchase_order_id = order
+        receipt = self.env["eguitra.commerce.receipt"].sudo().create({"purchase_order_id": order.id})
+        Attachment = self.env["ir.attachment"].sudo()
+        devis = Attachment.create({
+            "name": "devis.pdf", "raw": b"%PDF-1.4 devis", "mimetype": "application/pdf",
+            "res_model": order._name, "res_id": order.id,
+        })
+        livraison = Attachment.create({
+            "name": "livraison.pdf", "raw": b"%PDF-1.4 livraison", "mimetype": "application/pdf",
+            "res_model": receipt._name, "res_id": receipt.id,
+        })
+        etranger = Attachment.create({
+            "name": "autre-devis.pdf", "raw": b"%PDF-1.4 autre", "mimetype": "application/pdf",
+            "res_model": autre._name, "res_id": autre.id,
+        })
+        token = self.open_session("chef.comptable")["access_token"]
+        status, detail = self.call("GET", f"/approvals/{req.id}", token=token)
+        self.assertEqual(status, 200, detail)
+        self.assertEqual({a["id"] for a in detail["attachments"]}, {devis.id, livraison.id}, detail)
+        status, contenu = self.call("GET", f"/approvals/{req.id}/attachments/{livraison.id}", token=token)
+        self.assertEqual((status, contenu), (200, "%PDF-1.4 livraison"))
+        status, body = self.call("GET", f"/approvals/{req.id}/attachments/{etranger.id}", token=token)
+        self.assertEqual(status, 404, body)
+
     def test_refus_puis_nouvelle_soumission(self):
         bill = self._bill(10_000_000)
         bill.with_user(self.comptable)._eguitra_post_or_submit()

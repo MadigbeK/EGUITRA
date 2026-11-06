@@ -2,16 +2,16 @@
 
 /**
  * Bons de commande fournisseur (Finance > Achats et dépenses) : saisie directe ou depuis un engagement
- * approuvé, soumission au circuit d'approbation (quatre yeux), envoi au fournisseur, réceptions (service
- * fait, bon de livraison joint), pièce d'achat rattachée et son rapprochement avec la commande et la réception.
+ * approuvé, envoi pour approbation (quatre yeux), envoi au fournisseur, réceptions (service fait, bon de
+ * livraison joint), facture du fournisseur rattachée et son rapprochement avec la commande et la réception.
  */
 
 import { useEffect, useState } from "react";
-import { Download, Paperclip, Pencil, Plus, Send, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
+import { ChevronRight, Download, Paperclip, Pencil, Plus, Send, Trash2, X } from "@/components/icons";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, Select, Tabs, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
-import { CREATION_TIERS, PagesListe, aujourdhui } from "@/components/finance/communPieces";
-import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
+import { CREATION_TIERS, PagesListe, aujourdhui, ecrireMemoire, lireMemoire } from "@/components/finance/communPieces";
+import { apiGet, apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
 import { ACHATS_PIECE, ACHATS_TOUS, CATEGORIES_PIECE, TON_BON, type Approbation, type Article, type BonCommande, type CircuitPrevu, type EvenementBon, type Page, type PageBons, type PieceAchat, type PieceJointeBon, type Referentiels } from "@/lib/commerce-types";
 import { useEnvoi } from "@/lib/envoi";
 import { AIDE_NOMBRE, fmtDate, fmtDateTime, fmtDec, fmtGNF, fmtInt, fmtPct, lireNombre, nombreIllisible } from "@/lib/format";
@@ -20,6 +20,8 @@ import { NouveauFournisseur } from "./NouveauFournisseur";
 
 type Vue = "draft" | "approval" | "open" | "to_bill" | "done" | "all";
 const PAGE = 100;
+/** Dernière catégorie de dépense prise chez un fournisseur, gardée dans ce navigateur (préfixe, puis son identifiant). */
+const CLE_CATEGORIE = "nimova.commerce.categorie.";
 const VUES: Array<{ key: Vue; label: string }> = [
   { key: "open", label: "À recevoir" },
   { key: "to_bill", label: "Reçus, à facturer" },
@@ -49,7 +51,7 @@ export function BonsCommandePage() {
     <div>
       <PageHeader
         title="Bons de commande fournisseur"
-        subtitle="Depuis un engagement approuvé (approuvé d'office dans sa limite) ou directement (contrôle par le chef comptable ou le DAF, puis approbation de la direction générale) ; la réception constate le service fait, la pièce d'achat se rapproche de la commande et de la réception."
+        subtitle="Depuis un engagement approuvé (approuvé d'office dans sa limite) ou directement (contrôle par le chef comptable ou le DAF, puis approbation de la direction générale) ; la réception constate le service fait, la facture du fournisseur se rapproche de la commande et de la réception."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => setPieces(true)}><Paperclip className="h-4 w-4" /> Pièces des bons</Button>
@@ -58,7 +60,7 @@ export function BonsCommandePage() {
         }
       />
       {data?.issue_reserved && !data.can_issue && (
-        <div className="mb-4"><Notice tone="neutral">Émission réservée au service Achats (Responsable Achats et Contrats) : vous consultez, réceptionnez, contrôlez ou approuvez les bons ; leur création, leur modification, leur soumission et leur annulation avant approbation reviennent au service Achats.</Notice></div>
+        <div className="mb-4"><Notice tone="neutral">Émission réservée au service Achats (Responsable Achats et Contrats) : vous consultez, réceptionnez, contrôlez ou approuvez les bons ; leur création, leur modification, leur envoi pour approbation et leur annulation avant approbation reviennent au service Achats.</Notice></div>
       )}
       {data && vue === "open" && (
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -73,7 +75,13 @@ export function BonsCommandePage() {
           <Input aria-label="Rechercher un bon de commande" className="max-w-xs" placeholder="Numéro, objet, fournisseur, réf. du devis…" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
         </div>
         <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement des bons de commande…">
-          {(page) => (
+          {(page) => page.items.length === 0 && !search && offset === 0 && vue !== "all" && emission ? (
+            <Empty
+              title="Aucun bon de commande ici"
+              hint="Un bon de commande part au fournisseur après approbation ; le devis ou la proforma s'y joint dès la saisie."
+              action={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau bon de commande</Button>}
+            />
+          ) : (
             <>
               <DataTable rows={page.items} rowKey={(o) => o.id} onRowClick={(o) => setSelected(o.id)} empty="Aucun bon de commande pour ce filtre." columns={[
                 { key: "name", label: "Bon de commande", render: (o) => <div className="min-w-[180px]"><span className="font-mono text-xs">{o.name}</span><div className="text-[12px] text-muted">{o.object ?? "Sans objet"}{o.commitment ? ` · ${o.commitment.name}` : ""}</div></div> },
@@ -113,6 +121,20 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
   });
   const [piece, setPiece] = useState<File | null>(null);
   const [lignes, setLignes] = useState<LigneSaisie[]>(bon ? lignesDe(bon.lines, "purchase") : []);
+  // Conditions de livraison et de paiement, références du devis : repliées, sauf sur un bon qui en a déjà.
+  const [conditions, setConditions] = useState(Boolean(bon && (bon.conditions || bon.partner_ref || bon.quote_date || bon.payment_term || bon.payment_note || bon.delivery_days || bon.date_planned || bon.delivery_place)));
+  // Bon créé par cette fenêtre dont la pièce jointe ou l'envoi a échoué : un nouvel essai le modifie.
+  const [creeId, setCreeId] = useState<number | null>(null);
+  // Dernière catégorie de dépense prise chez ce fournisseur (mémoire de ce navigateur), proposée aux lignes libres.
+  const cleCategorie = partner ? `${CLE_CATEGORIE}${partner.id}` : null;
+  const memoire = cleCategorie ? lireMemoire(cleCategorie) : null;
+  const proposee = memoire && refs?.categories.some((c) => String(c.id) === memoire && !c.entry) ? memoire : "";
+  useEffect(() => {
+    if (bon || !proposee) return;
+    setLignes((ls) => (ls.some((l) => l.display_type === "product" && !l.product_id && !l.category_id)
+      ? ls.map((l) => (l.display_type === "product" && !l.product_id && !l.category_id ? { ...l, category_id: proposee } : l))
+      : ls));
+  }, [bon, proposee]);
   const envoi = useEnvoi();
   const corps = corpsLignes(lignes, "purchase");
   // Depuis un engagement, sans ligne : une ligne du reste à commander, sur son compte et son analytique.
@@ -133,7 +155,7 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
   const { data: circuit } = useApi<CircuitPrevu>(`/commerce/purchase-orders/circuit?${circuitParams.toString()}`);
 
   async function enregistrer(soumettre: boolean) {
-    let id = bon?.id ?? null;
+    let id = bon?.id ?? creeId;
     const body: Record<string, unknown> = {
       object: f.object, conditions: f.conditions, partner_ref: f.partner_ref, quote_kind: f.quote_kind,
       quote_date: f.quote_date || null, payment_term_id: f.payment_term_id ? Number(f.payment_term_id) : null,
@@ -146,18 +168,23 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
     if (f.date_planned) body.date_planned = f.date_planned;
     if (!sansLigne) body.lines = corps;
     const ok = await envoi.run(soumettre ? "soumettre" : "enregistrer", async () => {
-      if (bon) {
-        await apiSend("PATCH", `/commerce/purchase-orders/${bon.id}`, body);
+      if (id !== null) {
+        await apiSend("PATCH", `/commerce/purchase-orders/${id}`, body);
       } else {
         if (choisi) body.commitment_id = choisi.id;
         id = (await apiSend<BonCommande>("POST", "/commerce/purchase-orders", body)).id;
+        setCreeId(id);
       }
-      // La pièce du fournisseur est jointe avant la soumission : l'approbateur la voit.
+      // Catégorie retenue chez ce fournisseur : proposée à son prochain bon.
+      const derniere = [...lignes].reverse().find((l) => l.display_type === "product" && l.category_id)?.category_id;
+      if (cleCategorie && derniere) ecrireMemoire(cleCategorie, derniere);
+      // La pièce du fournisseur est jointe avant l'envoi pour approbation : l'approbateur la voit.
       if (piece && id !== null) {
         const form = new FormData();
         form.append("file", piece);
         form.append("category", f.quote_kind === "proforma" ? "proforma" : "quote");
         await apiUpload(`/commerce/purchase-orders/${id}/documents`, form);
+        setPiece(null);
       }
       if (soumettre && id !== null) await apiSend("POST", `/commerce/purchase-orders/${id}/submit`, {});
     }, undefined, "Enregistrement impossible.");
@@ -165,10 +192,10 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
   }
 
   return (
-    <Modal open wide title={bon ? `Modifier ${bon.name}` : "Nouveau bon de commande"} onClose={onClose} footer={
+    <Modal open wide title={bon ? `Modifier ${bon.name}` : "Nouveau bon de commande"} onClose={() => (creeId !== null ? onDone(creeId) : onClose())} footer={
       <div className="flex gap-2">
-        <Button loading={envoi.busy === "enregistrer"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(false)}>Enregistrer en brouillon</Button>
-        <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(true)}>Soumettre à l&apos;approbation</Button>
+        <Button loading={envoi.busy === "enregistrer"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(false)}>Enregistrer</Button>
+        <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(true)}>Envoyer pour approbation</Button>
       </div>
     }>
       <div className="space-y-4">
@@ -191,38 +218,59 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
           </Field>
           <Field label="Objet de la commande" className="md:col-span-2"><Input value={f.object} onChange={(e) => setF({ ...f, object: e.target.value })} /></Field>
         </div>
-        <Card title="Devis ou facture proforma du fournisseur">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-            <Field label="Nature"><Select value={f.quote_kind} onChange={(e) => setF({ ...f, quote_kind: e.target.value as "quote" | "proforma" })} options={[{ value: "quote", label: "Devis" }, { value: "proforma", label: "Facture proforma" }]} /></Field>
-            <Field label="Référence"><Input value={f.partner_ref} onChange={(e) => setF({ ...f, partner_ref: e.target.value })} placeholder="DEV-2026-041" /></Field>
-            <Field label="Date"><Input type="date" value={f.quote_date} max={aujourdhui()} onChange={(e) => setF({ ...f, quote_date: e.target.value })} /></Field>
-            <Field label="Pièce" hint="PDF, JPEG ou PNG ; d'autres pièces se joignent sur la fiche du bon.">
-              <FileButton small label={piece ? piece.name : f.quote_kind === "proforma" ? "Joindre la proforma" : "Joindre le devis"} accept=".pdf,.jpg,.jpeg,.png" onFile={setPiece} />
-            </Field>
+        <div className="space-y-1.5">
+          <span className="block text-[13px] font-medium">Devis ou facture proforma du fournisseur</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <FileButton small label={piece ? "Changer de fichier" : f.quote_kind === "proforma" ? "Joindre la proforma" : "Joindre le devis"} accept=".pdf,.jpg,.jpeg,.png" onFile={setPiece} />
+            {piece && (
+              <span className="inline-flex min-w-0 items-center gap-1 text-sm">
+                <span className="truncate">{piece.name}</span>
+                <button type="button" className="text-muted hover:text-danger" onClick={() => setPiece(null)} aria-label={`Retirer ${piece.name}`}><X className="h-3.5 w-3.5" /></button>
+              </span>
+            )}
           </div>
-        </Card>
+          <p className="text-[12px] text-muted">Envoyé avec le bon : l&apos;approbateur le voit. PDF, JPEG ou PNG ; d&apos;autres pièces se joignent sur la fiche du bon.</p>
+        </div>
         <Card title="Lignes">
           {sansLigne && <Notice tone="neutral">Sans ligne saisie, le bon reprend le reste de l&apos;engagement {choisi?.name} ({fmtGNF(choisi?.remaining)} HT), sur son compte et son analytique.</Notice>}
-          <LignesSaisie kind="purchase" lignes={lignes} onChange={setLignes} refs={refs} catalogue={catalogue} />
-          {!lignes.length && !choisi && <div className="mt-2"><Button size="sm" onClick={() => setLignes([nouvelleLigne()])}>Ajouter une première ligne</Button></div>}
+          <LignesSaisie kind="purchase" lignes={lignes} onChange={setLignes} refs={refs} catalogue={catalogue} categorieProposee={proposee} />
+          {!lignes.length && !choisi && <div className="mt-2"><Button size="sm" onClick={() => setLignes([{ ...nouvelleLigne(), category_id: proposee }])}>Ajouter une première ligne</Button></div>}
+          {proposee && !bon && <p className="mt-2 text-[12px] text-muted">Catégorie proposée : la dernière prise chez ce fournisseur. Changez-la si cet achat est d&apos;une autre nature.</p>}
           {sansTva && (
             <Field label="Mention d'exonération de TVA" hint="Imprimée sous les totaux (par exemple l'exonération dont bénéficie l'achat)." className="mt-3">
               <Input value={f.tax_exemption} onChange={(e) => setF({ ...f, tax_exemption: e.target.value })} />
             </Field>
           )}
         </Card>
-        <Card title="Conditions de la commande">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <Field label="Conditions de paiement" hint="Vide : celles de la fiche du fournisseur.">
-              <Select value={f.payment_term_id} placeholder="Selon la fiche du fournisseur" onChange={(e) => setF({ ...f, payment_term_id: e.target.value })} options={(refs?.payment_terms ?? []).map((t) => ({ value: t.id, label: t.name }))} />
-            </Field>
-            <Field label="Précision sur le règlement" className="md:col-span-2"><Input value={f.payment_note} onChange={(e) => setF({ ...f, payment_note: e.target.value })} placeholder="30 % à la commande, solde à la livraison, par virement" /></Field>
-            <Field label="Livraison prévue le"><Input type="date" value={f.date_planned} onChange={(e) => setF({ ...f, date_planned: e.target.value })} /></Field>
-            <Field label="Délai de livraison (jours)" error={delaiInvalide ? "Nombre entier de jours." : undefined}><Input inputMode="numeric" value={f.delivery_days} onChange={(e) => setF({ ...f, delivery_days: e.target.value })} /></Field>
-            <Field label="Lieu de livraison" hint={refs?.delivery_place ? `Vide : ${refs.delivery_place}` : undefined}><Input value={f.delivery_place} onChange={(e) => setF({ ...f, delivery_place: e.target.value })} /></Field>
-          </div>
-          <Field label="Autres conditions" hint="Garanties, pénalités, modalités : imprimées au bas du bon." className="mt-3"><Textarea value={f.conditions} onChange={(e) => setF({ ...f, conditions: e.target.value })} /></Field>
-        </Card>
+        <div>
+          <button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline" onClick={() => setConditions(!conditions)} aria-expanded={conditions} aria-controls="bon-conditions">
+            <ChevronRight className={cx("h-4 w-4 transition-transform", conditions && "rotate-90")} /> {conditions ? "Conditions de livraison et de paiement" : "+ Conditions de livraison et de paiement"}
+          </button>
+          {!conditions && <p className="mt-1 text-[12px] text-muted">Vides : paiement selon la fiche du fournisseur{refs?.delivery_place ? `, livraison à ${refs.delivery_place}` : ""}. Nature, référence et date du devis s&apos;y précisent aussi.</p>}
+          {conditions && (
+            <div id="bon-conditions" className="mt-3 space-y-4">
+              <Card title="Références du devis ou de la proforma">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <Field label="Nature"><Select value={f.quote_kind} onChange={(e) => setF({ ...f, quote_kind: e.target.value as "quote" | "proforma" })} options={[{ value: "quote", label: "Devis" }, { value: "proforma", label: "Facture proforma" }]} /></Field>
+                  <Field label="Référence"><Input value={f.partner_ref} onChange={(e) => setF({ ...f, partner_ref: e.target.value })} placeholder="DEV-2026-041" /></Field>
+                  <Field label="Date"><Input type="date" value={f.quote_date} max={aujourdhui()} onChange={(e) => setF({ ...f, quote_date: e.target.value })} /></Field>
+                </div>
+              </Card>
+              <Card title="Conditions de la commande">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <Field label="Conditions de paiement" hint="Vide : celles de la fiche du fournisseur.">
+                    <Select value={f.payment_term_id} placeholder="Selon la fiche du fournisseur" onChange={(e) => setF({ ...f, payment_term_id: e.target.value })} options={(refs?.payment_terms ?? []).map((t) => ({ value: t.id, label: t.name }))} />
+                  </Field>
+                  <Field label="Précision sur le règlement" className="md:col-span-2"><Input value={f.payment_note} onChange={(e) => setF({ ...f, payment_note: e.target.value })} placeholder="30 % à la commande, solde à la livraison, par virement" /></Field>
+                  <Field label="Livraison prévue le"><Input type="date" value={f.date_planned} onChange={(e) => setF({ ...f, date_planned: e.target.value })} /></Field>
+                  <Field label="Délai de livraison (jours)" error={delaiInvalide ? "Nombre entier de jours." : undefined}><Input inputMode="numeric" value={f.delivery_days} onChange={(e) => setF({ ...f, delivery_days: e.target.value })} /></Field>
+                  <Field label="Lieu de livraison" hint={refs?.delivery_place ? `Vide : ${refs.delivery_place}` : undefined}><Input value={f.delivery_place} onChange={(e) => setF({ ...f, delivery_place: e.target.value })} /></Field>
+                </div>
+                <Field label="Autres conditions" hint="Garanties, pénalités, modalités : imprimées au bas du bon." className="mt-3"><Textarea value={f.conditions} onChange={(e) => setF({ ...f, conditions: e.target.value })} /></Field>
+              </Card>
+            </div>
+          )}
+        </div>
         {circuit && <CircuitApercu circuit={circuit} />}
       </div>
       {nouveau !== null && <NouveauFournisseur nom={nouveau} onClose={() => setNouveau(null)} onChoisi={(p) => { setPartner(p); setNouveau(null); }} />}
@@ -232,10 +280,10 @@ export function FormBon({ bon, engagement, onClose, onDone }: { bon?: BonCommand
 
 /** Circuit prévu pour le montant du bon : chaque niveau, le profil attendu, son seuil, s'il s'applique. */
 export function CircuitApercu({ circuit }: { circuit: CircuitPrevu }) {
-  if (circuit.covered) return <Notice tone="neutral">Dans la limite de son engagement approuvé : soumis, le bon sera approuvé d&apos;office, sans nouveau circuit.</Notice>;
+  if (circuit.covered) return <Notice tone="neutral">Dans la limite de son engagement approuvé : une fois envoyé, le bon sera approuvé d&apos;office, sans nouveau circuit.</Notice>;
   return (
     <Card title={`Circuit d'approbation prévu pour ${fmtGNF(circuit.amount)} HT`} padded={false}>
-      <DataTable dense rows={circuit.rules} rowKey={(r) => r.id} empty="Aucune règle : le bon sera approuvé dès sa soumission." columns={[
+      <DataTable dense rows={circuit.rules} rowKey={(r) => r.id} empty="Aucune règle : le bon sera approuvé dès son envoi." columns={[
         { key: "sequence", label: "Étape", render: (r) => `${r.sequence}. ${r.name}` },
         { key: "profile_label", label: "Tranchée par" },
         { key: "min_amount", label: "Seuil", render: (r) => seuil(r.min_amount, r.max_amount) + (r.account_prefix ? ` (comptes ${r.account_prefix}…)` : "") },
@@ -267,8 +315,8 @@ function CircuitAvancement({ approval }: { approval: Approbation }) {
         { key: "comment", label: "Commentaire", render: (s) => s.comment ?? "" },
       ]} />
       <p className="px-4 py-2 text-[12px] text-muted">
-        {approval.requested_by ? `Soumis par ${approval.requested_by}${approval.requested_at ? ` le ${fmtDateTime(approval.requested_at)}` : ""} · ` : ""}
-        Demande n° {approval.request_id}{approval.fingerprint ? ` · empreinte du bon soumis ${approval.fingerprint}…` : ""}. Chaque décision est donnée par un compte authentifié, horodatée et liée à cette empreinte : un bon modifié doit être soumis de nouveau.
+        {approval.requested_by ? `Envoyé par ${approval.requested_by}${approval.requested_at ? ` le ${fmtDateTime(approval.requested_at)}` : ""} · ` : ""}
+        Demande n° {approval.request_id}{approval.fingerprint ? ` · empreinte du bon envoyé ${approval.fingerprint}…` : ""}. Chaque décision est donnée par un compte authentifié, horodatée et liée à cette empreinte : un bon modifié doit être envoyé de nouveau.
       </p>
     </Card>
   );
@@ -326,7 +374,7 @@ function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void;
             {o.conditions && <div className="text-[12.5px] text-ink-2"><span className="text-muted">Autres conditions : </span><span className="whitespace-pre-line">{o.conditions}</span></div>}
             {o.tax_exemption && <div className="text-[12.5px] text-ink-2"><span className="text-muted">Mention d&apos;exonération : </span>{o.tax_exemption}</div>}
             {o.issue_reserved && (o.status === "draft" || o.status === "rejected") && !o.can.submit && <Notice tone="neutral">Émission réservée au service Achats : ce brouillon se modifie, se soumet ou s&apos;annule par le service Achats (Responsable Achats et Contrats).</Notice>}
-            {o.status === "to_approve" && o.approval?.pending_with && <Notice tone="warn">En approbation, à l&apos;étape de : {o.approval.pending_with}. Celui qui l&apos;a saisi ou soumis n&apos;en tranche aucune étape.</Notice>}
+            {o.status === "to_approve" && o.approval?.pending_with && <Notice tone="warn">En approbation, à l&apos;étape de : {o.approval.pending_with}. Celui qui l&apos;a saisi ou envoyé n&apos;en tranche aucune étape.</Notice>}
             {o.status === "rejected" && <Notice tone="warn">Refusé{o.approval?.rejected_by ? ` par ${o.approval.rejected_by}` : ""}{o.approval?.rejected_reason ? ` : ${o.approval.rejected_reason}` : ""}. Modifiez-le au besoin, puis soumettez-le de nouveau.</Notice>}
             <DataTable dense rows={o.lines ?? []} rowKey={(l) => l.id} columns={[
               { key: "name", label: "Désignation", render: (l) => (l.display_type === "line_section" ? <b>{l.name}</b> : l.display_type === "line_note" ? <i>{l.name}</i> : <div>{l.name}{l.category && <div className="text-[11.5px] text-muted">{l.category.name}</div>}</div>) },
@@ -362,7 +410,7 @@ function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void;
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
               <Button loading={envoi.busy === "pdf"} disabled={!!envoi.busy} onClick={() => void envoi.telecharger("pdf", `/commerce/purchase-orders/${o.id}/pdf`, `Bon de commande ${o.name}.pdf`)}><Download className="h-4 w-4" /> Bon de commande en PDF</Button>
               {saisie && o.can.edit && <Button disabled={!!envoi.busy} onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> Modifier</Button>}
-              {saisie && o.can.submit && <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!!envoi.busy} onClick={() => void agir("soumettre", "submit", {}, "Bon de commande soumis.")}>Soumettre à l&apos;approbation</Button>}
+              {saisie && o.can.submit && <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!!envoi.busy} onClick={() => void agir("soumettre", "submit", {}, "Bon de commande envoyé pour approbation.")}>Envoyer pour approbation</Button>}
               {saisie && o.can.send && (
                 <>
                   <Button loading={envoi.busy === "envoye"} disabled={!!envoi.busy} onClick={() => void agir("envoye", "send", {}, "Bon de commande marqué envoyé.")}>Marquer envoyé</Button>
@@ -394,7 +442,7 @@ function FicheBon({ id, onClose, onChanged }: { id: number; onClose: () => void;
   );
 }
 
-/** Pièces jointes du bon : devis, proforma, contrat, bon de livraison, autre ; archivées une fois le bon soumis. */
+/** Pièces jointes du bon : devis, proforma, contrat, bon de livraison, autre ; archivées une fois le bon envoyé pour approbation. */
 function PiecesJointes({ o, ecriture, onChanged }: { o: BonCommande; ecriture: boolean; onChanged: () => void }) {
   const envoi = useEnvoi();
   const [categorie, setCategorie] = useState<string>(o.partner_ref && o.quote_kind === "proforma" ? "proforma" : "quote");
@@ -424,7 +472,7 @@ function PiecesJointes({ o, ecriture, onChanged }: { o: BonCommande; ecriture: b
         { key: "origin", label: "Provenance", render: (p) => p.origin ?? p.note ?? "" },
         { key: "removable", label: "", render: (p) => (ecriture && p.removable ? <Button size="sm" variant="ghost" aria-label={`Retirer ${p.name}`} loading={envoi.busy === `retirer${p.id}`} onClick={() => void retirer(p)}><Trash2 className="h-4 w-4" /></Button> : <span className="text-[11.5px] text-muted">{p.removable ? "" : "Archivée"}</span>) },
       ]} />
-      <p className="px-4 py-2 text-[12px] text-muted">Une pièce mal jointe se retire tant que le bon n&apos;est pas soumis ; ensuite, les pièces sont archivées avec le bon et ne se suppriment plus.</p>
+      <p className="px-4 py-2 text-[12px] text-muted">Une pièce mal jointe se retire tant que le bon n&apos;est pas envoyé pour approbation ; ensuite, les pièces sont archivées avec le bon et ne se suppriment plus.</p>
     </Card>
   );
 }
@@ -485,14 +533,14 @@ function DocumentsAchats({ onClose, onOuvrir }: { onClose: () => void; onOuvrir:
 
 function PiecesRapprochees({ bills }: { bills: PieceAchat[] }) {
   return (
-    <Card title="Pièces d'achat rattachées et rapprochement" padded={false}>
+    <Card title="Factures du fournisseur rattachées et rapprochement" padded={false}>
       <DataTable dense rows={bills} rowKey={(b) => b.id} columns={[
-        { key: "name", label: "Pièce", render: (b) => <div><span className="font-mono text-xs">{b.name ?? "Brouillon"}</span>{b.ref && <div className="text-[11.5px] text-muted">{b.ref}</div>}</div> },
+        { key: "name", label: "Facture", render: (b) => <div><span className="font-mono text-xs">{b.name ?? "Brouillon"}</span>{b.ref && <div className="text-[11.5px] text-muted">{b.ref}</div>}</div> },
         { key: "amount_untaxed", label: "HT (GNF)", align: "right", render: (b) => fmtInt(b.amount_untaxed) },
-        { key: "match", label: "Rapprochement", render: (b) => (b.match ? (b.match.ok ? <Badge tone="ok">Conforme</Badge> : <div><Badge tone="danger">Écart</Badge><div className="mt-1 text-[12px] text-ink-2">{b.match.issues.join(" ")}</div><div className="text-[11.5px] text-muted">{b.match.mode === "block" ? "Écart bloquant : corrigez la pièce ou la réception." : "Passe par le circuit des pièces d'achat."}</div></div>) : "–") },
+        { key: "match", label: "Rapprochement", render: (b) => (b.match ? (b.match.ok ? <Badge tone="ok">Conforme</Badge> : <div><Badge tone="danger">Écart</Badge><div className="mt-1 text-[12px] text-ink-2">{b.match.issues.join(" ")}</div><div className="text-[11.5px] text-muted">{b.match.mode === "block" ? "Écart bloquant : corrigez la pièce ou la réception." : "Passe par le circuit des factures fournisseurs."}</div></div>) : "–") },
         { key: "state", label: "État", render: (b) => <div><Badge tone={b.state === "posted" ? "ok" : b.state === "cancel" ? "neutral" : "warn"}>{b.state === "posted" ? "Comptabilisée" : b.state === "cancel" ? "Annulée" : "Brouillon"}</Badge>{b.approval?.pending_with && <div className="text-[11.5px] text-muted">chez : {b.approval.pending_with}</div>}</div> },
       ]} />
-      <p className="px-4 py-2 text-[12px] text-muted">Une pièce conforme (quantités dans le reçu, prix dans la tolérance) se valide sans circuit ; elle se complète (justificatif, échéance) dans l&apos;onglet Pièces d&apos;achat.</p>
+      <p className="px-4 py-2 text-[12px] text-muted">Une facture conforme (quantités dans le reçu, prix dans la tolérance) se valide sans circuit ; elle se complète (justificatif, échéance) dans Achats et dépenses.</p>
     </Card>
   );
 }
@@ -548,37 +596,61 @@ function FormPiece({ o, onClose, onDone }: { o: BonCommande; onClose: () => void
   const [ref, setRef] = useState("");
   const [date, setDate] = useState(aujourdhui());
   const [resultat, setResultat] = useState<PieceAchat | null>(null);
+  // Facture du fournisseur (fichier) : jointe juste après l'enregistrement, avant l'envoi pour approbation.
+  const [fichier, setFichier] = useState<File | null>(null);
+  const [jointe, setJointe] = useState(false);
+  // Facture créée par cette fenêtre dont le fichier ou l'envoi a échoué : un nouvel essai ne reprend que ces étapes.
+  const [creee, setCreee] = useState<number | null>(null);
   const illisible = lignes.some((l) => nombreIllisible(valeurs[l.id]?.q) || nombreIllisible(valeurs[l.id]?.p));
   async function enregistrer(soumettre: boolean) {
     await envoi.run(soumettre ? "soumettre" : "enregistrer", async () => {
-      const res = await apiSend<BonCommande>("POST", `/commerce/purchase-orders/${o.id}/bill`, {
-        ref, invoice_date: date, submit: soumettre,
-        lines: lignes.map((l) => ({ id: l.id, quantity: lireNombre(valeurs[l.id]?.q), price_unit: lireNombre(valeurs[l.id]?.p) })),
-      });
-      setResultat(res.bill ?? null);
+      let id = creee;
+      if (id === null) {
+        const res = await apiSend<BonCommande>("POST", `/commerce/purchase-orders/${o.id}/bill`, {
+          ref, invoice_date: date, submit: soumettre && !fichier,
+          lines: lignes.map((l) => ({ id: l.id, quantity: lireNombre(valeurs[l.id]?.q), price_unit: lireNombre(valeurs[l.id]?.p) })),
+        });
+        if (!fichier || !res.bill) {
+          setResultat(res.bill ?? null);
+          return;
+        }
+        id = res.bill.id;
+        setCreee(id);
+      }
+      if (fichier) {
+        const form = new FormData();
+        form.append("file", fichier);
+        await apiUpload(`/finance/moves/${id}/attachments`, form);
+        setFichier(null);
+        setJointe(true);
+      }
+      // Même contrôle que l'envoi direct du noyau (axes obligatoires, rapprochement, circuit).
+      if (soumettre) await apiSend("POST", `/finance/moves/${id}/post`);
+      setResultat(await apiGet<PieceAchat>(`/commerce/bills/${id}/match`));
     }, undefined, "Saisie impossible.");
   }
   if (resultat) {
     return (
-      <Modal open title="Pièce d'achat rattachée" onClose={onDone} footer={<Button variant="primary" onClick={onDone}>Fermer</Button>}>
+      <Modal open title="Facture fournisseur rattachée" onClose={onDone} footer={<Button variant="primary" onClick={onDone}>Fermer</Button>}>
         <div className="space-y-3 text-sm">
           {resultat.match?.ok ? <Notice tone="ok">Conforme à la commande et à la réception{resultat.state === "posted" ? " : comptabilisée sans circuit." : "."}</Notice> : (
-            <Notice tone="warn">Écart de rapprochement : {resultat.match?.issues.join(" ")} {resultat.match?.mode === "block" ? "La pièce ne se valide pas tant que l'écart dure." : "Soumise, elle passe par le circuit des pièces d'achat."}</Notice>
+            <Notice tone="warn">Écart de rapprochement : {resultat.match?.issues.join(" ")} {resultat.match?.mode === "block" ? "La facture ne se valide pas tant que l'écart dure." : "Envoyée, elle passe par le circuit des factures fournisseurs."}</Notice>
           )}
-          <p>Pièce {resultat.name ?? "en brouillon"}{resultat.approval?.pending_with ? `, en validation chez : ${resultat.approval.pending_with}` : ""}. Joignez la facture du fournisseur dans l&apos;onglet Pièces d&apos;achat.</p>
+          <p>Facture {resultat.name ?? "en brouillon"}{resultat.approval?.pending_with ? `, en approbation chez : ${resultat.approval.pending_with}` : ""}. {jointe ? "Le fichier de la facture est joint." : "Joignez le fichier de la facture dans Achats et dépenses."}</p>
         </div>
       </Modal>
     );
   }
   return (
-    <Modal open wide title={`Facture du fournisseur sur ${o.name}`} onClose={onClose} footer={
+    <Modal open wide title={`Facture du fournisseur sur ${o.name}`} onClose={() => (creee !== null ? onDone() : onClose())} footer={
       <div className="flex gap-2">
-        <Button loading={envoi.busy === "enregistrer"} disabled={illisible || !!envoi.busy} onClick={() => void enregistrer(false)}>Enregistrer en brouillon</Button>
-        <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={illisible || !!envoi.busy} onClick={() => void enregistrer(true)}>Enregistrer et soumettre</Button>
+        <Button loading={envoi.busy === "enregistrer"} disabled={illisible || !!envoi.busy} onClick={() => void enregistrer(false)}>Enregistrer</Button>
+        <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={illisible || !!envoi.busy} onClick={() => void enregistrer(true)}>Envoyer pour approbation</Button>
       </div>
     }>
       <div className="space-y-3">
         {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
+        {creee !== null && <Notice tone="warn">Facture déjà enregistrée en brouillon : un nouvel essai ne reprend que le fichier et l&apos;envoi. Corrigez ses montants dans Achats et dépenses.</Notice>}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <Field label="Numéro de la facture du fournisseur"><Input value={ref} onChange={(e) => setRef(e.target.value)} /></Field>
           <Field label="Date de la facture"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
@@ -590,7 +662,16 @@ function FormPiece({ o, onClose, onDone }: { o: BonCommande; onClose: () => void
           { key: "p", label: "PU HT facturé", align: "right", render: (l) => <Input aria-label={`Prix facturé : ${l.name}`} inputMode="decimal" className="ml-auto w-32 text-right font-mono" value={valeurs[l.id]?.p ?? ""} onChange={(e) => setValeurs({ ...valeurs, [l.id]: { q: valeurs[l.id]?.q ?? "", p: e.target.value } })} /> },
           { key: "commande", label: "PU commandé", align: "right", render: (l) => fmtInt(l.price_unit) },
         ]} />
-        <p className="text-[12.5px] text-muted">Saisissez ce que facture le fournisseur. La pièce se rapproche de la commande (prix) et de la réception (quantités) : conforme, elle se valide sans circuit ; en écart, elle suit la règle de la société.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <FileButton small label={fichier ? "Changer de fichier" : "Joindre le fichier de la facture"} accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={setFichier} />
+          {fichier && (
+            <span className="inline-flex min-w-0 items-center gap-1 text-sm">
+              <span className="truncate">{fichier.name}</span>
+              <button type="button" className="text-muted hover:text-danger" onClick={() => setFichier(null)} aria-label={`Retirer ${fichier.name}`}><X className="h-3.5 w-3.5" /></button>
+            </span>
+          )}
+        </div>
+        <p className="text-[12.5px] text-muted">Saisissez ce que facture le fournisseur. La facture se rapproche de la commande (prix) et de la réception (quantités) : conforme, elle se valide sans circuit ; en écart, elle suit la règle de la société.</p>
       </div>
     </Modal>
   );

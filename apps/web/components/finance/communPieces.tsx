@@ -1,11 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "@/components/icons";
 import { Button } from "@/components/ui";
 import { ApiError, apiDownload } from "@/lib/api-client";
 import { INSECABLE, fmtDec, fmtFixe, fmtGNF, fmtInt } from "@/lib/format";
 import type { Profile } from "@/lib/types";
+
+/**
+ * Chiffre clé nommé en clair, son sigle (DSO, BFR…) en infobulle pour qui le connaît. La case garde la
+ * hauteur de sa rangée.
+ */
+export function Sigle({ sigle, children }: { sigle: string; children: ReactNode }) {
+  return (
+    <div title={`Sigle : ${sigle}`} className="grid min-w-0">
+      {children}
+    </div>
+  );
+}
 
 /**
  * Jour à Conakry, au format du noyau (« 2026-10-25 ») : le noyau date ses pièces à l'heure de
@@ -76,6 +88,27 @@ export const SAISIE_PIECES: Profile[] = ["admin", "finance", "achats"];
 export const CREATION_TIERS: Profile[] = ["admin", "finance", "exploitation", "chantiers", "immobilier", "cabinet", "achats"];
 /** Modification d'une fiche de tiers (PATCH /finance/partners/<id>) ; le profil Achats n'y modifie que les fournisseurs. */
 export const MODIFICATION_TIERS: Profile[] = ["admin", "finance", "achats"];
+
+/**
+ * Mémoire de ce navigateur (dernier compte de trésorerie, dernière catégorie d'un fournisseur, détails
+ * dépliés) : une commodité, l'écran marche sans elle. null si rien n'est mémorisé ou si le stockage est
+ * refusé (navigation privée).
+ */
+export function lireMemoire(cle: string): string | null {
+  try {
+    return window.localStorage.getItem(cle);
+  } catch {
+    return null;
+  }
+}
+
+export function ecrireMemoire(cle: string, valeur: string) {
+  try {
+    window.localStorage.setItem(cle, valeur);
+  } catch {
+    // Stockage refusé : le choix vaut pour cette fenêtre.
+  }
+}
 
 /** Champ dont la saisie est refusée (nombre illisible, montant hors bornes) : bordure et halo rouges. */
 export const CHAMP_INVALIDE = "aria-[invalid=true]:border-danger aria-[invalid=true]:ring-4 aria-[invalid=true]:ring-danger/15";

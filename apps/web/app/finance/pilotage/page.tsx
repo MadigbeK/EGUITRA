@@ -34,13 +34,13 @@ export default function PilotagePage() {
   }, []);
   return (
     <div>
-      <PageHeader title="Activités et budget" subtitle="Produits, charges et marge par axe analytique ; budget par ligne budgétaire comparé au réalisé ; flux mensuels de trésorerie et prévision ; besoin en fonds de roulement." />
+      <PageHeader title="Activités et budget" subtitle="Produits, charges et marge par axe analytique ; budget par ligne budgétaire comparé au réalisé ; flux mensuels de trésorerie et prévision ; besoin de financement de l'activité." />
       <Tabs
         tabs={[
           { key: "axes", label: "Pilotage par axe" },
           { key: "budget", label: "Budget et écarts" },
           { key: "tresorerie", label: "Trésorerie mensuelle" },
-          { key: "bfr", label: "BFR et délais" },
+          { key: "bfr", label: "Besoin de financement et délais" },
         ]}
         value={tab}
         onChange={setTab}
@@ -93,7 +93,7 @@ function TresorerieMensuelle() {
   );
 }
 
-/** BFR, DSO, DPO, DIO, cycle, part échue et concentration sur une période. */
+/** Besoin de financement de l'activité (BFR), délais (DSO, DPO, DIO), cycle, part échue et concentration sur une période. */
 function Bfr() {
   const [scope, setScope] = useState<"company" | "group">("company");
   const [from, setFrom] = useState(`${anneeEnCours()}-01-01`);
@@ -117,10 +117,10 @@ function Bfr() {
       {erreurSeuils && <ErrorBox error={erreurSeuils} titre="Seuils d'alerte non chargés : les délais ne sont pas comparés à leurs seuils." onRetry={() => relireSeuils()} />}
       <Etat data={data} error={error} onRetry={() => mutate()}>
         {(wc) => (
-          <Card title={`Besoin en fonds de roulement sur ${wc.days} jours`}>
+          <Card title={`Besoin de financement de l'activité sur ${wc.days} jours`}>
             <CarteBfr wc={wc} thresholds={thresholds} />
             <p className="mt-4 text-[12.5px] leading-relaxed text-muted">
-              DSO = créances clients / ventes TTC × jours ; DPO = dettes fournisseurs / achats TTC × jours ; DIO = stocks / achats TTC × jours ; cycle = DSO + DIO - DPO ; BFR = créances + stocks - dettes fournisseurs. Le BFR SYSCOHADA (actif circulant moins passif circulant) comprend aussi les créances et dettes fiscales et sociales. Ventes TTC de la période : {fmtGNF(wc.sales_ttc)} ; achats TTC : {fmtGNF(wc.purchases_ttc)}.
+              Délai d&apos;encaissement des clients (DSO) = créances clients / ventes TTC × jours ; délai de paiement des fournisseurs (DPO) = dettes fournisseurs / achats TTC × jours ; stock (DIO) = stocks / achats TTC × jours ; cycle = délai clients + stock - délai fournisseurs ; besoin de financement (BFR) = créances + stocks - dettes fournisseurs. Au bilan comptable (actif circulant moins passif circulant), il comprend aussi les créances et dettes fiscales et sociales. Ventes TTC de la période : {fmtGNF(wc.sales_ttc)} ; achats TTC : {fmtGNF(wc.purchases_ttc)}.
             </p>
           </Card>
         )}

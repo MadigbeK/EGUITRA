@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Tabs, Tag, cx } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Kpi, Loading, Modal, Notice, PageHeader, ProgressBar, Segmented, Tabs, Tag, cx } from "@/components/ui";
 import { BalanceAgee } from "@/components/finance/BalanceAgee";
 import { CHAMP_INVALIDE, CREATION_TIERS, MODIFICATION_TIERS, PagesListe } from "@/components/finance/communPieces";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
@@ -46,14 +46,14 @@ export default function PartnersPage() {
   return (
     <div>
       <PageHeader
-        title="Tiers"
-        subtitle="Clients et fournisseurs : soldes, balance âgée, retards et statut, limites de crédit."
+        title="Clients et fournisseurs"
+        subtitle="Soldes, balance âgée, retards et statut, limites de crédit."
         actions={
           <>
             <Segmented label="Vue" options={[{ key: "fiches", label: "Fiches" }, { key: "agee", label: "Balance âgée" }]} value={vue} onChange={setVue} />
             {creation && (
               <Button variant="primary" onClick={() => setEditing("new")}>
-                <Plus className="h-4 w-4" /> Nouveau tiers
+                <Plus className="h-4 w-4" /> Nouveau client ou fournisseur
               </Button>
             )}
           </>
@@ -80,12 +80,14 @@ export default function PartnersPage() {
         )}
         {!data ? (
           !error && isLoading && <Loading />
+        ) : data.items.length === 0 && !search && offset === 0 && kind === "all" && creation ? (
+          <Empty title="Aucun client ni fournisseur" hint="Créez une première fiche : nom, NIF et coordonnées suffisent pour commencer." action={<Button variant="primary" onClick={() => setEditing("new")}><Plus className="h-4 w-4" /> Nouveau client ou fournisseur</Button>} />
         ) : (
           <DataTable
             rows={data?.items ?? []}
             rowKey={(p) => p.id}
             onRowClick={(p) => setSelected(p.id)}
-            empty="Aucun tiers."
+            empty="Aucun client ni fournisseur."
             columns={[
               { key: "name", label: "Nom" },
               { key: "role", label: "Rôle", render: (p) => <div className="flex gap-1">{p.customer && <Tag>Client</Tag>}{p.supplier && <Tag>Fournisseur</Tag>}</div> },
@@ -96,7 +98,7 @@ export default function PartnersPage() {
             ]}
           />
         )}
-        {data && <PagesListe offset={offset} taille={PAGE} total={data.total_count} libelle="Tiers" onPage={setOffset} />}
+        {data && <PagesListe offset={offset} taille={PAGE} total={data.total_count} libelle="Clients et fournisseurs" onPage={setOffset} />}
       </Card>
       {selected !== null && <PartnerModal id={selected} onClose={() => setSelected(null)} onEdit={(p) => { setSelected(null); setEditing(p); }} />}
       {editing && <PartnerForm partner={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void mutate(); }} />}
@@ -108,7 +110,7 @@ function PartnerModal({ id, onClose, onEdit }: { id: number; onClose: () => void
   const { data: p, error, mutate } = useApi<PartnerDetail>(`/finance/partners/${id}`);
   const modification = useAutorise(MODIFICATION_TIERS);
   return (
-    <Modal open wide title={p?.name ?? "Tiers"} onClose={onClose} footer={p && modification && <Button onClick={() => onEdit(p)}>Modifier</Button>}>
+    <Modal open wide title={p?.name ?? "Client ou fournisseur"} onClose={onClose} footer={p && modification && <Button onClick={() => onEdit(p)}>Modifier</Button>}>
       {error && <ErrorBox error={error} onRetry={() => mutate()} />}
       {!p && !error && <Loading />}
       {p && (
@@ -238,7 +240,7 @@ function PartnerForm({ partner, onClose, onSaved }: { partner: (Partner & Partia
     </Field>
   );
   return (
-    <Modal open wide title={partner ? `Modifier ${partner.name}` : "Nouveau tiers"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.name || invalide}>Enregistrer</Button>}>
+    <Modal open wide title={partner ? `Modifier ${partner.name}` : "Nouveau client ou fournisseur"} onClose={onClose} footer={<Button variant="primary" loading={busy} onClick={submit} disabled={!form.name || invalide}>Enregistrer</Button>}>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {error && (
           <div className="col-span-2 md:col-span-4">

@@ -682,7 +682,7 @@ function TransferModal({ accounts, onClose, onDone }: { accounts: CashAccount[];
       if (res.status === "submitted") {
         const qui = res.moves[0]?.approval?.pending_with;
         setSoumis(
-          `Virement soumis à l'approbation${qui ? ` (${qui})` : ""} : ses deux écritures restent en attente et ne comptent qu'à la dernière approbation. Ne le saisissez pas une seconde fois ; la demande se suit dans « À valider ».`,
+          `Virement envoyé pour approbation${qui ? ` (${qui})` : ""} : ses deux écritures restent en attente et ne comptent qu'à la dernière approbation. Ne le saisissez pas une seconde fois ; la demande se suit dans « À approuver ».`,
         );
         return;
       }

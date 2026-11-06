@@ -114,7 +114,7 @@ export function TableauAchats() {
             <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Kpi label="À recevoir" value={fmtGNF(d.kpis.to_receive_amount)} hint={`${d.kpis.to_receive_count} bon${d.kpis.to_receive_count > 1 ? "s" : ""}, dont ${d.kpis.late_count} en retard`} tone={d.kpis.late_count ? "warn" : "neutral"} />
               <Kpi label="Reçu non facturé" value={fmtGNF(d.kpis.to_bill_amount)} hint={`${d.kpis.to_bill_count} bon${d.kpis.to_bill_count > 1 ? "s" : ""}, HT`} />
-              <Kpi label="Écarts de rapprochement" value={fmtInt(d.kpis.gaps_count)} hint="Pièces d'achat en brouillon qui s'écartent de leur commande" tone={d.kpis.gaps_count ? "danger" : "neutral"} />
+              <Kpi label="Écarts de rapprochement" value={fmtInt(d.kpis.gaps_count)} hint="Factures fournisseurs en brouillon qui s'écartent de leur commande" tone={d.kpis.gaps_count ? "danger" : "neutral"} />
               <Kpi label="Engagements non soldés" value={fmtGNF(d.kpis.commitments_remaining)} hint={`${d.kpis.commitments_count} engagement${d.kpis.commitments_count > 1 ? "s" : ""} ; ${d.kpis.in_approval} bon${d.kpis.in_approval > 1 ? "s" : ""} en approbation`} />
             </div>
             <Card padded={false}>

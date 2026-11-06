@@ -1,10 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { Badge, Card, DataTable, Empty, Etat, PageHeader, Segmented } from "@/components/ui";
+import { Badge, Card, DataTable, Empty, Etat, PageHeader, Segmented, classesBouton } from "@/components/ui";
 import { AlerteLigne, GRAVITES, fmtValeur, gravite } from "@/components/finance/Pilotage";
 import { ScopeToggle } from "@/components/finance/ScopeToggle";
-import { useApi } from "@/lib/api-client";
+import { useApi, useAutorise } from "@/lib/api-client";
 import type { Alert, AlertUnit, Severity } from "@/lib/finance-types";
 import { pluriel } from "@/lib/format";
 
@@ -15,6 +16,7 @@ interface Threshold { id: number; code: string; label: string; value: number; se
  * profils de la finance) ; les seuils se modifient dans Administration > Seuils et taux.
  */
 export default function AlertsPage() {
+  const administrateur = useAutorise(["admin"]);
   const [scope, setScope] = useState<"company" | "group">("company");
   const [vue, setVue] = useState<"actives" | "toutes">("actives");
   const { data, error, mutate } = useApi<Alert[]>(`/finance/alerts?scope=${scope}${vue === "toutes" ? "&all=1" : ""}`);
@@ -52,7 +54,7 @@ export default function AlertsPage() {
               {rows.length === 0 ? (
                 <Card>
                   {vue === "toutes" ? (
-                    <Empty title="Aucune règle d'alerte" hint="Les règles se paramètrent dans Administration > Seuils et taux." />
+                    <Empty title="Aucune règle d'alerte" hint="Les règles se paramètrent dans Administration > Seuils et taux." action={administrateur ? <Link href="/finance/admin/parametres" className={classesBouton("primary")}>Ouvrir les seuils et taux</Link> : undefined} />
                   ) : (
                     <Empty title="Aucune alerte active" hint="Tous les indicateurs sont dans les seuils fixés." />
                   )}

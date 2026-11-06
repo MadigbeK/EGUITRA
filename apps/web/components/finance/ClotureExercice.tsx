@@ -1,16 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { CheckCircle2, Lock, LockOpen, Plus, ShieldAlert, Trash2 } from "@/components/icons";
+import { CheckCircle2, ChevronRight, Lock, LockOpen, Plus, ShieldAlert, Trash2 } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Etat, Field, Input, Notice, Select, Textarea, cx, demanderConfirmation } from "@/components/ui";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
+import { ECRANS } from "@/components/finance/Pilotage";
 import { ApiError, apiSend, useApi, useAutorise, useSaisieLibre } from "@/lib/api-client";
 import { MOVE_STATES } from "@/lib/finance-types";
 import { AIDE_NOMBRE, MONTHS_FR, fmtDate, fmtDateTime, fmtGNF, lireNombre, nombreIllisible } from "@/lib/format";
 import type { Profile } from "@/lib/types";
 
-// Profils des routes du noyau (addons/eguitra_finance/controllers/closing.py) : l'OD d'affectation est une
+// Profils des routes du noyau (addons/eguitra_finance/controllers/closing.py) : l'écriture d'affectation est une
 // écriture de la finance (avec le droit « Saisie libre des comptes ») ; le verrouillage définitif revient,
 // comme la réouverture d'un mois, à la direction et à l'administration.
 const AFFECTATION: Profile[] = ["admin", "finance"];
@@ -57,8 +59,8 @@ const CONDITIONS = [
 ];
 
 /**
- * Clôture de l'exercice : état des douze mois, résultat et son affectation décidée par l'assemblée (OD en
- * brouillon qui suit ensuite le circuit des OD), verrouillage définitif. L'exercice suivant s'ouvre sans
+ * Clôture de l'exercice : état des douze mois, résultat et son affectation décidée par l'assemblée (écriture en
+ * brouillon qui suit ensuite le circuit des écritures), verrouillage définitif. L'exercice suivant s'ouvre sans
  * écriture : le résultat non affecté figure au bilan en report à nouveau.
  */
 export function ClotureExercice({ year }: { year: number }) {
@@ -101,14 +103,14 @@ export function ClotureExercice({ year }: { year: number }) {
         <div className="space-y-6">
           <p className="text-sm leading-relaxed text-muted">
             Exercice du {fmtDate(data.fiscal_year.start)} au {fmtDate(data.fiscal_year.end)}, {data.company}. L&apos;exercice suivant s&apos;ouvre sans écriture : le résultat non affecté figure au bilan en report à nouveau
-            jusqu&apos;à l&apos;OD d&apos;affectation décidée par l&apos;assemblée. Une fois les douze mois clôturés, la direction verrouille définitivement l&apos;exercice.
+            jusqu&apos;à l&apos;écriture d&apos;affectation décidée par l&apos;assemblée. Une fois les douze mois clôturés, la direction verrouille définitivement l&apos;exercice.
           </p>
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
           <DouzeMois months={data.months} />
           <Chiffres data={data} />
           {data.previous_unallocated !== 0 && (
             <Notice tone="warn">
-              Résultat d&apos;exercices antérieurs à {data.year} non encore affecté : {fmtGNF(data.previous_unallocated)}. Il figure au bilan en report à nouveau ; passez son OD d&apos;affectation depuis l&apos;exercice concerné.
+              Résultat d&apos;exercices antérieurs à {data.year} non encore affecté : {fmtGNF(data.previous_unallocated)}. Il figure au bilan en report à nouveau ; passez son écriture d&apos;affectation depuis l&apos;exercice concerné.
             </Notice>
           )}
           <Affectation
@@ -151,8 +153,8 @@ function Chiffres({ data }: { data: Exercice }) {
   const lignes: Array<[string, string]> = [
     ["Mois clôturés", `${data.months_closed}/12`],
     [perte ? "Résultat de l'exercice (perte)" : "Résultat de l'exercice", fmtGNF(data.result)],
-    ["Affecté (OD validées)", fmtGNF(Math.abs(data.allocated.posted))],
-    ["OD en brouillon", fmtGNF(Math.abs(data.allocated.draft))],
+    ["Affecté (écritures validées)", fmtGNF(Math.abs(data.allocated.posted))],
+    ["Écritures en brouillon", fmtGNF(Math.abs(data.allocated.draft))],
     ["Restant à affecter", fmtGNF(Math.abs(data.to_allocate))],
     ["Verrouillage définitif", data.hard_lock_date ? `jusqu'au ${fmtDate(data.hard_lock_date)}` : "aucun"],
   ];
@@ -192,15 +194,15 @@ function Affectation({ data, affecter, libre, onOuvrir, onCreee }: { data: Exerc
               { key: "amount", label: "Montant", align: "right", render: (a) => fmtGNF(a.amount) },
             ]}
           />
-          <p className="text-xs text-muted">Ouvrez une OD pour la valider (circuit de validation des OD), y joindre le procès-verbal de l&apos;assemblée, ou la supprimer tant qu&apos;elle est en brouillon.</p>
+          <p className="text-xs text-muted">Ouvrez une écriture pour la valider (circuit de validation des écritures), y joindre le procès-verbal de l&apos;assemblée, ou la supprimer tant qu&apos;elle est en brouillon.</p>
         </>
       )}
       {!data.allocation.can_allocate ? (
         <Notice tone="accent">{data.allocation.blocking.map((c) => c.detail).join(" ")}</Notice>
       ) : !affecter ? (
-        <Notice tone="accent">Restant à affecter : {fmtGNF(Math.abs(data.to_allocate))}. L&apos;OD d&apos;affectation décidée par l&apos;assemblée est saisie par la finance.</Notice>
+        <Notice tone="accent">Restant à affecter : {fmtGNF(Math.abs(data.to_allocate))}. L&apos;écriture d&apos;affectation décidée par l&apos;assemblée est saisie par la finance.</Notice>
       ) : !libre ? (
-        <Notice tone="accent">L&apos;OD d&apos;affectation porte des comptes choisis : elle demande le droit « Saisie libre des comptes » (Administration &gt; Utilisateurs).</Notice>
+        <Notice tone="accent">L&apos;écriture d&apos;affectation porte des comptes choisis : elle demande le droit « Saisie libre des comptes » (Administration &gt; Utilisateurs).</Notice>
       ) : (
         <FormulaireAffectation key={`${data.year}-${data.to_allocate}`} data={data} onCreee={onCreee} />
       )}
@@ -240,7 +242,7 @@ function FormulaireAffectation({ data, onCreee }: { data: Exercice; onCreee: (te
         note,
         lines: lignes.map((l, i) => ({ account_id: Number(l.account_id), amount: montants[i], name: l.name.trim() || undefined, partner_id: l.partner?.id })),
       });
-      onCreee(`OD d'affectation du résultat ${data.year} créée en brouillon : ouvrez-la ci-dessus pour la valider (circuit de validation des OD) et y joindre le procès-verbal de l'assemblée.`);
+      onCreee(`Écriture d'affectation du résultat ${data.year} créée en brouillon : ouvrez-la ci-dessus pour la valider (circuit de validation des écritures) et y joindre le procès-verbal de l'assemblée.`);
     } catch (e) {
       setErreur(e instanceof ApiError ? e.message : "Création impossible.");
     } finally {
@@ -324,9 +326,9 @@ function FormulaireAffectation({ data, onCreee }: { data: Exercice; onCreee: (te
         </Notice>
       )}
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <span className="text-xs text-muted">L&apos;OD est créée en brouillon, puis validée par le circuit des OD.</span>
+        <span className="text-xs text-muted">L&apos;écriture est créée en brouillon, puis validée par le circuit des écritures.</span>
         <Button variant="primary" disabled={!pret} loading={envoi} onClick={envoyer}>
-          Créer l&apos;OD d&apos;affectation
+          Créer l&apos;écriture d&apos;affectation
         </Button>
       </div>
     </div>
@@ -355,6 +357,12 @@ function Verrouillage({ data, verrouiller, envoi, onVerrouiller }: { data: Exerc
                   <div className="flex-1">
                     <div className="text-sm text-ink">{condition.label}</div>
                     {manque && <div className="text-xs text-muted">{manque.detail}</div>}
+                    {/* L'écran qui corrige (table des écrans, Pilotage.tsx) : les pièces en brouillon. */}
+                    {manque && ECRANS[condition.code] && (
+                      <Link href={ECRANS[condition.code]!.href} className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
+                        {ECRANS[condition.code]!.libelle} <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
+                    )}
                   </div>
                   <Badge tone={manque ? "danger" : "ok"}>{manque ? "Manquant" : "Conforme"}</Badge>
                 </li>

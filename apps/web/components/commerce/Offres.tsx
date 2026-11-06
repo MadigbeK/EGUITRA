@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { Download, Pencil, Plus, Send } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Segmented, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Segmented, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { PagesListe } from "@/components/finance/communPieces";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
@@ -57,7 +57,9 @@ export function OffresPage({ commandes = false }: { commandes?: boolean }) {
           <Input aria-label="Rechercher une offre" className="max-w-xs" placeholder="Numéro, objet ou client…" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} />
         </div>
         <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement des offres…">
-          {(page) => (
+          {(page) => page.items.length === 0 && !search && offset === 0 && ecriture && !commandes ? (
+            <Empty title="Aucune offre ici" hint="Une offre chiffre la demande d'un client ; acceptée, elle devient une commande puis une facture." action={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouvelle offre</Button>} />
+          ) : (
             <>
               <DataTable rows={page.items} rowKey={(o) => o.id} onRowClick={(o) => setSelected(o.id)} empty={commandes ? "Aucune commande." : "Aucune offre pour ce filtre."} columns={[
                 { key: "name", label: "Offre", render: (o) => <div className="min-w-[180px]"><span className="font-mono text-xs">{o.name}</span><div className="text-[12px] text-muted">{o.object ?? "Sans objet"}</div></div> },

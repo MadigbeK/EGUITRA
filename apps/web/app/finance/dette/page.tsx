@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Sigle } from "@/components/finance/communPieces";
 import { Pencil, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, demanderConfirmation } from "@/components/ui";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { apiSend, useApi, useAutorise, useSaisieLibre } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
@@ -75,9 +76,9 @@ export default function DebtPage() {
                 <Kpi label="Encours comptable" value={fmtShort(s.accounting_outstanding)} hint={`Comptes 16 et 17 · ${pluriel(s.loans, "financement")}`} tone="accent" />
                 <Kpi label="Capital restant dû des échéanciers" value={fmtShort(s.outstanding)} hint={ecart ? `Écart avec la comptabilité : ${fmtShort(s.schedule_gap)}` : "Conforme à la comptabilité"} tone={ecart ? "warn" : "ok"} />
                 <Kpi label="Dette nette" value={fmtShort(s.net_debt)} hint="Encours comptable moins la trésorerie" />
-                <Kpi label="Gearing" value={fmtRatio(s.gearing)} hint={s.equity !== undefined && s.equity <= 0 ? "Capitaux propres négatifs ou nuls" : "Dette / capitaux propres"} tone={(s.gearing ?? 0) > 1 ? "warn" : "neutral"} />
-                <Kpi label="Dette / EBE 12 mois" value={fmtRatio(s.debt_to_ebe)} hint={(s.ebe_12m ?? 0) <= 0 ? "EBE des 12 derniers mois négatif ou nul" : `EBE 12 mois : ${fmtShort(s.ebe_12m)}`} />
-                <Kpi label="DSCR" value={fmtRatio(s.dscr)} hint={`EBE 12 mois / service de la dette, ${dscrMin ? `minimum ${fmtRatio(dscrMin)}` : "minimum : seuil non fixé"}`} tone={s.dscr === null || s.dscr === undefined || dscrMin === null ? "neutral" : s.dscr < dscrMin ? "danger" : "ok"} />
+                <Sigle sigle="gearing"><Kpi label="Dette sur capitaux propres" value={fmtRatio(s.gearing)} hint={s.equity !== undefined && s.equity <= 0 ? "Capitaux propres négatifs ou nuls" : "Au-delà de 1, la dette dépasse les capitaux propres"} tone={(s.gearing ?? 0) > 1 ? "warn" : "neutral"} /></Sigle>
+                <Sigle sigle="EBE"><Kpi label="Dette sur excédent brut d'exploitation (12 mois)" value={fmtRatio(s.debt_to_ebe)} hint={(s.ebe_12m ?? 0) <= 0 ? "Excédent brut d'exploitation des 12 derniers mois négatif ou nul" : `Excédent brut d'exploitation sur 12 mois : ${fmtShort(s.ebe_12m)}`} /></Sigle>
+                <Sigle sigle="DSCR"><Kpi label="Capacité à rembourser la dette" value={fmtRatio(s.dscr)} hint={`Excédent brut d'exploitation sur 12 mois / remboursements et intérêts, ${dscrMin ? `minimum ${fmtRatio(dscrMin)}` : "minimum : seuil non fixé"}`} tone={s.dscr === null || s.dscr === undefined || dscrMin === null ? "neutral" : s.dscr < dscrMin ? "danger" : "ok"} /></Sigle>
                 <Kpi label="Service de la dette de l'exercice" value={fmtShort(s.service_fy)} hint={`Réglé : ${fmtShort(s.service_fy_paid)} · intérêts ${fmtShort(s.service_fy_interest)}`} />
                 <Kpi label="Prochaine échéance" value={fmtShort(s.next_due_amount)} hint={s.next_due_date ? `Le ${fmtDate(s.next_due_date)}${s.overdue > 0 ? ` · impayé ${fmtShort(s.overdue)}` : ""}` : "Aucune"} tone={s.overdue > 0 ? "danger" : "neutral"} />
               </div>
@@ -87,22 +88,26 @@ export default function DebtPage() {
                 </Notice>
               )}
               <Card padded={false}>
-                <DataTable
-                  rows={d.items}
-                  rowKey={(l) => l.id}
-                  onRowClick={(l) => setSelected(l.id)}
-                  empty="Aucun financement enregistré."
-                  columns={[
-                    { key: "name", label: "Référence" },
-                    { key: "kind", label: "Nature", render: (l) => (l.kind === "lease" ? "Crédit-bail" : "Emprunt") },
-                    { key: "lender", label: "Prêteur", render: (l) => l.lender.name },
-                    { key: "purpose", label: "Objet", render: (l) => l.purpose ?? "–" },
-                    { key: "principal", label: "Montant", align: "right", render: (l) => fmtGNF(l.principal) },
-                    { key: "annual_rate", label: "Taux", align: "right", render: (l) => fmtPct(l.annual_rate, 2) },
-                    { key: "outstanding", label: "Restant dû", align: "right", render: (l) => fmtGNF(l.outstanding) },
-                    { key: "state", label: "Statut", render: (l) => <Badge tone={STATE[l.state].tone}>{STATE[l.state].label}</Badge> },
-                  ]}
-                />
+                {d.items.length === 0 && ecriture ? (
+                  <Empty title="Aucun financement enregistré" hint="Enregistrez un emprunt ou un crédit-bail : son échéancier se calcule aussitôt." action={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouveau financement</Button>} />
+                ) : (
+                  <DataTable
+                    rows={d.items}
+                    rowKey={(l) => l.id}
+                    onRowClick={(l) => setSelected(l.id)}
+                    empty="Aucun financement enregistré."
+                    columns={[
+                      { key: "name", label: "Référence" },
+                      { key: "kind", label: "Nature", render: (l) => (l.kind === "lease" ? "Crédit-bail" : "Emprunt") },
+                      { key: "lender", label: "Prêteur", render: (l) => l.lender.name },
+                      { key: "purpose", label: "Objet", render: (l) => l.purpose ?? "–" },
+                      { key: "principal", label: "Montant", align: "right", render: (l) => fmtGNF(l.principal) },
+                      { key: "annual_rate", label: "Taux", align: "right", render: (l) => fmtPct(l.annual_rate, 2) },
+                      { key: "outstanding", label: "Restant dû", align: "right", render: (l) => fmtGNF(l.outstanding) },
+                      { key: "state", label: "Statut", render: (l) => <Badge tone={STATE[l.state].tone}>{STATE[l.state].label}</Badge> },
+                    ]}
+                  />
+                )}
               </Card>
             </div>
           );
@@ -148,7 +153,7 @@ function LoanModal({ id, onClose, onChanged }: { id: number; onClose: () => void
       retenue = apres.schedule?.find((x) => x.id === ligne.id)?.settlement === "pending";
     }, `Échéance n° ${ligne.sequence} réglée.`);
     // Au-delà du seuil des décaissements, le règlement attend l'approbation : il n'est pas encore comptabilisé.
-    if (ok && retenue) envoi.setMessage({ tone: "ok", text: `Règlement de l'échéance n° ${ligne.sequence} soumis à l'approbation (À valider) : il sera comptabilisé à la dernière approbation.` });
+    if (ok && retenue) envoi.setMessage({ tone: "ok", text: `Règlement de l'échéance n° ${ligne.sequence} envoyé pour approbation (À approuver) : il sera comptabilisé à la dernière approbation.` });
   }
   const brouillon = loan?.state === "draft";
   return (

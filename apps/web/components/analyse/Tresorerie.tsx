@@ -4,7 +4,7 @@ import { type CSSProperties } from "react";
 import { Landmark } from "@/components/icons";
 import { AreaChart, Badge, Card, Compteur, DataTable, SERIES, IconTile, cx } from "@/components/ui";
 import { CarteChaleur, Eventail } from "@/components/analyse/charts";
-import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, pluriel, usePeriode, gnfOu } from "@/components/analyse/commun";
+import { AttenteSection, ErreurLecture, Chiffre, Constats, EnTeteSection, FournisseurTheme, GardeSociete, Vide, combler, fmtDate, fmtPct, fmtShort, joursOu, libelleClair, pluriel, usePeriode, gnfOu } from "@/components/analyse/commun";
 import { moisCourt } from "@/components/analyse/charts/commun";
 import { useApi } from "@/lib/api-client";
 import type { GroupeTresorerie } from "@/lib/analyse-types";
@@ -128,14 +128,14 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Cycle de conversion" className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">DSO + DIO − DPO, en jours</span>}>
+            <Card title="Cycle de conversion" className="xl:col-span-6" actions={<span className="text-[12.5px] text-muted">Délai clients + stock − délai fournisseurs, en jours</span>}>
               {cycle.length && d.cycle.months.length ? (
                 <>
-                  <AreaChart label="DSO, DPO, DIO et cycle de conversion" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={cycle.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={210} format={(v) => fmtJours(v)} formatAxis={(v) => `${fmtInt(v)}${INSECABLE}j`} />
+                  <AreaChart label="Délais clients et fournisseurs, stock et cycle de conversion" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={cycle.map((s, i) => ({ key: s.key, label: libelleClair(s.key, s.label), values: combler(s.values), color: SERIES[i % SERIES.length]! }))} height={210} format={(v) => fmtJours(v)} formatAxis={(v) => `${fmtInt(v)}${INSECABLE}j`} />
                   {bfr && (
                     <div className="mt-4 border-t border-line pt-3">
-                      <div className="mb-2 text-[12.5px] font-semibold text-ink-2">Besoin en fonds de roulement</div>
-                      <AreaChart label="BFR mensuel" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={[{ key: "bfr", label: bfr.label, values: combler(bfr.values), color: SERIES[4]! }]} height={120} format={(v) => fmtGNF(v)} />
+                      <div className="mb-2 text-[12.5px] font-semibold text-ink-2">Besoin de financement de l&apos;activité</div>
+                      <AreaChart label="Besoin de financement de l'activité, par mois" labels={d.cycle.months.map((m) => moisCourt(m, true))} series={[{ key: "bfr", label: libelleClair("bfr", bfr.label), values: combler(bfr.values), color: SERIES[4]! }]} height={120} format={(v) => fmtGNF(v)} />
                     </div>
                   )}
                   {d.cycle.definition && <p className="mt-2 text-[11.5px] leading-snug text-muted">{d.cycle.definition} Les mois sans donnée reprennent la valeur précédente.</p>}

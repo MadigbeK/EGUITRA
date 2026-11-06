@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { Plus, Trash2 } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { AnalyticFields, fromDistribution, toDistribution, useAxes, type AxisChoice } from "@/components/finance/AnalyticFields";
 import { MoveDetailModal } from "@/components/finance/MoveDetailModal";
 import { CHAMP_INVALIDE, ECRITURE_FINANCE, PagesListe, aujourdhui, enSaisie } from "@/components/finance/communPieces";
@@ -61,12 +61,12 @@ export default function EntriesPage() {
   return (
     <div>
       <PageHeader
-        title="Journaux et opérations diverses"
-        subtitle="Écritures d'OD guidées, toujours équilibrées. Les virements internes se saisissent dans Trésorerie."
+        title="Écritures comptables"
+        subtitle="Opérations diverses guidées, toujours équilibrées. Les virements internes se saisissent dans Trésorerie."
         actions={
           saisie && (
             <Button variant="primary" onClick={() => setCreating(true)} disabled={!libre}>
-              <Plus className="h-4 w-4" /> Nouvelle OD
+              <Plus className="h-4 w-4" /> Nouvelle écriture
             </Button>
           )
         }
@@ -81,6 +81,8 @@ export default function EntriesPage() {
       <Card padded={false}>
         {!data ? (
           <Etat error={error} onRetry={() => mutate()} />
+        ) : data.items.length === 0 && offset === 0 && saisie && libre ? (
+          <Empty title="Aucune écriture comptable" hint="Salaires, impôts, corrections : chaque opération diverse se saisit ici, toujours équilibrée." action={<Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouvelle écriture</Button>} />
         ) : (
           <DataTable
             rows={data.items}

@@ -9,7 +9,7 @@ export default function PurchasesGuidePage() {
     <GuideIntegre
       source={GUIDES.achats ?? ""}
       title="Guide des achats"
-      subtitle="Engager une dépense avant la commande, saisir la pièce du fournisseur par catégorie, la soumettre au circuit et suivre son état, tenir les fiches des fournisseurs."
+      subtitle="Engager une dépense avant la commande, saisir la pièce du fournisseur par catégorie, l'envoyer pour approbation et suivre son état, tenir les fiches des fournisseurs."
     />
   );
 }

@@ -78,7 +78,7 @@ function CockpitGroupe() {
         <>Le score de santé n&apos;est pas calculable sur la période</>
       )}
       {ca?.value !== null && ca?.value !== undefined && <> : {gnfOu(ca.value)} de chiffre d&apos;affaires{ca.delta_pct !== null && ` (${ca.delta_pct >= 0 ? "+" : ""}${fmtPct(ca.delta_pct)} sur un an)`}</>}
-      {ebe?.value !== null && ebe?.value !== undefined && <>, {gnfOu(ebe.value)} d&apos;EBE{ebePct?.value !== null && ebePct?.value !== undefined ? ` soit ${fmtPct(ebePct.value)}` : ""}</>}
+      {ebe?.value !== null && ebe?.value !== undefined && <>, {gnfOu(ebe.value)} d&apos;excédent brut d&apos;exploitation{ebePct?.value !== null && ebePct?.value !== undefined ? ` soit ${fmtPct(ebePct.value)}` : ""}</>}
       {cash?.value !== null && cash?.value !== undefined && <>, {gnfOu(cash.value)} de trésorerie{cash.target !== null && cash.value < cash.target ? " sous le seuil de sécurité" : ""}</>}.
       {alerte && <> Premier point d&apos;attention : {alerte.title}.</>}
     </>
@@ -191,7 +191,7 @@ function CockpitGroupe() {
               {mensuel && mensuel.months?.length > 0 && mensuel.series?.length > 0 && (
                 <div className="mt-4">
                   <AreaChart
-                    label="Chiffre d'affaires, EBE et trésorerie sur 24 mois"
+                    label="Chiffre d'affaires, excédent brut d'exploitation et trésorerie sur 24 mois"
                     labels={mensuel.months.map((m) => moisCourt(m, true))}
                     series={mensuel.series.map((s, i) => ({ key: s.key, label: s.label, values: combler(s.values), color: [SERIES[0], SERIES[2], SERIES[1]][i] ?? SERIES[i % SERIES.length]! }))}
                     height={170}

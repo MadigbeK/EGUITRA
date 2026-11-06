@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Calculator, Download, Plus, ShieldCheck } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, demanderConfirmation } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Kpi, Modal, Notice, PageHeader, Select, demanderConfirmation } from "@/components/ui";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { useEnvoi } from "@/lib/envoi";
@@ -111,23 +111,27 @@ export default function AssetsPage() {
               <Kpi label="Valeur nette comptable" value={fmtShort(d.totals.residual)} tone="accent" />
             </div>
             <Card padded={false}>
-              <DataTable
-                rows={d.items}
-                rowKey={(a) => a.id}
-                onRowClick={(a) => setSelected(a.id)}
-                empty="Aucune immobilisation."
-                columns={[
-                  { key: "name", label: "Désignation", render: (a) => (a.code ? `${a.code} ${a.name}` : a.name) },
-                  { key: "profile", label: "Catégorie", render: (a) => a.profile.name },
-                  { key: "date_start", label: "Mise en service", render: (a) => fmtDate(a.date_start) },
-                  { key: "purchase_value", label: "Valeur brute", align: "right", render: (a) => fmtGNF(a.purchase_value) },
-                  { key: "months", label: "Mois amortis", align: "right", render: (a) => (a.non_depreciable ? "–" : `${fmtInt(a.months_depreciated)} / ${fmtInt(a.months_total)}`) },
-                  { key: "depreciated", label: "Amortie", align: "right", render: (a) => fmtGNF(a.depreciated) },
-                  { key: "residual", label: "VNC", align: "right", render: (a) => fmtGNF(a.residual) },
-                  { key: "location", label: "Localisation", render: (a) => a.location ?? "–" },
-                  { key: "state", label: "Statut", render: (a) => <Badge tone={STATE[a.state][1]}>{STATE[a.state][0]}</Badge> },
-                ]}
-              />
+              {d.items.length === 0 && ecriture ? (
+                <Empty title="Aucune immobilisation" hint="Enregistrez un bien durable : véhicule, engin, bâtiment. Son plan d'amortissement se calcule aussitôt." action={<Button variant="primary" onClick={() => setModal("asset")}><Plus className="h-4 w-4" /> Nouvelle immobilisation</Button>} />
+              ) : (
+                <DataTable
+                  rows={d.items}
+                  rowKey={(a) => a.id}
+                  onRowClick={(a) => setSelected(a.id)}
+                  empty="Aucune immobilisation."
+                  columns={[
+                    { key: "name", label: "Désignation", render: (a) => (a.code ? `${a.code} ${a.name}` : a.name) },
+                    { key: "profile", label: "Catégorie", render: (a) => a.profile.name },
+                    { key: "date_start", label: "Mise en service", render: (a) => fmtDate(a.date_start) },
+                    { key: "purchase_value", label: "Valeur brute", align: "right", render: (a) => fmtGNF(a.purchase_value) },
+                    { key: "months", label: "Mois amortis", align: "right", render: (a) => (a.non_depreciable ? "–" : `${fmtInt(a.months_depreciated)} / ${fmtInt(a.months_total)}`) },
+                    { key: "depreciated", label: "Amortie", align: "right", render: (a) => fmtGNF(a.depreciated) },
+                    { key: "residual", label: "VNC", align: "right", render: (a) => fmtGNF(a.residual) },
+                    { key: "location", label: "Localisation", render: (a) => a.location ?? "–" },
+                    { key: "state", label: "Statut", render: (a) => <Badge tone={STATE[a.state][1]}>{STATE[a.state][0]}</Badge> },
+                  ]}
+                />
+              )}
             </Card>
           </div>
         )}

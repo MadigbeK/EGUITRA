@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ApercuBon } from "@/components/commerce/ApercuBon";
 import { MaSignature } from "@/components/commerce/SignatureApprobateur";
-import { Check, X } from "@/components/icons";
+import { Check, Paperclip, X } from "@/components/icons";
 import { Badge, Button, Card, DataTable, Empty, Etat, Field, Input, Modal, Notice, PageHeader, Select, Tabs, Textarea, demanderConfirmation, type Tone } from "@/components/ui";
 import { apiSend, useApi, useAutorise } from "@/lib/api-client";
 import { useEnvoi } from "@/lib/envoi";
@@ -15,7 +15,7 @@ import type { Profile } from "@/lib/types";
 const CIRCUITS_LECTURE: Profile[] = ["admin", "direction", "finance"];
 const CIRCUITS_ECRITURE: Profile[] = ["admin"];
 
-interface Req {
+export interface Req {
   id: number;
   name: string;
   document: string;
@@ -30,7 +30,10 @@ interface Req {
   pending_with: string | null;
   can_decide: boolean;
   steps?: Step[];
-  document_detail?: { name: string | null; ref?: string | null; date: string; state: string; lines?: Array<{ name: string; account: string; amount: number }> };
+  /** label : catégorie de dépense ou libellé du compte, en clair ; account : le code du compte. */
+  document_detail?: { name: string | null; ref?: string | null; date: string; state: string; lines?: Array<{ name: string; account: string; label?: string | null; amount: number }> };
+  /** Justificatifs des documents de la demande (facture, devis, proforma), ouverts par la demande elle-même. */
+  attachments?: Array<{ id: number; name: string; mimetype: string | null; size: number }>;
 }
 interface Step { sequence: number; label: string; profile: string; state: string; decided_by: string | null; decided_at: string | null; comment: string | null }
 interface Rule { id: number; name: string; document: string; document_label: string; sequence: number; min_amount: number; max_amount: number | null; account_prefix: string | null; approver_profile: string; approver_label: string; active: boolean }
@@ -52,7 +55,7 @@ const PAGE = 100;
 
 /** Ce que produit la dernière approbation d'une demande, selon sa nature. */
 const EFFET_FINAL: Record<string, string> = {
-  commitment: "L'engagement sera engagé : les pièces d'achat du fournisseur pourront le consommer.",
+  commitment: "L'engagement sera engagé : les factures du fournisseur pourront le consommer.",
   purchase_order: "Le bon de commande sera approuvé : il pourra être envoyé au fournisseur.",
   in_invoice: "La pièce sera comptabilisée.",
   payment_out: "Le règlement sera comptabilisé.",
@@ -61,9 +64,22 @@ const EFFET_FINAL: Record<string, string> = {
 };
 
 /**
- * Circuit d'approbation. « corbeille » (À valider) : demandes à trancher, demandes de l'utilisateur, toutes
- * celles qu'il voit, circuits. « demandes » (Mes demandes, profil Achats) : l'état de ses pièces d'achat et
- * de ses engagements soumis, sans corbeille ni circuits, qui ne le concernent pas.
+ * Confirmation d'une approbation. À la dernière étape (la pièce est comptabilisée, la dépense engagée,
+ * sans retour possible), toujours. Aux étapes précédentes, seulement depuis une liste (tableau de bord) :
+ * la demande n'y a pas été ouverte. `r` : la demande lue avec ses étapes (GET /approvals/<id>).
+ */
+export async function confirmerApprobation(r: Req, depuisListe = false): Promise<boolean> {
+  const derniere = (r.steps?.filter((s) => s.state === "pending").length ?? 0) === 1;
+  if (!derniere && !depuisListe) return true;
+  const question = depuisListe ? `Approuver « ${r.name} » (${fmtGNF(r.amount)}${r.partner ? `, ${r.partner}` : ""}) ?` : "Approuver la demande ?";
+  const suite = derniere ? `C'est la dernière étape du circuit : ${EFFET_FINAL[r.document] ?? "la pièce sera validée."}` : "Elle passe à l'étape suivante du circuit.";
+  return demanderConfirmation(`${question} ${suite}`, { action: "Approuver" });
+}
+
+/**
+ * Circuit d'approbation. « corbeille » (À approuver) : demandes à trancher, demandes de l'utilisateur, toutes
+ * celles qu'il voit, circuits. « demandes » (Mes demandes, profil Achats) : l'état de ses factures fournisseurs et
+ * de ses engagements envoyés, sans corbeille ni circuits, qui ne le concernent pas.
  */
 export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
   const demandes = mode === "demandes";
@@ -83,7 +99,7 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
         { key: "mine", label: "Toutes mes demandes" },
       ]
     : [
-        { key: "inbox", label: "Ma corbeille", count: inbox?.length },
+        { key: "inbox", label: "À approuver", count: inbox?.length },
         { key: "mine", label: "Mes demandes" },
         { key: "all", label: "Toutes" },
         ...(circuits ? [{ key: "rules" as const, label: "Circuits" }] : []),
@@ -91,9 +107,9 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
   return (
     <div>
       {demandes ? (
-        <PageHeader title="Mes demandes" subtitle="Vos pièces d'achat et engagements de dépense soumis au circuit d'approbation : où en est chaque demande, qui doit la viser, et le motif d'un refus." />
+        <PageHeader title="Mes demandes" subtitle="Vos factures fournisseurs et engagements de dépense envoyés pour approbation : où en est chaque demande, qui doit la viser, et le motif d'un refus." />
       ) : (
-        <PageHeader title="À valider" subtitle="Corbeille de validation : engagements de dépense, pièces d'achat, règlements et décaissements soumis au circuit d'approbation, par seuil et par niveau." />
+        <PageHeader title="À approuver" subtitle="Engagements de dépense, factures fournisseurs, règlements et décaissements qui attendent votre décision, par seuil et par niveau." />
       )}
       <Tabs tabs={onglets} value={tab} onChange={(t) => { setTab(t); setOffset(0); }} />
       {tab === "rules" && circuits ? (
@@ -105,7 +121,7 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
         <Etat error={tab === "inbox" ? erreurCorbeille : erreurListe} onRetry={() => void (tab === "inbox" ? refreshInbox() : mutate())} />
       ) : rows.length === 0 ? (
         <Card>
-          <Empty title={tab === "inbox" ? "Rien à valider" : offset ? "Aucune demande plus ancienne" : "Aucune demande"} hint={tab === "inbox" ? "Les pièces soumises à votre profil apparaîtront ici." : demandes ? "Les pièces et engagements que vous soumettez apparaîtront ici." : undefined} />
+          <Empty title={tab === "inbox" ? "Rien à approuver" : offset ? "Aucune demande plus ancienne" : "Aucune demande"} hint={tab === "inbox" ? "Les pièces à approuver par votre profil apparaîtront ici." : demandes ? "Les pièces et engagements que vous envoyez pour approbation apparaîtront ici." : undefined} />
         </Card>
       ) : (
         <Card padded={false}>
@@ -115,7 +131,7 @@ export function Approbations({ mode }: { mode: "corbeille" | "demandes" }) {
             onRowClick={(r) => setSelected(r.id)}
             columns={[
               { key: "name", label: "Demande" },
-              { key: "partner", label: "Tiers", render: (r) => r.partner ?? "–" },
+              { key: "partner", label: "Fournisseur ou bénéficiaire", render: (r) => r.partner ?? "–" },
               { key: "amount", label: "Montant", align: "right", render: (r) => fmtGNF(r.amount) },
               { key: "requested_by", label: "Demandée par" },
               { key: "requested_at", label: "Le", render: (r) => fmtDate(r.requested_at) },
@@ -155,7 +171,7 @@ function etiquetteEtape(s: Step, r: Req, courante: Step | undefined): { tone: To
   return s === courante ? { tone: "warn", text: `En attente : ${s.profile}` } : { tone: "neutral", text: `Ensuite : ${s.profile}` };
 }
 
-function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => void; onDecided: () => void }) {
+export function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => void; onDecided: () => void }) {
   const { data: r, error: erreurChargement, mutate } = useApi<Req>(`/approvals/${id}`);
   const [comment, setComment] = useState("");
   const envoi = useEnvoi();
@@ -163,9 +179,9 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
   const courante = r?.state === "pending" ? enAttente[0] : undefined;
   async function decide(action: "approve" | "reject") {
     if (!r) return;
-    if (action === "reject" && !(await demanderConfirmation("Refuser la demande ? Le demandeur la reçoit avec votre motif ; elle devra être corrigée puis soumise à nouveau.", { action: "Refuser", danger: true }))) return;
+    if (action === "reject" && !(await demanderConfirmation("Refuser la demande ? Le demandeur la reçoit avec votre motif ; elle devra être corrigée puis envoyée à nouveau.", { action: "Refuser", danger: true }))) return;
     // Dernière étape : l'approbation comptabilise la pièce, ou engage la dépense, sans retour possible.
-    if (action === "approve" && enAttente.length === 1 && !(await demanderConfirmation(`Approuver la demande ? C'est la dernière étape du circuit : ${EFFET_FINAL[r.document] ?? "la pièce sera validée."}`, { action: "Approuver" }))) return;
+    if (action === "approve" && !(await confirmerApprobation(r))) return;
     const ok = await envoi.run(action, () => apiSend("POST", `/approvals/${id}/${action}`, { comment }), action === "approve" ? "Demande approuvée." : "Demande refusée.", "Décision impossible.");
     if (ok) {
       await mutate();
@@ -202,7 +218,7 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
               <div className="font-mono font-semibold">{fmtGNF(r.amount)}</div>
             </div>
             <div>
-              <div className="text-xs text-muted">Tiers</div>
+              <div className="text-xs text-muted">Fournisseur ou bénéficiaire</div>
               <div>{r.partner ?? "–"}</div>
             </div>
             <div>
@@ -215,7 +231,37 @@ function RequestModal({ id, onClose, onDecided }: { id: number; onClose: () => v
             </div>
           </div>
           {r.document_detail?.lines && (
-            <DataTable dense rows={r.document_detail.lines} rowKey={(_l, i) => i} columns={[{ key: "name", label: "Libellé" }, { key: "account", label: "Compte" }, { key: "amount", label: "Montant", align: "right", render: (l) => fmtGNF(l.amount) }]} />
+            <DataTable
+              dense
+              rows={r.document_detail.lines}
+              rowKey={(_l, i) => i}
+              columns={[
+                { key: "name", label: "Libellé" },
+                // Catégorie ou libellé du compte en clair ; le code du compte au survol (noyau antérieur : le code seul).
+                { key: "label", label: "Catégorie", render: (l) => <span title={l.account ? `Compte ${l.account}` : undefined}>{l.label ?? l.account ?? "–"}</span> },
+                { key: "amount", label: "Montant", align: "right", render: (l) => fmtGNF(l.amount) },
+              ]}
+            />
+          )}
+          {r.attachments && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-ink-2">
+                <Paperclip className="h-3.5 w-3.5" /> Justificatifs
+              </div>
+              {r.attachments.length === 0 ? (
+                <p className="text-[12.5px] text-muted">Aucune pièce jointe au document : demandez la facture ou le devis avant d&apos;approuver.</p>
+              ) : (
+                <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                  {r.attachments.map((a) => (
+                    <li key={a.id}>
+                      <button type="button" className="text-sm text-accent underline-offset-2 hover:underline disabled:opacity-60" disabled={envoi.busy !== null} onClick={() => void envoi.telecharger(`pj${a.id}`, `/approvals/${id}/attachments/${a.id}`, a.name)}>
+                        {envoi.busy === `pj${a.id}` ? `Ouverture de ${a.name}…` : a.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           {/* Bon de commande fournisseur (eguitra_commerce) : le moteur n'en décrit pas les lignes, l'écran les lit. */}
           {r.res_model === "purchase.order" && r.res_id && <ApercuBon id={r.res_id} />}
@@ -324,7 +370,7 @@ function Rules() {
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Investissements : accord de la direction" />
             </Field>
             <Field label="Nature">
-              <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "commitment", label: "Engagements de dépense" }, { value: "purchase_order", label: "Bons de commande fournisseur" }, { value: "in_invoice", label: "Pièces d'achat" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "cash_out", label: "Décaissements de trésorerie" }, { value: "entry", label: "Opérations diverses" }]} />
+              <Select value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} options={[{ value: "commitment", label: "Engagements de dépense" }, { value: "purchase_order", label: "Bons de commande fournisseur" }, { value: "in_invoice", label: "Factures fournisseurs" }, { value: "payment_out", label: "Règlements fournisseurs" }, { value: "cash_out", label: "Décaissements de trésorerie" }, { value: "entry", label: "Opérations diverses" }]} />
             </Field>
             <Field label="Approbateur">
               <Select value={form.approver_profile} onChange={(e) => setForm({ ...form, approver_profile: e.target.value })} options={[{ value: "finance", label: "Finance" }, { value: "direction", label: "Direction générale" }, { value: "admin", label: "Administration" }]} />

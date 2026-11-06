@@ -8,7 +8,7 @@
 
 import { useState } from "react";
 import { Download, Pencil, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, Etat, Field, FileButton, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
+import { Badge, Button, Card, DataTable, Empty, Etat, Field, FileButton, Input, Modal, Notice, PageHeader, Select } from "@/components/ui";
 import { apiSend, apiUpload, useApi, useAutorise } from "@/lib/api-client";
 import { CATALOGUE_ECRITURE, type Article, type CompteC, type Referentiels } from "@/lib/commerce-types";
 import { useEnvoi } from "@/lib/envoi";
@@ -51,7 +51,9 @@ export function CataloguePage() {
           <label className="flex items-center gap-2 text-sm text-muted"><input type="checkbox" checked={inactifs} onChange={(e) => setInactifs(e.target.checked)} /> Afficher les articles retirés</label>
         </div>
         <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement du catalogue…">
-          {(rows) => (
+          {(rows) => rows.length === 0 && !search && ecriture ? (
+            <Empty title="Catalogue vide" hint="Créez un article, ou importez le modèle rempli." action={<Button variant="primary" onClick={() => setEdition("nouveau")}><Plus className="h-4 w-4" /> Nouvel article</Button>} />
+          ) : (
             <DataTable rows={rows} rowKey={(a) => a.id} onRowClick={ecriture ? (a) => setEdition(a) : undefined} empty="Catalogue vide : créez un article ou importez le modèle rempli." columns={[
               { key: "name", label: "Article", render: (a) => <div className="min-w-[200px]">{a.name}{a.code && <div className="font-mono text-[11.5px] text-muted">{a.code}</div>}</div> },
               { key: "kind", label: "Type", render: (a) => (a.kind === "service" ? "Prestation" : "Article") },

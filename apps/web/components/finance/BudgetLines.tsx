@@ -111,7 +111,7 @@ export function BudgetLines() {
       </div>
       {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
       {!current ? (
-        <Card><Empty title="Aucun budget" hint={ecriture ? "Créez le budget de l'exercice, puis ses lignes ou l'import du classeur." : "La finance n'a pas encore saisi de budget."} /></Card>
+        <Card><Empty title="Aucun budget" hint={ecriture ? "Créez le budget de l'exercice, puis ses lignes ou l'import du classeur." : "La finance n'a pas encore saisi de budget."} action={ecriture ? <Button variant="primary" onClick={() => setModal("budget")}><Plus className="h-4 w-4" /> Créer le budget</Button> : undefined} /></Card>
       ) : (
         <Etat data={data} error={error} onRetry={() => mutate()} label="Calcul de l'exécution du budget…">
           {(d) => {

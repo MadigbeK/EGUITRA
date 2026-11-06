@@ -1,6 +1,6 @@
 "use client";
 
-/** Bon de commande soumis, tel que l'approbateur le voit dans la corbeille « À valider ». */
+/** Bon de commande envoyé pour approbation, tel que l'approbateur le voit dans « À approuver ». */
 
 import { Button, DataTable, Etat, Notice } from "@/components/ui";
 import { Download } from "@/components/icons";
@@ -43,8 +43,8 @@ export function ApercuBon({ id }: { id: number }) {
             <p className="text-[12.5px] text-muted">Aucune pièce jointe (devis, proforma) : à vérifier au contrôle.</p>
           )}
           <DataTable dense rows={(o.lines ?? []).filter((l) => l.display_type === "product")} rowKey={(l) => l.id} columns={[
-            { key: "name", label: "Désignation", render: (l) => <div>{l.name}{l.category && <div className="text-[11.5px] text-muted">{l.category.name}</div>}</div> },
-            { key: "account", label: "Compte", render: (l) => l.account?.code ?? "Article" },
+            { key: "name", label: "Désignation", render: (l) => l.name },
+            { key: "account", label: "Catégorie", render: (l) => <span title={l.account?.code ? `Compte ${l.account.code}` : undefined}>{l.category?.name ?? l.account?.name ?? "Article du catalogue"}</span> },
             { key: "quantity", label: "Qté", align: "right", render: (l) => `${fmtDec(l.quantity)} ${l.uom?.name ?? ""}` },
             { key: "price_unit", label: "PU HT", align: "right", render: (l) => fmtInt(l.price_unit) },
             { key: "price_subtotal", label: "HT", align: "right", render: (l) => fmtInt(l.price_subtotal) },

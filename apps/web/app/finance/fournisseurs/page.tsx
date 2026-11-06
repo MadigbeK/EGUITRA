@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Pencil, Plus } from "@/components/icons";
-import { Button, Card, DataTable, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader } from "@/components/ui";
+import { Button, Card, DataTable, Empty, ErrorBox, Field, Input, Loading, Modal, Notice, PageHeader } from "@/components/ui";
 import { MoveStatus } from "@/components/finance/MovesPage";
 import { CREATION_TIERS, MODIFICATION_TIERS, PagesListe } from "@/components/finance/communPieces";
 import { ApiError, apiSend, useApi, useAutorise } from "@/lib/api-client";
@@ -57,6 +57,8 @@ export default function SuppliersPage() {
         )}
         {!data ? (
           !error && isLoading && <Loading />
+        ) : data.items.length === 0 && !search && offset === 0 && creation ? (
+          <Empty title="Aucun fournisseur" hint="Créez la fiche du fournisseur : raison sociale, NIF et coordonnées suffisent pour commencer." action={<Button variant="primary" onClick={() => setEditing("new")}><Plus className="h-4 w-4" /> Nouveau fournisseur</Button>} />
         ) : (
           <DataTable
             rows={data?.items ?? []}
@@ -132,12 +134,12 @@ function SupplierModal({ id, onClose, onEdit }: { id: number; onClose: () => voi
             <div>{[p.street, p.city].filter(Boolean).join(", ") || "–"}</div>
             <div>Paiement : {p.supplier_payment_term?.name ?? "selon la société"}</div>
           </div>
-          <Card title="Pièces d'achat récentes" padded={false}>
+          <Card title="Factures récentes" padded={false}>
             <DataTable
               dense
               rows={p.recent_moves}
               rowKey={(m) => m.id}
-              empty="Aucune pièce d'achat."
+              empty="Aucune facture fournisseur."
               columns={[
                 { key: "name", label: "Pièce", render: (m) => m.name ?? "Brouillon" },
                 { key: "ref", label: "Référence", render: (m) => m.ref ?? "–" },

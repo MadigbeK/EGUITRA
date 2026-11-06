@@ -36,7 +36,7 @@ export function AchatsEngagement({ commitmentId, onChanged }: { commitmentId: nu
         <div className="space-y-4">
           {envoi.message && <Notice tone={envoi.message.tone}>{envoi.message.text}</Notice>}
           <Card title="Devis fournisseurs comparés" padded={false} actions={saisie && d.editable ? <Button size="sm" onClick={() => setAjout(true)}><Plus className="h-4 w-4" /> Ajouter un devis</Button> : undefined}>
-            {d.quotes_required > 0 && <div className="px-4 pt-3"><Notice tone={d.quotes.length >= d.quotes_required ? "neutral" : "warn"}>Au-delà de {fmtGNF(d.threshold)} HT : {d.quotes_required} devis de fournisseurs différents au moins, et le devis retenu motivé, avant la soumission ({d.quotes.length} joint{d.quotes.length > 1 ? "s" : ""}).</Notice></div>}
+            {d.quotes_required > 0 && <div className="px-4 pt-3"><Notice tone={d.quotes.length >= d.quotes_required ? "neutral" : "warn"}>Au-delà de {fmtGNF(d.threshold)} HT : {d.quotes_required} devis de fournisseurs différents au moins, et le devis retenu motivé, avant l&apos;envoi pour approbation ({d.quotes.length} joint{d.quotes.length > 1 ? "s" : ""}).</Notice></div>}
             <DataTable dense rows={d.quotes} rowKey={(q) => q.id} empty="Aucun devis comparé : facultatif sous le seuil des trois devis." columns={[
               { key: "partner", label: "Fournisseur", render: (q) => <div>{q.partner.name}{q.reference && <div className="text-[11.5px] text-muted">{q.reference}</div>}</div> },
               { key: "amount", label: "HT (GNF)", align: "right", render: (q) => fmtInt(q.amount) },

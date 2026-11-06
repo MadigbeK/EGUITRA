@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Pencil, Plus } from "@/components/icons";
-import { Badge, Button, Card, DataTable, ErrorBox, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
+import { Download, Pencil, Plus, X } from "@/components/icons";
+import { Badge, Button, Card, DataTable, Empty, ErrorBox, Etat, Field, FileButton, Input, Kpi, Modal, Notice, PageHeader, ProgressBar, Select, Tabs, Textarea, demanderConfirmation } from "@/components/ui";
 import { AchatsEngagement } from "@/components/commerce/DevisEngagement";
 import { PartnerPicker } from "@/components/finance/PartnerPicker";
 import { PROFILS_FINANCE, apiSend, apiUpload, useAchatsSeul, useApi, useAutorise } from "@/lib/api-client";
@@ -63,19 +63,27 @@ export default function EngagementsPage() {
     <div>
       <PageHeader
         title="Engagements de dépense"
-        subtitle="Une dépense s'approuve avant la commande ; les pièces d'achat la consomment sans repasser par le circuit, dans la limite de l'engagement."
+        subtitle="Une dépense s'approuve avant la commande ; les factures fournisseurs la consomment sans repasser par le circuit, dans la limite de l'engagement."
         actions={saisie ? <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouvel engagement</Button> : undefined}
       />
       {tab === "open" && data && (
         <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Kpi label="Engagements en cours" value={fmtInt(engaged.length)} />
           <Kpi label="Montant engagé (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.amount, 0))} />
-          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} hint="Engagé moins pièces d'achat comptabilisées" />
+          <Kpi label="Reste à engager (HT)" value={fmtShort(engaged.reduce((a, c) => a + c.remaining, 0))} hint="Engagé moins factures fournisseurs comptabilisées" />
         </div>
       )}
-      <Tabs tabs={[{ key: "open", label: "En cours" }, { key: "pending", label: "À soumettre ou en approbation" }, { key: "all", label: "Tous" }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ key: "open", label: "En cours" }, { key: "pending", label: "À envoyer ou en approbation" }, { key: "all", label: "Tous" }]} value={tab} onChange={setTab} />
       <Etat data={data} error={error} onRetry={() => mutate()} label="Chargement des engagements…">
-        {(rows) => (
+        {(rows) => rows.length === 0 && tab !== "pending" ? (
+          <Card>
+            <Empty
+              title={tab === "open" ? "Aucun engagement en cours" : "Aucun engagement"}
+              hint="Une dépense importante s'approuve avant la commande : saisissez son engagement, avec le devis du fournisseur."
+              action={saisie ? <Button variant="primary" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> Nouvel engagement</Button> : undefined}
+            />
+          </Card>
+        ) : (
           <Card padded={false}>
             <DataTable rows={rows} rowKey={(c) => c.id} onRowClick={(c) => setSelected(c.id)} empty="Aucun engagement." columns={[
               { key: "name", label: "Engagement", render: (c) => <div className="min-w-[200px]"><b>{c.name}</b> {c.object}<div className="text-[12px] text-muted">{c.partner.name}{c.account ? ` · ${c.account.code}` : " · compte à préciser"}</div></div> },
@@ -126,6 +134,10 @@ function CommitmentForm({ commitment, onClose, onDone, onChanged }: { commitment
   const erreurMontant = nombreIllisible(f.amount) ? AIDE_NOMBRE : montant !== null && montant <= 0 ? "Montant positif attendu." : undefined;
   const ready = Boolean(partner && f.object.trim() && montant !== null && montant > 0);
   const categorie = f.category_id ?? categorieInitiale;
+  // Devis choisi dans la fenêtre (création) : joint juste après l'enregistrement, avant l'envoi pour approbation.
+  const [devis, setDevis] = useState<File | null>(null);
+  // Engagement créé par cette fenêtre dont le devis ou l'envoi a échoué : un nouvel essai le modifie.
+  const [creeId, setCreeId] = useState<number | null>(null);
 
   function corps(): Record<string, unknown> {
     const body: Record<string, unknown> = {
@@ -140,16 +152,25 @@ function CommitmentForm({ commitment, onClose, onDone, onChanged }: { commitment
   }
 
   async function enregistrer(soumettre: boolean) {
-    let id: number | null = commitment?.id ?? null;
+    let id: number | null = commitment?.id ?? creeId;
     const ok = await envoi.run(soumettre ? "soumettre" : "enregistrer", async () => {
-      if (commitment) {
-        await apiSend("PATCH", `/finance/commitments/${commitment.id}`, corps());
-        onChanged?.();
-        // Modifications enregistrées : un refus de la soumission s'affiche ici, l'engagement reste en brouillon.
-        if (soumettre) await apiSend("POST", `/finance/commitments/${commitment.id}/submit`);
+      if (id === null) {
+        // Avec un devis, l'engagement naît en brouillon : le devis le rejoint avant l'envoi pour approbation.
+        id = (await apiSend<Commitment>("POST", "/finance/commitments", { ...corps(), submit: soumettre && !devis })).id;
+        if (!devis) return;
+        setCreeId(id);
       } else {
-        id = (await apiSend<Commitment>("POST", "/finance/commitments", { ...corps(), submit: soumettre })).id;
+        await apiSend("PATCH", `/finance/commitments/${id}`, corps());
+        onChanged?.();
       }
+      // Modifications enregistrées : un refus du devis ou de l'envoi s'affiche ici, l'engagement reste en brouillon.
+      if (devis) {
+        const form = new FormData();
+        form.append("file", devis);
+        await apiUpload(`/finance/commitments/${id}/quote`, form);
+        setDevis(null);
+      }
+      if (soumettre) await apiSend("POST", `/finance/commitments/${id}/submit`);
     }, undefined, "Enregistrement impossible.");
     if (ok && id !== null) onDone(id);
   }
@@ -158,10 +179,10 @@ function CommitmentForm({ commitment, onClose, onDone, onChanged }: { commitment
   if (commitment?.account && !optionsComptes.some((a) => a.id === commitment.account?.id)) optionsComptes.unshift(commitment.account);
   const erreurListe = charges.error ?? immobilisations.error ?? categories.error;
   return (
-    <Modal open wide title={commitment ? `Modifier ${commitment.name}` : "Nouvel engagement de dépense"} onClose={onClose} footer={
+    <Modal open wide title={commitment ? `Modifier ${commitment.name}` : "Nouvel engagement de dépense"} onClose={() => (creeId !== null ? onDone(creeId) : onClose())} footer={
       <div className="flex gap-2">
-        <Button loading={envoi.busy === "enregistrer"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(false)}>{commitment ? "Enregistrer" : "Enregistrer en brouillon"}</Button>
-        <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(true)}>{commitment ? "Enregistrer et soumettre" : "Soumettre à l'approbation"}</Button>
+        <Button loading={envoi.busy === "enregistrer"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(false)}>Enregistrer</Button>
+        <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!ready || !!envoi.busy} onClick={() => void enregistrer(true)}>Envoyer pour approbation</Button>
       </div>
     }>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -181,10 +202,24 @@ function CommitmentForm({ commitment, onClose, onDone, onChanged }: { commitment
         ) : null}
         <Field label="Livraison ou exécution prévue"><Input type="date" value={f.date_expected} onChange={(e) => setF({ ...f, date_expected: e.target.value })} /></Field>
         <Field label="Justification" className="md:col-span-2"><Textarea value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
+        {!commitment && (
+          <div className="space-y-1.5 md:col-span-2">
+            <span className="block text-[13px] font-medium">Devis ou facture proforma du fournisseur</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <FileButton small label={devis ? "Changer de fichier" : "Joindre le devis"} accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={setDevis} />
+              {devis && (
+                <span className="inline-flex min-w-0 items-center gap-1 text-sm">
+                  <span className="truncate">{devis.name}</span>
+                  <button type="button" className="text-muted hover:text-danger" onClick={() => setDevis(null)} aria-label={`Retirer ${devis.name}`}><X className="h-3.5 w-3.5" /></button>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         <p className="text-[12px] text-muted md:col-span-2">
-          {commitment ? "Le devis se remplace depuis la fiche de l'engagement." : "Le devis se joint après l'enregistrement."}
+          {commitment ? "Le devis se remplace depuis la fiche de l'engagement." : "Envoyé avec l'engagement : l'approbateur le voit. PDF, image, Word ou Excel, 20 Mo au plus."}
           {pret && !achats && !comptes && " La finance précise le compte de charge ou d'immobilisation ; tant qu'il manque, l'engagement suit aussi les règles d'approbation réservées à certains comptes, comme les investissements."}
-          {" "}L&apos;engagement suit les seuils d&apos;approbation des engagements{comptes && " (À valider > Circuits)"}.
+          {" "}L&apos;engagement suit les seuils d&apos;approbation des engagements{comptes && " (À approuver > Circuits)"}.
         </p>
       </div>
     </Modal>
@@ -242,7 +277,7 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
                 <FileButton small label={c.quote ? "Remplacer le devis" : "Joindre le devis"} accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onFile={(file) => { const form = new FormData(); form.append("file", file); void agir("devis", () => apiUpload(`/finance/commitments/${c.id}/quote`, form), "Devis joint."); }} />
               ))}
             </div>
-            <Card title="Pièces d'achat rattachées" padded={false}>
+            <Card title="Factures fournisseurs rattachées" padded={false}>
               <DataTable dense rows={c.moves ?? []} rowKey={(m) => m.id} empty="Aucune pièce : rattachez la facture du fournisseur à cet engagement à sa saisie." columns={[
                 { key: "name", label: "Pièce", render: (m) => m.name ?? "Brouillon" },
                 { key: "ref", label: "Référence", render: (m) => m.ref ?? "–" },
@@ -257,11 +292,11 @@ function CommitmentDetail({ id, onClose, onChanged }: { id: number; onClose: () 
               {saisie && (c.state === "draft" || c.state === "rejected") && (
                 <>
                   <Button disabled={!!envoi.busy} onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /> Modifier</Button>
-                  <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!!envoi.busy} onClick={() => void agir("soumettre", () => apiSend("POST", `/finance/commitments/${c.id}/submit`), "Engagement soumis à l'approbation.")}>Soumettre à l&apos;approbation</Button>
+                  <Button variant="primary" loading={envoi.busy === "soumettre"} disabled={!!envoi.busy} onClick={() => void agir("soumettre", () => apiSend("POST", `/finance/commitments/${c.id}/submit`), "Engagement envoyé pour approbation.")}>Envoyer pour approbation</Button>
                 </>
               )}
               {c.state === "approved" && soldeur && (
-                <Button loading={envoi.busy === "solder"} disabled={!!envoi.busy} onClick={async () => { if (await demanderConfirmation("Solder l'engagement ? Plus aucune pièce d'achat ne pourra s'y rattacher.", { action: "Solder", danger: true })) void agir("solder", () => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé."); }}>Solder</Button>
+                <Button loading={envoi.busy === "solder"} disabled={!!envoi.busy} onClick={async () => { if (await demanderConfirmation("Solder l'engagement ? Plus aucune facture fournisseur ne pourra s'y rattacher.", { action: "Solder", danger: true })) void agir("solder", () => apiSend("POST", `/finance/commitments/${c.id}/close`), "Engagement soldé."); }}>Solder</Button>
               )}
               {saisie && ["draft", "submitted", "rejected", "approved"].includes(c.state) && (
                 <Button variant="danger" loading={envoi.busy === "annuler"} disabled={!!envoi.busy} onClick={async () => { if (await demanderConfirmation("Annuler l'engagement ? Sa demande d'approbation en cours est abandonnée et il ne pourra plus être engagé.", { action: "Annuler l'engagement", danger: true })) void agir("annuler", () => apiSend("POST", `/finance/commitments/${c.id}/cancel`), "Engagement annulé."); }}>Annuler l&apos;engagement</Button>

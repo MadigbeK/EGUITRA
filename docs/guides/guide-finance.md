@@ -22,7 +22,7 @@ ne la retapez jamais. Les pièces d'achat passent par le circuit d'approbation s
 | Un bien amortissable | Comptabilité > Immobilisations | Les dotations échues sont comptabilisées chaque nuit. |
 | Un nouvel emprunt ou crédit-bail | Comptabilité > Dette et financement | Renseigner l'objet, le compte de dette, le compte d'intérêts et le journal, puis « Mettre en service ». |
 | Le déblocage d'un emprunt | Comptabilité > Trésorerie, type « Déblocage d'emprunt » | Désigner le financement : l'entrée de banque crédite son compte de dette. |
-| Une écriture diverse | Comptabilité > Journaux et OD | À-nouveaux et régularisations seulement ; droit « Saisie libre des comptes ». |
+| Une écriture diverse | Comptabilité > Écritures comptables | À-nouveaux et régularisations seulement ; droit « Saisie libre des comptes ». |
 | Un budget | Pilotage > Activités et budget | Un montant par compte et par mois ; le réalisé se compare au budget cumulé. |
 
 ## Trois règles à ne jamais enfreindre
@@ -92,7 +92,7 @@ adresse `/transport`) ; l'ancienne entrée Finance > Métiers > Transport y mèn
   période, compte de charge, refacturation avec ou sans TVA).
 - À la facturation : la déduction du manquant et les taxes refacturées s'ajoutent à la facture du
   client ; la créance sur un chauffeur devient une opération diverse en brouillon, à valider dans
-  Journaux et OD (un chauffeur sans fiche tiers est signalé dans les contrôles).
+  Écritures comptables (un chauffeur sans fiche tiers est signalé dans les contrôles).
 - Taxes spécifiques : état mensuel par nature, rapproché des montants comptabilisés sur les comptes
   du barème, export XLSX.
 - Rentabilité : imputer les achats de la flotte (carburant, pneumatiques, entretien) sur
@@ -187,7 +187,7 @@ opération diverse ; une catégorie d'investissement crée l'immobilisation à l
   À la clôture, le solde des relevés doit égaler le solde comptable.
 - Virements entre comptes : passent par le compte de passage 585, qui doit être soldé.
 
-## Tiers (Comptabilité > Tiers)
+## Clients et fournisseurs (Comptabilité > Clients et fournisseurs)
 
 Fiches clients et fournisseurs : code, NIF, RCCM, secteur, contact, conditions de paiement (délai,
 fin de mois) côté client et côté fournisseur, non-assujettissement à la TVA, retenues à la source par
@@ -195,7 +195,7 @@ défaut, limites de crédit, encours et historique. La vue « Balance âgée » 
 comme pour les fournisseurs, l'ancienneté par tranche avec le nombre de pièces, et l'encours de
 chaque tiers avec son retard maximal et son statut : à jour, retard, contentieux (plus de 90 jours).
 
-## Journaux et OD (Comptabilité > Journaux et OD)
+## Écritures comptables (Comptabilité > Écritures comptables)
 
 Écritures d'opérations diverses guidées et équilibrées, imputées sur les axes analytiques (comptes
 des classes 2, 6, 7 et 8) ; consultation des journaux. Chaque ligne d'une OD porte un compte choisi :
@@ -309,7 +309,7 @@ verrouillage définitif.
    antérieures) tant qu'elle n'atteint pas le cinquième du capital.
 4. **Valider l'OD.** La plateforme crée l'OD « Affectation du résultat AAAA » en brouillon, dans le
    journal des opérations diverses, en contrepartie du compte 999999. Ouvrez-la (dans le bloc ou
-   dans Journaux et OD), joignez le procès-verbal de l'assemblée, puis « Valider » : elle suit le
+   dans Écritures comptables), joignez le procès-verbal de l'assemblée, puis « Valider » : elle suit le
    circuit d'approbation des OD. Une fois validée, le report à nouveau du bilan passe en réserves,
    en report à nouveau décidé et en dividendes à payer, sans déséquilibre. Pour corriger un
    brouillon, supprimez-le et recommencez ; une seconde OD n'est acceptée que pour un reste à

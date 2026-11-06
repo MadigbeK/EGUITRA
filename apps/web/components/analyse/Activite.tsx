@@ -182,7 +182,7 @@ function Corps() {
           </div>
 
           <div className="grid gap-5 xl:grid-cols-12">
-            <Card title="Honoraires par ligne de service" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Créances {gnfOu(d.revenue.receivables.open)}, dont {fmtShort(d.revenue.receivables.overdue)} échues{d.revenue.receivables.dso_days !== null ? ` · DSO ${joursOu(d.revenue.receivables.dso_days)}` : ""}</span>}>
+            <Card title="Honoraires par ligne de service" className="xl:col-span-7" actions={<span className="text-[12.5px] text-muted">Créances {gnfOu(d.revenue.receivables.open)}, dont {fmtShort(d.revenue.receivables.overdue)} échues{d.revenue.receivables.dso_days !== null ? ` · délai moyen d'encaissement ${joursOu(d.revenue.receivables.dso_days)}` : ""}</span>}>
               {d.revenue.monthly.series.length && d.revenue.monthly.months.length ? (
                 <>
                   <AreaChart label="Honoraires mensuels par ligne de service" labels={d.revenue.monthly.months.map((m) => moisCourt(m, true))} series={d.revenue.monthly.series.map((x, i) => ({ key: x.key, label: x.label, values: combler(x.values), color: SERIES[i % SERIES.length]! }))} height={230} format={(v) => fmtGNF(v)} />
