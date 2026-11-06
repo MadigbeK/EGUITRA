@@ -2,9 +2,10 @@
 
 NIMOVA · MB AxisPro Consulting, l'application du cabinet MB AxisPro Consulting.
 
-Dossiers, évaluation par critère et par gate, compartiments, comité et décision scellée à deux,
-data room, plan d'actions, financements, modèle financier, temps et honoraires, équipe et accès
-des porteurs, outils du portail des porteurs, relances des porteurs, lecture du business plan.
+Parcours d'un projet en sept étapes selon la méthode SC-01 V2.0 (partie H), dossiers de l'ancienne
+méthode et outils du cabinet : évaluation par critère et par gate, compartiments, comité et décision
+scellée à deux, data room, plan d'actions, financements, modèle financier, temps et honoraires, équipe
+et accès des porteurs, outils du portail des porteurs, relances des porteurs, lecture du business plan.
 
 | Rubrique {28} | À remplir {72} |
 |---|---|
@@ -17,8 +18,8 @@ des porteurs, outils du portail des porteurs, relances des porteurs, lecture du 
 | Compte de test | ______ |
 | Société | MB AxisPro Consulting |
 
-Document préparé par E-VOLUTION XP le 26 octobre 2026, d'après les écrans de la plateforme à cette
-date.
+Document préparé par E-VOLUTION XP le 26 octobre 2026 et mis à jour le 6 novembre 2026, d'après les
+écrans de la plateforme à cette date.
 
 <!-- saut de page -->
 
@@ -35,10 +36,11 @@ compris les erreurs.
 2. Deux consultants. Une décision du comité, un passage de gate forcé et la réouverture d'un dossier
    décidé engagent toujours au moins deux personnes : ces scénarios se jouent avec test.consultant
    et test.associe, deux testeurs ou deux navigateurs.
-3. Jouer un scénario. Suivez les étapes dans l'ordre, avec les données indiquées. Un scénario à deux
-   comptes se joue dans deux navigateurs (Chrome et Edge) ou sur deux postes. Travaillez sur le
-   dossier ouvert pour le test (AXP-02), pas sur les dossiers de démonstration, sauf mention
-   contraire.
+3. Jouer un scénario. Commencez par la partie H : c'est le parcours de référence depuis le 6 novembre
+   2026 (cahier des charges et outil SC-01 V2.0). Les parties A à G vérifient les dossiers de
+   l'ancienne méthode et les outils communs : un « outil » s'ouvre par le bouton « Outils du cabinet »,
+   en haut de la page du dossier. Suivez les étapes dans l'ordre, avec les données indiquées. Un
+   scénario à deux comptes se joue dans deux navigateurs (Chrome et Edge) ou sur deux postes.
 4. Noter le résultat. Cochez « Réussi » si l'écran correspond au résultat attendu, sinon « Échoué ».
    Dans « Remarques », notez ce qui diffère : l'écran, le message affiché, l'heure.
 5. Signaler une anomalie. Menu du compte (rond à vos initiales, en haut à droite) > « Mes demandes »
@@ -51,60 +53,65 @@ compris les erreurs.
 
 | Compte {20} | Profil {16} | Société {26} | Rôle dans ce cahier {38} |
 |---|---|---|---|
-| test.consultant | Cabinet | MB AxisPro Consulting | consultant, responsable des dossiers qu'il ouvre |
-| test.associe | Cabinet | MB AxisPro Consulting | associé : second regard, compartiments, comité |
-| test.dg | Direction | les deux | consultation du portefeuille |
+| test.consultant | Cabinet | MB AxisPro Consulting | évaluateur : voit ses projets seulement |
+| test.associe | Cabinet | MB AxisPro Consulting | associé : voit tout, second regard, comité |
+| test.dg | Direction | les deux | consultation du portefeuille, comité |
+| test.lecteur | Lecteur | MB AxisPro Consulting | consultation sans aucune modification |
 | test.porteur | Porteur | MB AxisPro Consulting | vérification côté portail |
 | test.daf | Finance | les deux | refus, facture d'honoraires |
+| test.auditeur | Auditeur HSSEQ | EGUITRA GROUP SARLU | refus : aucun accès au cabinet |
 
-Données fictives utiles : dossiers « Usine de briques compressées (démo) » (promoteur « Démo -
-Briqueterie de Kindia SARL ») et « Unité de séchage de mangues (démo) » (promoteur « Démo - Vergers
-de Mamou SA », suivi au portail par test.porteur).
+Données fictives utiles, toutes en ancienne méthode : dossiers « Usine de briques compressées (démo) »
+(promoteur « Démo - Briqueterie de Kindia SARL », responsable hors des comptes de test : seuls
+test.associe et la direction le voient), « Unité de séchage de mangues (démo) » (promoteur « Démo -
+Vergers de Mamou SA », suivi au portail par test.porteur) et « Centrale solaire de Kindia
+(démonstration) ».
 
-## A. Consultant du cabinet
+## A. Consultant du cabinet (ancienne méthode et outils)
 
 ### AXP-01. Lire le portefeuille des dossiers
 
-Objectif : vérifier que l'accueil donne l'état du portefeuille et des recommandations.
+Objectif : vérifier que l'accueil donne l'état des projets de l'évaluateur et ce qu'il faut traiter.
 
 Compte : test.consultant.
 
 Données : aucune.
 
-1. Ouvrez NIMOVA · MB AxisPro Consulting : la page « Dossiers de projets » s'affiche.
-2. Lisez la grille en vigueur (« Évaluation selon … »), les chiffres clés, l'« Entonnoir des dossiers
-   par étape » et les « Recommandations ».
-3. Passez de « Tableau » à « Liste ».
+1. Ouvrez NIMOVA · MB AxisPro Consulting : la page « Bonjour Test, voici l'état de vos projets »
+   s'affiche.
+2. Lisez les chiffres clés (« Projets suivis », « Promoteurs à relancer », « Bloqués par un
+   knock-out », « Prêts pour le comité »), puis « À relancer aujourd'hui » et « Projets par gate ».
+3. Cliquez sur « Ouvrir le portefeuille ».
 
-Résultat attendu : les dossiers apparaissent par étape (« Tableau ») ou en lignes (« Liste ») avec
-leurs scores, leur prochain gate et leur besoin de financement.
+Résultat attendu : l'accueil rappelle la méthode en vigueur (SC-01 V2 : 111 critères, 9 knock-out,
+8 gates). Le portefeuille liste les projets de test.consultant avec leur N°, leurs scores et leur
+suivi. « Usine de briques compressées (démo) », confié à un autre responsable, n'y figure pas.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
 | ☐ Réussi | |
 | ☐ Échoué | |
 
-### AXP-02. Ouvrir un dossier
+### AXP-02. Ouvrir un dossier de l'ancienne méthode et ses outils
 
-Objectif : vérifier l'ouverture d'un dossier, sa référence et son responsable.
+Objectif : vérifier qu'un dossier de l'ancienne méthode garde ses écrans, sa référence et son
+responsable. Un nouveau projet suit toujours la méthode SC-01 V2.0 (AXP-42) : dans les parties A à
+G, « le dossier de AXP-02 » désigne donc le dossier ci-dessous.
 
 Compte : test.consultant.
 
-Données : projet « Unité de transformation de manioc (essai) » ; promoteur « Essai Agro Forécariah
-SARL » (à créer depuis le champ) ; secteur agro-industrie ; localisation Forécariah ; devise GNF ;
-investissement 4 500 000 000 ; besoin de financement 3 000 000 000.
+Données : le dossier « Centrale solaire de Kindia (démonstration) ».
 
-1. Cliquez sur « Nouveau dossier ». La fenêtre « Ouverture d'un dossier » s'ouvre.
-2. Remplissez « Projet », « Promoteur », « Secteur », « Localisation », « Devise du dossier »,
-   « Date d'évaluation », l'investissement prévu et le besoin de financement.
-3. Cliquez sur « Ouvrir le dossier ».
-4. Dans l'onglet « Synthèse », lisez le cadre « Équipe et accès du porteur au portail ».
+1. Dans le portefeuille, ouvrez le dossier : la barre des sept étapes s'affiche.
+2. Cliquez sur « Outils du cabinet » et lisez la liste.
+3. Choisissez « Compartiments et équipe » et lisez le cadre « Équipe et accès du porteur au
+   portail ».
 
-Résultat attendu : le dossier reçoit une référence AX/… et s'ouvre sur l'onglet « Synthèse ». Les
-onglets sont « Synthèse », « Évaluation », « Stage gates », « Modèle financier », « Risques »,
-« Actions », « Financements », « Data room », « Comités », « Journal », « Échanges », « Rapport » et
-« Temps ». Le cadre indique « Responsable du dossier : Test - Consultant du cabinet » et « Aucun
-accès ouvert. ».
+Résultat attendu : le dossier porte une référence AX/…. Les outils sont « Modèle financier »,
+« Risques », « Plan d'actions », « Financements », « Journal », « Messages », « Temps passés »,
+« Compartiments et équipe », « Grille complète », « Stage gates », « Pièces standard », « Suivi des
+relances », « Revues scellées » et « Rapports ». Le cadre indique « Responsable du dossier : Test -
+Consultant du cabinet ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -119,7 +126,7 @@ Compte : test.consultant.
 
 Données : le dossier de AXP-02 ; cinq critères du premier gate.
 
-1. Ouvrez l'onglet « Évaluation ». Le mode « Saisie guidée » montre les critères des gates atteints,
+1. Ouvrez l'outil « Grille complète ». Le mode « Saisie guidée » montre les critères des gates atteints,
    les non évalués d'abord.
 2. Donnez un statut à cinq critères : « Disponible », « Incomplet », « Non disponible », « Non
    applicable ».
@@ -150,7 +157,7 @@ fin de l'année prochaine.
 2. Déclarez un knock-out « Disponible » sans pièce. Lisez l'encadré sous la ligne.
 3. Ouvrez « Détails, preuves et suivi », choisissez la date de « Validité », puis « Joindre une
    preuve » et le PDF.
-4. Ouvrez l'onglet « Data room ».
+4. Ouvrez l'outil « Pièces standard ».
 
 Résultat attendu : à l'étape 2, l'encadré indique « Retenu incomplet / à actualiser par la politique :
 … », la saisie restant « Disponible ». À l'étape 3, « Preuve « … » rattachée à … » ; le critère est
@@ -169,7 +176,7 @@ Compte : test.consultant.
 
 Données : le dossier de AXP-02 ; deux statuts modifiés dans le classeur.
 
-1. Onglet « Évaluation », « Fiche d'évaluation » : le classeur se télécharge.
+1. Outil « Grille complète », « Fiche d'évaluation » : le classeur se télécharge.
 2. Dans Excel, changez le statut de deux critères ; enregistrez.
 3. « Importer une fiche », choisissez le classeur.
 4. Lisez l'aperçu des changements (colonnes « Critère », « Avant », « Après »), puis « Appliquer 2
@@ -192,7 +199,7 @@ Compte : test.consultant.
 
 Données : le dossier de AXP-02.
 
-1. Ouvrez l'onglet « Stage gates ». Lisez le « Parcours du dossier » et, pour le gate en cours, sa
+1. Ouvrez l'outil « Stage gates ». Lisez le « Parcours du dossier » et, pour le gate en cours, sa
    décision, ses « Exigences d'entrée », ses « Livrables attendus » et ses « Critères de passage ».
 2. Cliquez sur « Passer au gate suivant ».
 3. Si la fenêtre « Passage contre la règle du gate » s'ouvre, lisez les motifs, puis « Annuler ».
@@ -211,11 +218,11 @@ suivant. ». Un passage contraire à la règle ouvre la fenêtre, qui demande un
 
 Objectif : vérifier que le modèle se recalcule en quittant une case.
 
-Compte : test.consultant.
+Compte : test.associe.
 
 Données : le dossier « Usine de briques compressées (démo) » ; prix unitaire augmenté de 10 %.
 
-1. Ouvrez l'onglet « Modèle financier ». Notez « VAN du projet », « TRI du projet » et le DSCR
+1. Ouvrez l'outil « Modèle financier ». Notez « VAN du projet », « TRI du projet » et le DSCR
    minimal.
 2. Dans le tableau des produits, modifiez « Prix unitaire », puis cliquez ailleurs (ou Entrée).
 3. Relisez les indicateurs, puis cliquez sur « Export XLSX ».
@@ -237,13 +244,13 @@ Compte : test.consultant.
 Données : risque « Retard de livraison des presses (essai) » ; probabilité et impact élevés ;
 traitement confié au porteur.
 
-1. Onglet « Risques », cadre « Nouveau risque » : remplissez « Risque », « Catégorie »,
+1. Outil « Risques », cadre « Nouveau risque » : remplissez « Risque », « Catégorie »,
    « Responsable du traitement », « Probabilité », « Impact » et « Mesures d'atténuation », puis
    « Enregistrer ».
 2. Repérez le risque dans la « Matrice probabilité × impact ».
 3. Ouvrez le risque, renseignez « Probabilité après traitement » et « Impact après traitement »,
    puis cliquez sur « Créer l'action de traitement ». Lisez la fenêtre, puis « Créer l'action ».
-4. Ouvrez l'onglet « Actions ».
+4. Ouvrez l'outil « Plan d'actions ».
 
 Résultat attendu : le risque figure au registre avec sa criticité avant et après traitement. La
 fenêtre prévient que l'action, confiée au porteur, lui sera notifiée sur le portail. L'action
@@ -263,7 +270,7 @@ Compte : test.consultant (puis test.porteur au portail).
 Données : le dossier « Unité de séchage de mangues (démo) » ; action « Fournir les devis des presses
 (essai) », confiée au porteur, échéance dans quinze jours.
 
-1. Onglet « Actions », « Créer depuis les écarts prioritaires ».
+1. Outil « Plan d'actions », « Créer depuis les écarts prioritaires ».
 2. Cadre « Nouvelle action » : « Action », « Confiée à » (porteur), « Échéance », « Détail attendu »,
    puis « Ajouter ».
 3. test.porteur déclare l'action faite au portail (cahier du portail, POR-07).
@@ -288,7 +295,7 @@ Compte : test.consultant.
 Données : financeur « Banque d'essai de Guinée » (à créer depuis le champ) ; instrument prêt ; montant
 sollicité 2 000 000 000 ; date de relance dans dix jours.
 
-1. Onglet « Financements », cadre « Nouvelle démarche ».
+1. Outil « Financements », cadre « Nouvelle démarche ».
 2. Remplissez « Financeur (banque, fonds, investisseur) », « Instrument », « Montant sollicité »,
    la prochaine étape et la « Date de relance », puis « Enregistrer ».
 3. Ouvrez Cabinet > Financements.
@@ -311,7 +318,7 @@ Données : le dossier « Unité de séchage de mangues (démo) », avec deux pi�
 besoin, faites-les déposer par test.porteur, POR-04) ; motif « Bilan non signé : merci de déposer la
 version signée. ».
 
-1. Onglet « Data room », cadre « Pièces standard ». Sur une pièce reçue, cliquez sur « Valider ».
+1. Outil « Pièces standard », cadre « Pièces standard ». Sur une pièce reçue, cliquez sur « Valider ».
 2. Sur l'autre pièce, cliquez sur « À reprendre ». La fenêtre « Reprise de « … » » s'ouvre.
 3. Regardez le bouton « Demander la reprise » tant que le motif est vide, puis saisissez le motif dans
    « Motif de la reprise, lu par le porteur au portail » et cliquez sur « Demander la reprise ».
@@ -336,7 +343,7 @@ Compte : test.consultant, puis test.porteur.
 Données : le dossier « Unité de séchage de mangues (démo) » ; message « Merci pour vos pièces (essai
 AXP-12). » ; note interne « Vérifier la marge du distributeur (note interne, essai). ».
 
-1. Onglet « Échanges » : écrivez le message dans « Message au porteur », puis « Envoyer ».
+1. Outil « Messages » : écrivez le message dans « Message au porteur », puis « Envoyer ».
 2. Cochez « Note interne au cabinet », écrivez la note, puis « Envoyer ».
 3. test.porteur : ouvrez « Messages » au portail.
 
@@ -360,7 +367,7 @@ Données : le dossier de AXP-02 ; identifiant « essai.porteur.manioc » ; nom �
 un mot de passe provisoire d'essai de votre choix, de 10 caractères au moins ; puis l'identifiant
 « test.porteur ».
 
-1. Onglet « Synthèse », cadre « Équipe et accès du porteur au portail ». Saisissez « test.porteur »
+1. Outil « Compartiments et équipe », cadre « Équipe et accès du porteur au portail ». Saisissez « test.porteur »
    comme identifiant, un nom, puis « Ouvrir l'accès ».
 2. Saisissez l'identifiant « essai.porteur.manioc », le « Nom du porteur » et un mot de passe
    provisoire de 8 caractères : regardez le message et le bouton.
@@ -368,7 +375,7 @@ un mot de passe provisoire d'essai de votre choix, de 10 caractères au moins ; 
 4. En face du porteur ajouté, cliquez sur « Retirer l'accès ». Lisez la fenêtre « Retirer l'accès au
    portail », puis « Annuler ».
 5. Recommencez et confirmez par « Retirer l'accès ».
-6. Ouvrez l'onglet « Journal ».
+6. Ouvrez l'outil « Journal ».
 
 Résultat attendu : à l'étape 1, l'accès est refusé : le compte « test.porteur » suit déjà le dossier
 d'un autre promoteur, et un compte porteur ne sert qu'un promoteur. À l'étape 2, « 10 caractères au
@@ -392,7 +399,7 @@ Compte : test.consultant, puis test.daf.
 Données : le dossier de AXP-02 ; 3,5 heures « Analyse du plan d'affaires (essai) » ; taux horaire HT
 500 000.
 
-1. Onglet « Temps », « Saisir du temps » : « Date des travaux », « Heures », « Travaux réalisés »,
+1. Outil « Temps passés », « Saisir du temps » : « Date des travaux », « Heures », « Travaux réalisés »,
    puis « Enregistrer ».
 2. Cliquez sur « Facturer les honoraires (3,5 h non facturées) ». Saisissez le « Taux horaire HT
    (GNF) », puis « Créer la facture ».
@@ -411,11 +418,11 @@ brouillon dans les ventes de MB AxisPro Consulting, jamais dans celles d'EGUITRA
 
 Objectif : vérifier les documents du dossier pour le comité.
 
-Compte : test.consultant.
+Compte : test.associe.
 
 Données : le dossier « Usine de briques compressées (démo) ».
 
-1. Onglet « Rapport ». Cliquez sur « Rapport du comité (PDF) ».
+1. Outil « Rapports ». Cliquez sur « Rapport du comité (PDF) ».
 2. Cliquez sur « Classeur d'évaluation », puis sur « Pièces à fournir (PDF) ».
 3. Cliquez sur « Imprimer l'aperçu ».
 
@@ -459,13 +466,14 @@ Objectif : vérifier les états du dossier et leur confirmation.
 
 Compte : test.consultant.
 
-Données : un dossier ouvert pour l'essai (comme en AXP-02, autre que celui des scénarios suivants).
+Données : le dossier « MB » (AX/2026/0005) ou, à défaut, un autre dossier de l'ancienne méthode, autre
+que celui des scénarios suivants.
 
 1. Dans l'en-tête du dossier, à côté de « État du dossier : En cours », cliquez sur « Suspendre ».
    Lisez la fenêtre, puis confirmez.
 2. Cliquez sur « Reprendre », confirmez.
 3. Cliquez sur « Clore le dossier ». Lisez la fenêtre, puis confirmez.
-4. Ouvrez l'onglet « Évaluation », puis « Stage gates » et « Comités ».
+4. Ouvrez les outils « Grille complète », « Stage gates » et « Revues scellées ».
 5. Cliquez sur « Reprendre », confirmez.
 
 Résultat attendu : « Dossier suspendu. », « Dossier en cours. », puis « Dossier clos. ». La fenêtre de
@@ -489,9 +497,9 @@ Compte : test.consultant (responsable), puis test.associe.
 
 Données : le dossier de AXP-02 ; compartiment C2 confié à test.associe.
 
-1. test.consultant : onglet « Synthèse », cadre « Suivi par compartiment ». Dans le choix du
+1. test.consultant : outil « Compartiments et équipe », cadre « Suivi par compartiment ». Dans le choix du
    consultant du compartiment C2, prenez « Test - Associé du cabinet ».
-2. test.associe : ouvrez le dossier, onglet « Évaluation », cliquez sur « Mes compartiments ».
+2. test.associe : ouvrez le dossier, outil « Grille complète », cliquez sur « Mes compartiments ».
 3. test.associe : évaluez un critère du compartiment C2.
 
 Résultat attendu : « Compartiment C2 confié à Test - Associé du cabinet. » ; le journal du dossier
@@ -513,12 +521,12 @@ Compte : test.consultant (le dossier ayant été évalué aussi par test.associe
 Données : le dossier de AXP-02, dont le gate en cours refuse le passage ; motif « Décision du comité
 du 15, pièce attendue sous huit jours (essai). ».
 
-1. Onglet « Stage gates », « Passer au gate suivant ». La fenêtre « Passage contre la règle du gate »
+1. Outil « Stage gates », « Passer au gate suivant ». La fenêtre « Passage contre la règle du gate »
    s'ouvre.
 2. Saisissez un motif de moins de dix caractères dans « Motif du passage forcé (10 caractères au
    moins) », puis le motif complet.
 3. Cliquez sur « Forcer le passage ».
-4. Ouvrez l'onglet « Journal ».
+4. Ouvrez l'outil « Journal ».
 
 Résultat attendu : « Forcer le passage » reste grisé tant que le motif compte moins de dix
 caractères. Ensuite, « Passage forcé enregistré
@@ -540,14 +548,14 @@ Compte : test.consultant (le dossier ayant été évalué aussi par test.associe
 Données : le dossier de AXP-02 ; décision HOLD ; motif « Étude de marché à compléter. » ; une
 condition « Déposer l'étude de marché (essai) ».
 
-1. Onglet « Comités », cadre « Nouvelle revue de comité ». Choisissez la « Décision » HOLD, laissez le
+1. Outil « Revues scellées », cadre « Nouvelle revue de comité ». Choisissez la « Décision » HOLD, laissez le
    motif vide et regardez les boutons.
 2. Saisissez le motif dans « Motif de la décision (obligatoire pour HOLD et NO-GO) » et la condition
    dans « Conditions », puis « Enregistrer en brouillon ».
 3. Sur la revue, cliquez sur « Verrouiller ». Lisez la fenêtre « Sceller et verrouiller la
    décision », puis « Sceller et verrouiller ».
-4. Ouvrez l'onglet « Évaluation » et tentez de changer un statut.
-5. Revenez à « Comités » et cliquez sur « Vérifier » sur la revue.
+4. Ouvrez l'outil « Grille complète » et tentez de changer un statut.
+5. Revenez à l'outil « Revues scellées » et cliquez sur « Vérifier » sur la revue.
 
 Résultat attendu : à l'étape 1, « Motif obligatoire pour une décision HOLD ou NO-GO, dès le
 brouillon. » et les deux boutons d'enregistrement sont grisés. À l'étape 2, « Revue enregistrée en
@@ -594,7 +602,7 @@ Compte : test.consultant.
 
 Données : le dossier de AXP-21, avec une seconde revue enregistrée sur la nouvelle révision.
 
-1. Onglet « Comités » : enregistrez une seconde revue en brouillon (par exemple CONDITIONAL GO).
+1. Outil « Revues scellées » : enregistrez une seconde revue en brouillon (par exemple CONDITIONAL GO).
 2. Dans l'historique, cochez les deux revues.
 3. Lisez la « Comparaison du … au … ».
 
@@ -615,17 +623,18 @@ Compte : test.consultant (responsable), puis test.associe.
 
 Données : le dossier de AXP-02, non figé (après AXP-21).
 
-1. test.consultant : onglet « Synthèse », cadre « Équipe et accès du porteur au portail ». Dans
+1. test.consultant : outil « Compartiments et équipe », cadre « Équipe et accès du porteur au portail ». Dans
    « Confier à un autre consultant », choisissez « Test - Associé du cabinet », puis « Confier le
    dossier ».
 2. Lisez la fenêtre « Changer de responsable », puis « Confier le dossier ».
-3. test.consultant : rechargez la synthèse.
+3. test.consultant : rechargez la page, puis cherchez le dossier dans le portefeuille.
 4. test.associe : confiez de nouveau le dossier à « Test - Consultant du cabinet ».
 
 Résultat attendu : la fenêtre précise que le nouveau responsable confiera seul ensuite les
 compartiments et le dossier. « Dossier confié à Test - Associé du cabinet. » ; le cadre indique le
-nouveau responsable et le journal garde le changement. À l'étape 3, test.consultant ne peut plus
-confier le dossier (le choix n'est plus proposé). À l'étape 4, le dossier revient à test.consultant.
+nouveau responsable et le journal garde le changement. À l'étape 3, le dossier n'est plus ouvert à
+test.consultant : sans compartiment confié, il ne voit plus ce projet. À l'étape 4, le dossier revient
+à test.consultant.
 Sur un dossier figé, le bouton est grisé : « Figé par la décision verrouillée, comme la fiche. ».
 
 | Résultat {22} | Remarques {78} |
@@ -752,7 +761,7 @@ Compte : test.dg.
 Données : le dossier « Usine de briques compressées (démo) ».
 
 1. Ouvrez NIMOVA · MB AxisPro Consulting : lisez le portefeuille.
-2. Ouvrez le dossier, onglets « Synthèse » et « Évaluation ».
+2. Ouvrez le dossier, puis les outils « Compartiments et équipe » et « Grille complète ».
 3. Ouvrez Méthode > Grille d'évaluation.
 
 Résultat attendu : le portefeuille et le dossier sont lisibles. L'évaluation affiche « Lecture seule :
@@ -776,7 +785,7 @@ Compte : test.consultant seul.
 Données : un dossier ouvert pour l'essai (par exemple celui de AXP-17, repris), dont test.consultant
 a évalué au moins un critère et que personne d'autre n'a touché ; décision GO.
 
-1. Onglet « Comités », « Nouvelle revue de comité », décision GO, « Enregistrer, sceller et
+1. Outil « Revues scellées », « Nouvelle revue de comité », décision GO, « Enregistrer, sceller et
    verrouiller », puis « Sceller et verrouiller ».
 
 Résultat attendu : le verrouillage est refusé : « Principe des quatre yeux : une décision du comité
@@ -798,7 +807,7 @@ Compte : test.consultant (responsable), puis test.associe.
 Données : le dossier de AXP-18 ; compartiment C3 confié à test.consultant.
 
 1. test.consultant : dans « Suivi par compartiment », confiez C3 à « Test - Consultant du cabinet ».
-2. test.associe : dans « Évaluation », « Grille complète », repérez un critère de C3.
+2. test.associe : dans l'outil « Grille complète », vue « Grille complète », repérez un critère de C3.
 
 Résultat attendu : chez test.associe, les boutons de statut des critères de C3 sont grisés et la ligne
 indique « Compartiment confié à Test - Consultant du cabinet » ; seuls ce consultant et le
@@ -837,7 +846,7 @@ Compte : test.consultant.
 
 Données : une archive .zip ; un ancien document Word .doc ; un document Word à macros (.docm).
 
-1. Onglet « Data room », « Pièce libre » : choisissez l'archive (affichez « Tous les fichiers » dans
+1. Outil « Pièces standard », « Pièce libre » : choisissez l'archive (affichez « Tous les fichiers » dans
    la fenêtre de choix).
 2. Recommencez avec le .doc, puis le .docm.
 
@@ -864,7 +873,7 @@ heure.
 1. Modèle financier, case « Prix unitaire » d'un produit : saisissez « 12 500 », cliquez ailleurs.
 2. Saisissez « 12.500 », cliquez ailleurs.
 3. Saisissez « 2.500.000 », cliquez ailleurs, puis appuyez sur Échap.
-4. Onglet « Temps », « Saisir du temps » : « Heures » « 1,5 », enregistrez.
+4. Outil « Temps passés », « Saisir du temps » : « Heures » « 1,5 », enregistrez.
 
 Résultat attendu : « 12 500 » est enregistré tel quel. « 12.500 » et « 2.500.000 » sont refusés par le
 message « Nombre illisible : écrivez par exemple 750 000 ou 2,5. » sous la case : rien n'est
@@ -884,8 +893,8 @@ Compte : test.consultant.
 
 Données : un dossier dont le gate en cours permet le passage ; des temps à facturer.
 
-1. Onglet « Stage gates » : double-cliquez sur « Passer au gate suivant ».
-2. Onglet « Temps » : double-cliquez sur « Créer la facture ».
+1. Outil « Stage gates » : double-cliquez sur « Passer au gate suivant ».
+2. Outil « Temps passés » : double-cliquez sur « Créer la facture ».
 
 Résultat attendu : le dossier ne franchit qu'un seul gate ; si le second clic arrive, l'écran le dit
 et relit le dossier. Une seule facture d'honoraires est créée.
@@ -904,7 +913,7 @@ Compte : test.consultant.
 
 Données : une action du plan d'actions créée pour le test ; un brouillon de communication.
 
-1. Onglet « Actions » : « Supprimer » sur l'action. Lisez la fenêtre « Supprimer l'action … ? », puis
+1. Outil « Plan d'actions » : « Supprimer » sur l'action. Lisez la fenêtre « Supprimer l'action … ? », puis
    annulez ; recommencez et confirmez.
 2. Portail des porteurs > Communications : « Supprimer le brouillon », lisez la fenêtre, annulez.
 
@@ -927,7 +936,7 @@ Compte : test.consultant.
 
 Données : le dossier de AXP-02 ; contact « Mariama Camara », téléphone « 622 00 00 00 ».
 
-1. Ouvrez le dossier, onglet « Relances ». Lisez le cadre « Suivi du porteur » et le tableau
+1. Ouvrez le dossier, outil « Suivi des relances ». Lisez le cadre « Suivi du porteur » et le tableau
    « Pièces attendues ».
 2. Cadre « Contact du promoteur » : saisissez le nom et le téléphone, puis « Enregistrer le
    contact ».
@@ -988,7 +997,7 @@ Compte : test.consultant, puis test.porteur.
 
 Données : le dossier « Unité de séchage de mangues (démo) », suivi au portail par test.porteur.
 
-1. test.consultant : ouvrez ce dossier, onglet « Relances ». Lisez la phrase sous le message.
+1. test.consultant : ouvrez ce dossier, outil « Suivi des relances ». Lisez la phrase sous le message.
 2. Cliquez sur « Envoyer par le portail ».
 3. Lisez l'« Historique des relances ».
 4. test.porteur : connectez-vous au portail et ouvrez « Messages ».
@@ -1007,31 +1016,30 @@ aucun intitulé de critère, aucune note du cabinet.
 ### AXP-40. Ouvrir un dossier à partir du business plan
 
 Objectif : vérifier que la lecture du business plan préremplit la fiche, que chaque champ lu est
-signalé et que rien n'est enregistré avant « Ouvrir le dossier ».
+signalé et que rien n'est enregistré avant « Créer le projet ».
 
 Compte : test.consultant.
 
 Données : un business plan fictif en PDF ou en Word (.docx), sans donnée réelle d'un client ; puis
 une image (PNG ou JPG).
 
-1. Portefeuille : « Nouveau dossier ». Regardez le haut de la fenêtre « Ouverture d'un dossier ».
-2. Si le cadre « Remplir la fiche à partir du business plan » est absent, la lecture n'est pas
-   activée sur cet environnement : notez-le dans les remarques et arrêtez le scénario ici.
+1. Portefeuille : « Nouveau projet ». Regardez le haut de la page.
+2. Si le cadre de lecture du business plan est absent, la lecture n'est pas activée sur cet
+   environnement : notez-le dans les remarques et arrêtez le scénario ici.
 3. « Lire le business plan » : choisissez l'image (choix « Tous les fichiers » dans la fenêtre). Lisez
    le message.
 4. « Lire le business plan » : choisissez le business plan. Attendez la fin de la lecture.
 5. Lisez les champs remplis et leur mention, puis la case « Ajouter … à la data room du dossier ».
-6. Corrigez un montant, choisissez le promoteur s'il n'a pas été reconnu, puis « Ouvrir le
-   dossier ».
-7. Dans le dossier, ouvrez l'onglet « Data room ».
+6. Corrigez un montant, choisissez le promoteur s'il n'a pas été reconnu, puis « Créer le projet ».
+7. Dans le projet, ouvrez l'étape « Pièces ».
 
 Résultat attendu : l'image est refusée : « Formats lus : PDF, Word (.docx) ou texte (.txt). ».
 Pendant la lecture, le bouton indique « Lecture… » et la fenêtre annonce quinze à soixante secondes
 en général. À la fin, un bandeau donne le nombre de champs lus et demande de les vérifier ; chaque champ lu porte la mention
 « Lu dans le business plan : à vérifier. ». La description reprend les points clés relevés. Un
 promoteur absent des tiers est signalé sous « Promoteur » ; rien n'est créé tant que vous n'avez pas
-cliqué sur « Ouvrir le dossier ». Le dossier s'ouvre avec les valeurs corrigées, et la data room
-contient « Business plan du promoteur (lu à l'ouverture) » si la case est restée cochée.
+cliqué sur « Créer le projet ». Le projet s'ouvre avec les valeurs corrigées et un N° MBAP, et ses
+pièces contiennent le business plan si la case est restée cochée.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -1047,14 +1055,337 @@ Compte : test.dg, puis test.consultant.
 
 Données : le dossier de AXP-37 ; le dossier clos de AXP-17.
 
-1. test.dg : ouvrez le dossier de AXP-37, onglet « Relances ».
-2. test.dg : revenez au portefeuille et cherchez le bouton « Nouveau dossier ».
-3. test.consultant : ouvrez le dossier clos, onglet « Relances ».
+1. test.dg : ouvrez le dossier de AXP-37, outil « Suivi des relances ».
+2. test.dg : revenez au portefeuille et cherchez le bouton « Nouveau projet ».
+3. test.consultant : ouvrez le dossier clos, outil « Suivi des relances ».
 
 Résultat attendu : test.dg lit les pièces attendues, le message et l'historique, avec la mention
 « Lecture seule : seul le cabinet relance les porteurs. » ; le message n'est pas modifiable et aucun
-bouton n'enregistre ni n'envoie de relance. La direction n'a pas de bouton « Nouveau dossier ». Le
+bouton n'enregistre ni n'envoie de relance. La direction n'a pas de bouton « Nouveau projet ». Le
 dossier clos indique « Sans relance » : « Dossier suspendu ou clos : il ne se relance pas. ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+## H. Parcours d'un projet, méthode SC-01 V2.0
+
+### AXP-42. Créer un projet
+
+Objectif : vérifier la création d'un projet, son N° MBAP et son responsable.
+
+Compte : test.consultant.
+
+Données : intitulé « Unité de transformation de manioc (essai) » ; promoteur « Essai Agro Forécariah
+SARL » (à créer depuis le champ) ; contact « Contact Essai », contact.essai@example.com ; localisation
+Forécariah ; un secteur ; CAPEX estimatif 4 500 000 000.
+
+1. Accueil : « Nouveau projet », puis « Saisir la fiche manuellement ».
+2. Cliquez sur « Créer le projet » sans rien remplir.
+3. Remplissez les champs, puis « Créer le projet ».
+4. Revenez au portefeuille et cherchez le projet.
+
+Résultat attendu : à l'étape 2, « Renseignez au moins l'intitulé et le promoteur. ». À l'étape 3, le
+projet reçoit un N° de la forme MBAP-2026-… et s'ouvre sur la « Fiche projet », avec la carte
+« Recevabilité · Gate 0 ». La barre des sept étapes s'affiche : Fiche projet, Pièces, Scoring,
+Résultats, Relances, Comité, Dossier complet. Le projet figure au portefeuille avec test.consultant
+pour responsable. Dans la suite de cette partie, « le projet » désigne celui-ci.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-43. Déclarer le projet recevable
+
+Objectif : vérifier que le passage au Gate 1 exige les quatre conditions de recevabilité.
+
+Compte : test.consultant.
+
+Données : le projet de AXP-42.
+
+1. Étape « Fiche projet » : cochez « Projet recevable : passer en préqualification (Gate 1) », puis
+   « Enregistrer la fiche ».
+2. Cochez les quatre conditions de recevabilité, puis « Enregistrer la fiche ».
+
+Résultat attendu : à l'étape 1, « Cochez les 4 conditions de recevabilité » et le projet reste au
+Gate 0. À l'étape 2, l'en-tête passe à « Gate 1 · Préqualification » et l'étape « Fiche projet » indique
+« Recevable ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-44. Déposer une pièce par catégorie
+
+Objectif : vérifier le dépôt dans la data room, le renommage et le refus d'un format.
+
+Compte : test.consultant.
+
+Données : le projet de AXP-42 ; un PDF nommé « kyc essai.pdf » ; un fichier .exe ou .zip.
+
+1. Étape « Pièces » : lisez les dix catégories A à J et les pièces attendues de chacune.
+2. Catégorie « A. Corporate / KYC », « Déposer » : choisissez le PDF.
+3. Dans la ligne de la pièce, rattachez un critère dans « Critère justifié », puis passez
+   « Vérification » à « Conforme ».
+4. Déposez le fichier .exe ou .zip dans la même catégorie.
+5. Ouvrez l'étape « Scoring » et cherchez le critère rattaché.
+
+Résultat attendu : « 1 pièce(s) déposée(s) en catégorie A. » ; la pièce est renommée selon la règle,
+par exemple A1_kyc_essai_20261106.pdf, et arrive « À vérifier ». Le fichier refusé affiche un message
+« format non accepté ». Le rattachement renseigne la référence de la pièce dans le scoring, sans jamais
+changer le statut du critère.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-45. Faire déposer une pièce par le promoteur
+
+Objectif : vérifier le lien de dépôt, utilisable sans compte, qui ne montre ni score ni autre pièce.
+
+Compte : test.consultant ; le promoteur est joué sans compte, depuis un téléphone ou une fenêtre
+de navigation privée.
+
+Données : le projet de AXP-44 ; un PDF nommé « statuts promoteur.pdf ».
+
+1. Étape « Pièces », cadre « Lien de dépôt pour le promoteur » : « Créer un lien valable 14 jours ».
+   Copiez l'adresse affichée.
+2. Ouvrez l'adresse sans vous connecter. Lisez la page.
+3. Laissez « Je ne sais pas » pour la catégorie, puis « Choisir des fichiers » et le PDF.
+4. test.consultant : rechargez l'étape « Pièces ».
+5. test.consultant : sur la ligne du lien, cliquez sur « Retirer », puis rouvrez l'adresse.
+
+Résultat attendu : l'adresse ne s'affiche qu'une fois. La page publique porte la marque MB AxisPro
+Consulting, le nom du projet et la date de fin du lien ; aucun score et aucune pièce du cabinet n'y
+figurent. Après l'envoi, « statuts promoteur.pdf : reçu » et la pièce s'ajoute à « Pièces reçues par ce
+lien ». Côté cabinet, la pièce arrive « À vérifier » dans « Pièces sans catégorie », avec la mention
+« Portail » et le compteur du lien à 1. Une fois le lien retiré, l'adresse ne permet plus de déposer.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-46. Noter les critères
+
+Objectif : vérifier la notation, l'observation obligatoire et le recalcul des scores.
+
+Compte : test.consultant.
+
+Données : le projet de AXP-42 ; observation « Pièce à compléter (essai) ».
+
+1. Étape « Scoring » : lisez les quinze domaines et le nombre de critères notés (sur 111).
+2. Sur le premier critère, choisissez « Incomplet / à actualiser », sans observation.
+3. Saisissez l'observation et quittez la case.
+4. Sur un autre critère, choisissez « Disponible et exploitable ».
+5. Cliquez sur « Domaine suivant », puis ouvrez l'étape « Résultats ».
+
+Résultat attendu : à l'étape 2, « Justification obligatoire » et rien n'est enregistré. Ensuite, chaque
+saisie s'enregistre aussitôt. Un critère non noté compte comme « Non disponible ». Le score du domaine
+et le compteur « … / 111 notés » se mettent à jour.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-47. Valider un « Non applicable »
+
+Objectif : vérifier qu'un « Non applicable » compte comme « Non disponible » tant que l'associé ne
+l'a pas validé.
+
+Compte : test.consultant, puis test.associe.
+
+Données : le projet de AXP-42 ; observation « Sans objet pour ce projet (essai) ».
+
+1. test.consultant : sur un critère non noté, choisissez « Non applicable » et saisissez
+   l'observation. Notez le score du domaine. Cherchez le bouton « Valider ».
+2. test.associe : ouvrez le projet, même critère, cliquez sur « Valider ».
+3. Relisez le score du domaine.
+
+Résultat attendu : à l'étape 1, le critère affiche « En attente de validation » et test.consultant n'a
+pas de bouton « Valider ». Après l'étape 2, le critère indique « Validé par Test - Associé du cabinet »
+et sort du calcul du score du domaine.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-48. Lire les résultats et figer une version
+
+Objectif : vérifier les scores, les knock-out, la recommandation et la trace datée.
+
+Compte : test.consultant.
+
+Données : le projet de AXP-46.
+
+1. Étape « Résultats » : lisez « Project Readiness Score », « APD Readiness Score », « Bankability
+   Score », « Complétude documentaire », les critères critiques, les knock-out et la décision
+   recommandée.
+2. Lisez le « Score par domaine » et sa priorité, puis les conditions de passage au gate suivant.
+3. Cliquez sur « Figer l'évaluation en v1 ».
+4. Notez un critère de plus à l'étape « Scoring » et revenez aux résultats.
+
+Résultat attendu : les scores sur 100 suivent le barème : disponible 1, incomplet 0,5, non disponible
+0, non applicable validé exclu. Chaque domaine porte une priorité (« Priorité urgente », « élevée »,
+« moyenne » ou « faible »). La version v1 s'ajoute à l'« Historique des évaluations » et ne change plus
+ensuite, alors que les scores du projet, eux, sont recalculés.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-49. Relancer le promoteur
+
+Objectif : vérifier la liste des pièces manquantes, le message proposé et le suivi des relances.
+
+Compte : test.consultant.
+
+Données : le projet de AXP-46 ; note « Relance d'essai ».
+
+1. Étape « Relances » : lisez « Pièces manquantes » (les 20 premières par priorité) et le « Message de
+   relance ».
+2. Cliquez sur « Copier le message ».
+3. Cadre « Enregistrer une relance » : gardez la date, choisissez le canal, saisissez la note, puis
+   « Enregistrer la relance ».
+4. Revenez au portefeuille.
+
+Résultat attendu : le message reprend le N° du projet, le contact et les pièces attendues. Rien n'est
+envoyé par cet écran : le message se copie ou s'ouvre dans la messagerie. « Relance enregistrée. », la
+relance figure à l'« Historique des relances » et le projet quitte « Jamais relancé ».
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-50. Sceller la décision du comité
+
+Objectif : vérifier qui décide, le motif d'une décision contraire, le scellement et le procès-verbal.
+
+Compte : test.consultant, puis test.associe.
+
+Données : le projet de AXP-46 ; membres « A. Associé, B. Direction » ; motif « Décision d'essai du
+comité. ».
+
+1. test.consultant : ouvrez l'étape « Comité » et cherchez « Enregistrer la décision ».
+2. test.associe : ouvrez l'étape « Comité » et lisez les conditions de passage et la recommandation.
+3. Choisissez une décision contraire à la recommandation, laissez le motif vide, puis « Enregistrer la
+   décision ».
+4. Saisissez le motif et les membres présents, puis « Enregistrer la décision ».
+5. Dans « Décisions enregistrées », cliquez sur « PDF ».
+
+Résultat attendu : test.consultant, qui a noté des critères, n'a pas accès à la décision. À l'étape 3,
+« Décision contraire à la recommandation : saisissez le motif. ». À l'étape 4, la décision est scellée
+et ne se modifie plus ; GO et CONDITIONAL GO font passer le projet au gate suivant, HOLD le maintient,
+NO-GO le clôt sans le supprimer. Le procès-verbal indique le projet, le promoteur, le gate, la décision,
+les membres, les scores, le motif, l'auteur du scellement et l'empreinte.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-51. Télécharger le dossier complet
+
+Objectif : vérifier le fichier unique du projet.
+
+Compte : test.consultant.
+
+Données : le projet de AXP-50.
+
+1. Étape « Dossier complet » : cliquez sur « Télécharger le dossier (.zip) ».
+2. Ouvrez le fichier.
+
+Résultat attendu : le fichier s'appelle Dossier_MBAP-2026-….zip. Il réunit la synthèse en PDF, le
+classeur de scoring, la dernière relance et les pièces classées par catégorie.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-52. Un évaluateur ne voit que ses projets
+
+Objectif : vérifier le périmètre de l'évaluateur.
+
+Compte : test.associe, puis test.consultant.
+
+Données : projet « Projet de l'associé (essai) », promoteur « Essai Agro Forécariah SARL ».
+
+1. test.associe : créez le projet, en vous gardant pour responsable. Copiez l'adresse de sa page.
+2. test.consultant : cherchez le projet dans le portefeuille, puis ouvrez l'adresse copiée.
+3. test.associe : étape « Fiche projet », cadre « Supprimer le projet » : supprimez ce projet d'essai.
+
+Résultat attendu : test.associe voit tous les projets. Le projet n'apparaît pas chez test.consultant et
+son adresse répond que le dossier est introuvable. Un évaluateur voit les projets dont il est
+responsable, ceux où un compartiment lui est confié et ceux sans responsable. Le N° du projet supprimé
+n'est jamais réutilisé.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-53. Le lecteur consulte sans rien modifier
+
+Objectif : vérifier le profil Lecteur du cabinet.
+
+Compte : test.lecteur.
+
+Données : le projet de AXP-50.
+
+1. Ouvrez l'accueil, puis le portefeuille.
+2. Ouvrez le projet, puis les étapes « Fiche projet », « Scoring » et « Pièces ».
+3. Ouvrez « Dossier complet » et téléchargez le fichier.
+
+Résultat attendu : tout se lit. Ni « Nouveau projet », ni « Enregistrer la fiche », ni case de statut, ni
+dépôt de pièce ne sont proposés. Le téléchargement du dossier complet fonctionne.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-54. L'auditeur HSSEQ n'entre pas au cabinet
+
+Objectif : vérifier que l'auditeur HSSEQ n'accède à aucun projet du cabinet.
+
+Compte : test.auditeur.
+
+Données : l'adresse de la recette suivie de /axispro/portefeuille.
+
+1. Ouvrez l'adresse.
+2. Cherchez un projet du cabinet.
+
+Résultat attendu : la page « Accès non ouvert à votre profil » s'affiche, avec le bouton « Aller à
+HSSEQ ». Aucun projet n'apparaît.
+
+| Résultat {22} | Remarques {78} |
+|---|---|
+| ☐ Réussi | |
+| ☐ Échoué | |
+
+### AXP-55. Suivre le parcours au téléphone
+
+Objectif : vérifier que les sept étapes restent lisibles sur un téléphone.
+
+Compte : test.consultant.
+
+Données : le projet de AXP-50 ; un téléphone, ou la largeur la plus étroite du navigateur.
+
+1. Ouvrez l'accueil, le portefeuille et « Nouveau projet ».
+2. Ouvrez le projet et parcourez les sept étapes.
+3. Notez un critère à l'étape « Scoring ».
+
+Résultat attendu : aucune page ne déborde sur le côté et aucun texte n'est coupé. Les étapes s'empilent
+sur deux colonnes, et la notation fonctionne au doigt.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -1065,14 +1396,15 @@ dossier clos indique « Sans relance » : « Dossier suspendu ou clos : il ne se
 
 | Partie {52} | Scénarios {12} | Réussis {12} | Échoués {12} | Non joués {12} |
 |---|---|---|---|---|
-| A. Consultant du cabinet | 17 | | | |
+| A. Consultant du cabinet (ancienne méthode et outils) | 17 | | | |
 | B. Associé : second regard et décisions à deux | 6 | | | |
 | C. Outils du portail des porteurs (cabinet) | 5 | | | |
 | D. Direction | 1 | | | |
 | E. Refus attendus | 4 | | | |
 | F. Contrôles de saisie et de sécurité | 3 | | | |
 | G. Relances du porteur et lecture du business plan | 5 | | | |
-| Total | 41 | | | |
+| H. Parcours d'un projet, méthode SC-01 V2.0 | 14 | | | |
+| Total | 55 | | | |
 
 Réserves et anomalies relevées :
 

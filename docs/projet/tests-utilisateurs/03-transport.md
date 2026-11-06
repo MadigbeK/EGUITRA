@@ -107,8 +107,8 @@ chargé 33 ; volume livré 32,95 ; carburant 3 200 000 ; péages 250 000 ; frais
 
 Résultat attendu : le montant estimé suit le tarif de la route (450 000 GNF par m³). La rotation est
 créée à l'état saisi et figure dans le filtre « Saisies à valider » ; sa fiche reprend le bon de
-livraison et le N° de bon. En bas de la fenêtre, la mention « La validation revient à un autre compte
-que celui qui saisit. ».
+livraison et le N° de bon. En bas de la fenêtre, la mention « Un autre compte que le vôtre la
+validera. ».
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -129,7 +129,7 @@ Données : la rotation de TRA-02.
    et cliquez sur « Valider ».
 
 Résultat attendu : chez test.exploitation, « Valider » est grisé et la fiche indique « Vous avez saisi
-cette rotation : elle se valide par un autre compte. ». Chez test.parc, la validation aboutit : la
+cette rotation : un autre compte la valide. ». Chez test.parc, la validation aboutit : la
 rotation passe dans « À facturer (validées) ».
 
 | Résultat {22} | Remarques {78} |

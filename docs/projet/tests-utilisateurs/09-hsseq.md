@@ -31,7 +31,7 @@ Ce cahier se joue sur la recette : une copie complète de NIMOVA, avec des donn�
 compris les erreurs.
 
 1. Se connecter. test.dg, test.parc et test.exploitation : ouvrez, dans Chrome ou Edge, l'adresse de
-   la recette communiquée par E-VOLUTION XP, puis la tuile « Cockpit HSSEQ » du rayon HSSEQ de
+   la recette communiquée par E-VOLUTION XP, puis la tuile « Tableau de bord » du rayon HSSEQ de
    l'accueil (la tuile « Transport » du rayon Transport pour NIMOVA · Transport). test.hsseq et
    test.auditeur n'ont pas Finance : ouvrez l'adresse de la recette suivie de /hsseq. Identifiant :
    le compte de test indiqué dans le scénario. Mot de passe : le mot de passe commun de la recette,
@@ -104,7 +104,7 @@ Données : aucune.
    Matoto (démo) » ; puis « Effacer les filtres ».
 5. Cliquez sur le compteur des événements à classer.
 
-Résultat attendu : la page « Cockpit HSSEQ » s'affiche, avec au moins un « événement déclaré à
+Résultat attendu : la page « Tableau de bord » s'affiche, avec au moins un « événement déclaré à
 classer », un « événement de criticité élevée ouvert » et une action en retard (« Recyclage conduite
 défensive des conducteurs de la ligne Kindia (démo) »). Les chiffres suivent la période et le site
 choisis. Le compteur ouvre la liste des événements déclarés.

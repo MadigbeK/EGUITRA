@@ -348,7 +348,7 @@ Données : aucune.
 
 1. Ouvrez Finance > Comptabilité > Ventes et notez la société affichée en haut à droite, à côté de son
    logo.
-2. Cliquez sur ce nom de société. Sous « Livres ouverts », choisissez MB AxisPro Consulting.
+2. Cliquez sur ce nom de société. Dans la liste, choisissez MB AxisPro Consulting.
 3. Regardez la liste des ventes et le menu du haut.
 4. Revenez à EGUITRA GROUP SARLU de la même façon.
 
@@ -372,7 +372,7 @@ Données : client « Démo - Distributeur pétrolier A » ; une ligne « Essai d
 prix 100 000.
 
 1. Onglet 1 : Finance > Comptabilité > Ventes, société EGUITRA GROUP SARLU.
-2. Onglet 2 : ouvrez le même écran, puis passez à MB AxisPro Consulting (« Livres ouverts »).
+2. Onglet 2 : ouvrez le même écran, puis passez à MB AxisPro Consulting (sur le nom de la société).
 3. Revenez à l'onglet 1 sans le recharger. Cliquez sur « Nouvelle facture », saisissez le client et la
    ligne, puis enregistrez la facture en brouillon.
 4. Dans l'onglet 2, rechargez la liste des ventes de MB AxisPro Consulting.
@@ -399,7 +399,7 @@ Données : aucune.
 3. Regardez la société affichée en haut à droite, puis cliquez dessus.
 4. Ouvrez ensuite MB AxisPro Consulting (AxisPro) par le même menu.
 
-Résultat attendu : Transport s'ouvre dans EGUITRA GROUP SARLU, sans liste « Livres ouverts » à choisir.
+Résultat attendu : Transport s'ouvre dans EGUITRA GROUP SARLU, sans liste de sociétés à choisir.
 AxisPro s'ouvre dans MB AxisPro Consulting, de même.
 
 | Résultat {22} | Remarques {78} |

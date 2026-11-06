@@ -521,7 +521,7 @@ Compte : test.daf.
 
 Données : aucune.
 
-1. Passez à la société MB AxisPro Consulting (en haut à droite, « Livres ouverts »).
+1. Passez à la société MB AxisPro Consulting (en haut à droite, sur le nom de la société).
 2. Ouvrez le menu « Métiers ».
 3. Dans la barre d'adresse, remplacez la fin de l'adresse par /finance/chantiers et validez.
 

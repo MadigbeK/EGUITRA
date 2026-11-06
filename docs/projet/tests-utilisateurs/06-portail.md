@@ -67,7 +67,7 @@ Données : identifiant test.porteur ; mot de passe commun de la recette.
    le menu ».
 
 Résultat attendu : l'accueil s'ouvre au nom du porteur, aux couleurs de MB AxisPro Consulting. Le
-menu propose « Accueil », « Mon projet », « Pièces et data room », « Plan d'actions », « Messages »,
+menu propose « Accueil », « Mon projet », « Mes documents », « Plan d'actions », « Messages »,
 « Rendez-vous », « Agenda », « Actualités », « Conseils et ressources », « Événements et
 formations », « Simulateurs », « Votre avis » et « Mon profil ». Le nom de NIMOVA n'apparaît pas.
 
@@ -126,7 +126,7 @@ Compte : test.porteur.
 
 Données : un document PDF de moins de 20 Mo (par exemple un relevé ou une attestation d'essai).
 
-1. Ouvrez « Pièces et data room ». Lisez « Préparation de vos pièces » et la liste « Pièces
+1. Ouvrez « Mes documents ». Lisez « Préparation de vos pièces » et la liste « Pièces
    attendues ».
 2. Filtrez sur « À déposer », puis cliquez sur « Déposer » en face d'une pièce.
 3. Choisissez le PDF.
@@ -151,7 +151,7 @@ Compte : test.porteur, après le scénario AXP-11 du cahier AxisPro Suite (pièc
 
 Données : une version corrigée du document, en PDF.
 
-1. « Pièces et data room », filtre « À reprendre ».
+1. « Mes documents », filtre « À reprendre ».
 2. Lisez « Commentaire du cabinet : ».
 3. Cliquez sur « Déposer la nouvelle version » et choisissez le PDF.
 
@@ -390,7 +390,7 @@ Compte : test.porteur, après le scénario AXP-12 (note interne du cabinet).
 
 Données : le dossier « Unité de séchage de mangues (démo) ».
 
-1. Parcourez « Mon projet », « Pièces et data room », « Plan d'actions » et « Messages ».
+1. Parcourez « Mon projet », « Mes documents », « Plan d'actions » et « Messages ».
 
 Résultat attendu : aucun score (Project Readiness, APD, Bankability), aucun critère de la grille,
 aucune note interne (« Vérifier la marge du distributeur… ») n'apparaît. Seul le taux de préparation
@@ -409,7 +409,7 @@ Compte : porteur.demo, puis test.porteur.
 
 Données : les deux dossiers de démonstration.
 
-1. porteur.demo : ouvrez « Mon projet », « Pièces et data room » et « Messages ».
+1. porteur.demo : ouvrez « Mon projet », « Mes documents » et « Messages ».
 2. test.porteur : faites de même.
 
 Résultat attendu : porteur.demo ne voit que « Usine de briques compressées (démo) » ; test.porteur ne
@@ -430,7 +430,7 @@ Compte : test.porteur.
 Données : une archive .zip ; un ancien fichier Excel .xls ; un programme renommé en .pdf (fichier
 d'essai fourni par E-VOLUTION XP) ; un document Word à macros (.docm).
 
-1. « Pièces et data room » : déposez chaque fichier sur une pièce (dans la fenêtre de choix,
+1. « Mes documents » : déposez chaque fichier sur une pièce (dans la fenêtre de choix,
    affichez « Tous les fichiers »).
 
 Résultat attendu : chaque dépôt est refusé par un message qui rappelle les formats acceptés : PDF,

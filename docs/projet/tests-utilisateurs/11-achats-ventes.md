@@ -874,10 +874,10 @@ Données : le bon d'ACV-33 ; facture « FAC-ESSAI-36 », date du jour, 400 barre
 
 1. Ouvrez le bon, « Saisir la facture du fournisseur ».
 2. Saisissez le numéro et la date ; gardez les quantités (le reçu non facturé) et les prix.
-3. « Enregistrer et soumettre ».
+3. « Envoyer pour approbation ».
 
-Résultat attendu : la fenêtre « Pièce d'achat rattachée » dit « Conforme à la commande et à la
-réception : comptabilisée sans circuit. ». La carte « Pièces d'achat rattachées et rapprochement »
+Résultat attendu : la fenêtre « Facture fournisseur rattachée » dit « Conforme à la commande et à la
+réception : comptabilisée sans circuit. ». La carte « Factures du fournisseur rattachées et rapprochement »
 montre la pièce « Conforme », « Comptabilisée » ; sur l'engagement, le consommé augmente d'autant.
 
 | Résultat {22} | Remarques {78} |
@@ -896,7 +896,7 @@ Données : le bon d'ACV-29 (groupe électrogène, approuvé) ; prix facturé 63 
 que le prix commandé.
 
 1. test.achats : ouvrez le bon, « Enregistrer une réception » (1 reçu), « Enregistrer la réception ».
-2. « Saisir la facture du fournisseur », « PU HT facturé » 63 000 000, « Enregistrer et soumettre ».
+2. « Saisir la facture du fournisseur », « PU HT facturé » 63 000 000, « Envoyer pour approbation ».
 3. test.comptable : « À valider », approuvez la pièce.
 
 Résultat attendu : à l'étape 2, « Écart de rapprochement : « Groupe électrogène 100 kVA (essai) » :
@@ -941,10 +941,10 @@ Compte : test.daf.
 Données : le bon « Ciment du chantier (démo) ».
 
 1. Achats et dépenses, onglet « Bons de commande », vue « À recevoir », ouvrez le bon.
-2. Lisez les cartes « Réceptions (service fait) » et « Pièces d'achat rattachées et rapprochement ».
+2. Lisez les cartes « Réceptions (service fait) » et « Factures du fournisseur rattachées et rapprochement ».
 
 Résultat attendu : la réception de 120 sacs, et la pièce « FAC-QDP-0001 (démo) » marquée « Écart »,
-avec les deux écarts écrits en clair, et « Passe par le circuit des pièces d'achat. ». Le bon est
+avec les deux écarts écrits en clair, et « Envoyée, elle passe par le circuit des factures fournisseurs. ». Le bon est
 « Reçu partiellement » (120 sur 200).
 
 | Résultat {22} | Remarques {78} |
@@ -961,7 +961,7 @@ Compte : test.achats, puis test.comptable.
 Données : pièce d'achat « Fournitures de bureau (essai) », 500 000, catégorie au choix, saisie
 directement.
 
-1. test.achats : onglet « Pièces d'achat », « Nouvelle pièce d'achat », saisissez et soumettez.
+1. test.achats : onglet « Pièces d'achat », « Nouvelle facture fournisseur », saisissez et soumettez.
 2. test.comptable : « À valider », approuvez.
 
 Résultat attendu : comme avant le module : la pièce part au circuit (« Pièces d'achat : contrôle de

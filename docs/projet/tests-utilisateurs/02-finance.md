@@ -120,7 +120,7 @@ Compte : test.dg, une fois l'étape de la finance approuvée par test.daf (comme
 Données : la pièce DEMO2-APP-2 (72 000 000 GNF HT, « Démo - Fournisseur de carburant »), ou une
 pièce de plus de 50 000 000 GNF saisie pour ce test.
 
-1. Ouvrez Pilotage > À valider, onglet « Ma corbeille ».
+1. Ouvrez Pilotage > À valider, onglet « À approuver ».
 2. Ouvrez la demande. Vérifiez « Montant », « Tiers », « Demandée par » et le circuit : l'étape de
    la finance porte « Approuvée par » avec son auteur.
 3. Cliquez sur « Approuver ».
@@ -144,7 +144,7 @@ Compte : test.dg.
 Données : une pièce de plus de 50 000 000 GNF en attente de la direction ; motif « Devis
 concurrent à fournir. ».
 
-1. Pilotage > À valider > « Ma corbeille », ouvrez la demande.
+1. Pilotage > À valider > « À approuver », ouvrez la demande.
 2. Laissez « Commentaire » vide et regardez le bouton « Refuser ».
 3. Écrivez le motif dans « Commentaire », puis « Refuser ».
 4. Dans la fenêtre « Refuser la demande ? », confirmez.
@@ -312,12 +312,12 @@ Données : fournisseur « Démo - Garage poids lourds » ; référence du fourni
 ligne « Révision du tracteur DEMO-02 », catégorie « Entretien et réparation des véhicules »,
 quantité 1, prix unitaire HT 7 800 000 ; une facture numérisée en PDF.
 
-1. test.comptable : Comptabilité > Achats et dépenses > « Nouvelle pièce d'achat ».
+1. test.comptable : Comptabilité > Achats et dépenses > « Nouvelle facture fournisseur ».
 2. Choisissez le « Fournisseur », saisissez la « Référence du fournisseur », puis la ligne.
 3. Cliquez sur « Enregistrer en brouillon ». Ouvrez la pièce, « Joindre un justificatif », choisissez
    le PDF.
 4. Cliquez sur « Soumettre / valider ».
-5. test.daf : Pilotage > À valider > « Ma corbeille ». Ouvrez la demande, regardez la pièce jointe,
+5. test.daf : Pilotage > À valider > « À approuver ». Ouvrez la demande, regardez la pièce jointe,
    puis « Approuver » et confirmez.
 
 Résultat attendu : après l'étape 4, la pièce reste en brouillon avec la mention « En validation ».
@@ -345,12 +345,12 @@ Données : fournisseur « Démo - Fournisseur de carburant » ; objet « Gasoil 
 3. Ouvrez l'engagement, « Joindre le devis », puis « Soumettre à l'approbation ».
 4. test.daf, puis test.dg : Pilotage > À valider, approuvez l'engagement.
 5. test.comptable : saisissez la facture du fournisseur de 55 000 000 GNF HT ; dans « Engagement de
-   dépense », choisissez l'engagement ; « Enregistrer et soumettre ».
+   dépense », choisissez l'engagement ; « Envoyer pour approbation ».
 6. Rouvrez l'engagement.
 
-Résultat attendu : « Engagement soumis à l'approbation. » à l'étape 3. Au-delà de 50 000 000 GNF,
+Résultat attendu : « Engagement envoyé pour approbation. » à l'étape 3. Au-delà de 50 000 000 GNF,
 la direction approuve après la finance. La facture rattachée est comptabilisée sans nouveau circuit.
-Dans l'engagement, « Pièces d'achat rattachées » montre la facture et « Reste à engager » vaut
+Dans l'engagement, « Factures fournisseurs rattachées » montre la facture et « Reste à engager » vaut
 5 000 000 GNF.
 
 | Résultat {22} | Remarques {78} |
@@ -763,8 +763,8 @@ Compte : test.daf, après FIN-29.
 
 Données : le mois clôturé.
 
-1. Clôtures et contrôles, bloc « Contrôles d'intégrité ».
-2. Lisez la ligne du mois clôturé : « Sceau recalculé » et « Sceau du PV ».
+1. Clôtures et contrôles, bloc « Contrôles du mois écoulé ».
+2. Lisez la ligne du mois clôturé : « Sceau recalculé » et « Sceau du procès-verbal ».
 
 Résultat attendu : le sceau recalculé est identique à celui du PV ; aucune ligne « À examiner ».
 
@@ -813,7 +813,7 @@ Données : aucune.
 
 Résultat attendu : Finance s'ouvre sur « Achats et dépenses ». Les menus ne proposent que « Mes
 demandes », « Engagements de dépense », « Guide des achats », « Achats et dépenses » et
-« Fournisseurs ». Les vues de la liste sont « Toutes », « Brouillons et soumises » et
+« Fournisseurs ». Les vues de la liste sont « Toutes », « Brouillons et en approbation » et
 « Comptabilisées ».
 
 | Résultat {22} | Remarques {78} |
@@ -835,8 +835,8 @@ bureau » ; téléphone « +224 620 00 00 00 ».
 3. Remplissez la raison sociale, le NIF, le secteur et le téléphone, puis « Enregistrer ».
 4. Ouvrez la fiche créée.
 
-Résultat attendu : la fiche montre les coordonnées et « Pièces d'achat récentes » (« Aucune pièce
-d'achat. »). Elle ne montre ni solde ni conditions de paiement, tenus par la finance.
+Résultat attendu : la fiche montre les coordonnées et « Factures récentes » (« Aucune facture
+fournisseur. »). Elle ne montre ni solde ni conditions de paiement, tenus par la finance.
 
 | Résultat {22} | Remarques {78} |
 |---|---|
@@ -858,7 +858,7 @@ trimestre (essai) » ; montant HT 4 500 000 ; catégorie « Fournitures de burea
 4. Cliquez sur « Soumettre à l'approbation ».
 5. Ouvrez Pilotage > Mes demandes.
 
-Résultat attendu : « Devis joint. » puis « Engagement soumis à l'approbation. ». L'engagement n'est
+Résultat attendu : « Devis joint. » puis « Engagement envoyé pour approbation. ». L'engagement n'est
 plus modifiable. Dans « Mes demandes », onglet « En validation », il figure avec l'étape en cours.
 
 | Résultat {22} | Remarques {78} |
@@ -876,12 +876,12 @@ Données : fournisseur « Démo - Garage poids lourds » ; référence « FG-202
 « Remplacement de deux pneus (essai) », catégorie « Pièces de rechange et pneumatiques », quantité
 2, prix unitaire HT 1 250 000 ; une facture en PDF.
 
-1. Comptabilité > Achats et dépenses > « Nouvelle pièce d'achat ».
+1. Comptabilité > Achats et dépenses > « Nouvelle facture fournisseur ».
 2. Remplissez le fournisseur, la référence et la ligne. Vérifiez qu'aucune colonne ne permet de
    choisir un compte.
 3. Laissez la catégorie vide et cliquez sur « Enregistrer en brouillon ».
 4. Choisissez la catégorie, puis « Enregistrer en brouillon ».
-5. Ouvrez la pièce, « Joindre un justificatif », puis « Soumettre au circuit ».
+5. Ouvrez la pièce, « Joindre un justificatif », puis « Envoyer pour approbation ».
 
 Résultat attendu : étape 3, le message « Choisissez la catégorie de dépense de chaque ligne : le
 compte en découle. ». Étape 5, la pièce est « En validation » et suivie dans « Mes demandes ». Les
@@ -904,7 +904,7 @@ Données : la pièce de FIN-35 ; motif « Joindre le bon de livraison signé. »
    « Refuser », confirmez.
 2. test.achats : Pilotage > Mes demandes, onglet « Refusées ». Lisez le motif.
 3. Ouvrez la pièce dans Achats et dépenses, joignez le bon de livraison (« Joindre un
-   justificatif »), puis « Modifier » et « Enregistrer et soumettre ».
+   justificatif »), puis « Modifier » et « Envoyer pour approbation ».
 
 Résultat attendu : le motif du refus est lisible par l'acheteur. Après correction, la pièce repart
 au circuit : elle revient dans la corbeille de la finance.
@@ -1056,10 +1056,10 @@ Compte : test.comptable.
 
 Données : une pièce d'achat saisie et soumise par test.comptable (comme en FIN-11).
 
-1. Ouvrez Pilotage > À valider, onglet « Ma corbeille ».
+1. Ouvrez Pilotage > À valider, onglet « À approuver ».
 2. Ouvrez l'onglet « Mes demandes », puis la demande.
 
-Résultat attendu : la pièce n'est pas dans « Ma corbeille » de test.comptable : elle attend une autre
+Résultat attendu : la pièce n'est pas dans « À approuver » de test.comptable : elle attend une autre
 personne de la finance. Dans « Mes demandes », elle figure avec l'étape en cours ; sa fiche ne propose
 ni « Approuver » ni « Refuser ».
 
@@ -1079,7 +1079,7 @@ Données : une pièce d'achat soumise et non encore approuvée.
 
 1. test.comptable : ouvrez la pièce « En validation », « Modifier », changez le prix unitaire, puis
    « Enregistrer ».
-2. test.daf : ouvrez la demande dans « Ma corbeille » et tentez « Approuver ».
+2. test.daf : ouvrez la demande dans « À approuver » et tentez « Approuver ».
 
 Résultat attendu : l'ancienne demande n'est plus approuvable : « La pièce a été modifiée depuis sa
 soumission : elle doit être soumise à nouveau. ». La pièce modifiée doit être soumise de nouveau
