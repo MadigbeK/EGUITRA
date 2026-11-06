@@ -200,7 +200,7 @@ function Choix({ onLu, onManuel }: { onLu: (l: Lecture, s: { f: Saisie; promoteu
       </section>
       <section className={cx(FEUILLE, "min-w-0 p-6")}>
         <h2 className="font-display text-[17px] font-[620] text-ink">Saisie manuelle</h2>
-        <p className="mt-2 text-[14px] leading-relaxed text-ink-2">Créez la fiche vide et remplissez-la vous-même à l&apos;étape 1 du projet.</p>
+        <p className="mt-2 text-[14px] leading-relaxed text-ink-2">Remplissez vous-même la fiche, puis créez le projet.</p>
         <Button className="mt-4" disabled={etat?.enCours} onClick={onManuel}>Saisir la fiche manuellement</Button>
       </section>
     </div>

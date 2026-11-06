@@ -1,8 +1,44 @@
 # Guide du cabinet : AxisPro Suite
 
-## Le tableau de bord (Cabinet > Dossiers)
+## Le parcours d'un projet (méthode SC-01 V2)
 
-L'accueil d'AxisPro montre le portefeuille : chiffres clés, entonnoir des dossiers par étape,
+**Accueil** : les projets à relancer, prêts pour le comité, bloqués par un knock-out ou à compléter, et la
+répartition par gate. **Portefeuille** : tous les projets, avec leurs scores et leur suivi. « Nouveau projet »
+se fait à partir du business plan ou par saisie manuelle. Chaque projet se suit ensuite en sept étapes :
+
+1. **Fiche** : identité du projet et recevabilité. Les quatre conditions cochées font passer le projet au Gate 1.
+2. **Pièces** : la data room en dix catégories (A à J). Chaque pièce est renommée automatiquement, se rattache à
+   un critère et porte un état de vérification. Le rattachement ne change jamais le statut du critère.
+3. **Scoring** : les 111 critères, un statut par critère. « Incomplet » et « Non applicable » demandent une
+   observation. Un « Non applicable » compte comme « Non disponible » tant que l'associé ne l'a pas validé.
+4. **Résultats** : Readiness, APD, Bankability, complétude, knock-out, classification et décision proposée, recalculés
+   à chaque ouverture. « Figer une version » garde une trace datée de l'évaluation.
+5. **Relances** : les pièces manquantes par priorité et le message prêt à envoyer (courriel, WhatsApp, portail).
+6. **Comité** : conditions du passage au gate suivant et procès-verbal. La décision se scelle en une action et ne se
+   modifie plus ; son procès-verbal se télécharge en PDF. Une décision contraire à la recommandation exige un motif.
+7. **Dossier complet** : un fichier .zip avec la synthèse en PDF, le classeur de scoring, la dernière relance et les
+   pièces classées.
+
+**Lien de dépôt pour le promoteur** (étape 2) : créez un lien valable 14 jours et transmettez-le au promoteur. Il
+dépose ses pièces sans compte. Il ne voit ni les scores ni les autres pièces, et ses pièces arrivent « À vérifier ».
+Le lien ne s'affiche qu'une fois ; vous pouvez le retirer à tout moment.
+
+**Qui voit quoi :**
+
+- L'évaluateur (profil « Cabinet AxisPro ») voit ses projets : ceux dont il est responsable, ceux où un compartiment lui
+  est confié et ceux qui n'ont pas encore de responsable. S'il confie son projet à un collègue, il ne le voit plus.
+- L'associé voit tout, valide les « Non applicable », administre la grille et peut supprimer un projet.
+- L'associé et la direction enregistrent les décisions du comité. Celui qui a noté des critères d'un projet ne vote pas
+  sur ce projet.
+- Le lecteur (profil « Lecteur du cabinet ») consulte l'accueil, le portefeuille et les dossiers, et télécharge le
+  dossier complet, sans rien modifier.
+
+Les projets encore suivis selon l'ancienne grille gardent leurs écrans jusqu'à leur bascule. Les sections qui suivent
+décrivent cette ancienne méthode et les outils communs.
+
+## Le tableau de bord (Cabinet > Dossiers, vue du cabinet)
+
+Cette vue montre les dossiers du cabinet : chiffres clés, entonnoir des dossiers par étape,
 recommandations, puis le pilotage du cabinet. On y trouve le financement des projets (besoin,
 montants sollicités et obtenus, démarches par étape), ce qu'il faut surveiller (actions en
 retard, comptes rendus des porteurs à valider, risques critiques, relances des financeurs dans
