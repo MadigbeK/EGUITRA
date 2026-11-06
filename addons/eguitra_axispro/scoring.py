@@ -507,7 +507,7 @@ def excel_round(value, digits=0):
 
 def sc01_settings(policy):
     """Réglages complets de la méthode : ceux de la politique sur les valeurs de référence (section 7.7)."""
-    return dict(DEFAULT_POLICY, **SC01_DEFAULTS, **{k: v for k, v in (policy or {}).items() if v is not None})
+    return {**DEFAULT_POLICY, **SC01_DEFAULTS, **{k: v for k, v in (policy or {}).items() if v is not None}}
 
 
 def sc01_status(note):
