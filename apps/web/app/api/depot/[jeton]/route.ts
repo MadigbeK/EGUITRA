@@ -72,7 +72,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ jeton: str
     // Lien inconnu ou expiré : le refus du noyau part tout de suite, sans lire le corps.
     const lien = await odooFetch(`/depot/${jeton}`, { clientIp });
     if (!lien.ok) return await relay(lien);
-    await lien.body?.cancel().catch(() => undefined);
+    // Réponse lue en entier, jamais annulée : Next.js double le flux d'un fetch, et l'annulation d'une seule moitié ne se termine pas.
+    await lien.text();
     const corps = await lireBorne(req);
     if (!corps) return tropGros();
     return await relay(await odooFetch(`/depot/${jeton}`, { method: "POST", rawBody: corps, contentType: type, clientIp }));
