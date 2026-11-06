@@ -275,6 +275,18 @@ const bascules = new Map<number, Promise<boolean>>();
  * passe de lui-même (lien venu de l'accueil, du lanceur ou d'un favori) ; sinon, on explique. Le
  * contexte illisible (réseau, noyau arrêté) se dit, avec « Réessayer », au lieu d'un squelette sans fin.
  */
+/** Évaluateur du cabinet : ses chiffres ne portent que sur ses projets, l'écran le dit. */
+export function AvisMesProjets({ contexte }: { contexte: Contexte }) {
+  if (!contexte.own_projects_only) return null;
+  return (
+    <div className="mb-4">
+      <Notice tone="accent">
+        Ces chiffres portent sur vos projets seulement : ceux dont vous êtes responsable, ceux dont un compartiment vous est confié et ceux sans responsable. Le portefeuille complet est ouvert aux associés et à la direction.
+      </Notice>
+    </div>
+  );
+}
+
 export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; children: ReactNode }) {
   const { data: contexte, error, mutate } = useContexte();
   const cible = contexte && contexte.entity !== attendu ? contexte.companies?.find((c) => c.entity === attendu) : undefined;
@@ -312,13 +324,7 @@ export function GardeSociete({ attendu, children }: { attendu: EntiteSociete; ch
   if (contexte.entity === attendu) {
     return (
       <>
-        {contexte.own_projects_only && (
-          <div className="mb-4">
-            <Notice tone="accent">
-              Ces chiffres portent sur vos projets seulement : ceux dont vous êtes responsable, ceux dont un compartiment vous est confié et ceux sans responsable. Le portefeuille complet est ouvert aux associés et à la direction.
-            </Notice>
-          </div>
-        )}
+        <AvisMesProjets contexte={contexte} />
         {children}
       </>
     );
