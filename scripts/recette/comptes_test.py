@@ -68,6 +68,8 @@ COMPTES = [
     # Associé du cabinet : scelle les décisions du comité, force un gate, rouvre une révision (avec la
     # direction), toujours à deux personnes au moins ; le consultant garde le reste.
     ("test.associe", "Test - Associé du cabinet", ["cabinet", "associe"], ["cabinet"]),
+    # Lecteur du cabinet : consulte les dossiers, sans rien modifier ni décider.
+    ("test.lecteur", "Test - Lecteur du cabinet", ["lecteur"], ["cabinet"]),
     ("test.rh", "Test - Gestionnaire RH", ["rh"], ["groupe", "cabinet"]),
     ("test.hsseq", "Test - Responsable HSSEQ", ["hsseq"], ["groupe", "cabinet"]),
     # Téléphone seul (NIMOVA Terrain) ; lié à un chauffeur de démonstration par donnees_demo_hsseq.py.

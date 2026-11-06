@@ -89,6 +89,7 @@ const METIER: Array<[Profile, EspaceCode]> = [
   ["exploitation", "transport"],
   ["cabinet", "axispro"],
   ["associe", "axispro"],
+  ["lecteur", "axispro"],
   ["rh", "rh"],
   ["hsseq", "hsseq"],
   ["service_client", "service-client"],

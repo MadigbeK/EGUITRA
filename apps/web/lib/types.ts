@@ -11,6 +11,8 @@ export type Profile =
   | "cabinet"
   /** Associé du cabinet : porte aussi « cabinet » ; scelle les décisions, force un gate, rouvre une révision. */
   | "associe"
+  /** Lecteur du cabinet : consulte les dossiers AxisPro, sans rien modifier ni décider. */
+  | "lecteur"
   | "porteur"
   | "rh"
   /** Responsable HSSEQ : administration du module, enquêtes, dérogations, détail des alcootests. */

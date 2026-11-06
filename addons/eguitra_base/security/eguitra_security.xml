@@ -92,6 +92,15 @@
         <field name="implied_ids" eval="[Command.link(ref('base.group_user')), Command.link(ref('group_profile_cabinet'))]"/>
     </record>
 
+    <!-- Lecteur du cabinet (référence AxisPro V2.0, section 3) : consulte les dossiers de MB AxisPro Consulting,
+         sans rien modifier ni décider. Distinct de l'auditeur HSSEQ, qui ne doit jamais lire ces dossiers. -->
+    <record id="group_profile_lecteur" model="res.groups">
+        <field name="name">Lecteur du cabinet</field>
+        <field name="privilege_id" ref="privilege_eguitra_profiles"/>
+        <field name="comment">Consultation des dossiers de MB AxisPro Consulting : fiche, évaluation, résultats, pièces et décisions. Aucune écriture, aucune décision, pas de temps passés.</field>
+        <field name="implied_ids" eval="[Command.link(ref('base.group_user'))]"/>
+    </record>
+
     <record id="group_profile_rh" model="res.groups">
         <field name="name">Ressources humaines</field>
         <field name="privilege_id" ref="privilege_eguitra_profiles"/>

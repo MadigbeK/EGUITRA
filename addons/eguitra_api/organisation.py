@@ -36,7 +36,8 @@ APPS = {
     # Achats : pièces d'achat, engagements de dépense et fournisseurs, dans l'une ou l'autre société.
     "finance": {"profiles": {"admin", "direction", "finance", "achats", "exploitation", "chantiers", "immobilier"},
                 "entity": None},
-    "axispro": {"profiles": {"admin", "direction", "cabinet", "associe"}, "entity": "cabinet"},
+    # Lecteur : consultation des dossiers. L'auditeur HSSEQ n'y entre jamais, même ouvert à cette société.
+    "axispro": {"profiles": {"admin", "direction", "cabinet", "associe", "lecteur"}, "entity": "cabinet"},
     "portail": {"profiles": {"porteur"}, "entity": "cabinet"},
     "mobile": {"profiles": {"admin", "exploitation"}, "entity": "groupe"},
     "transport": {"profiles": {"admin", "direction", "finance", "exploitation"}, "entity": "groupe"},
@@ -89,6 +90,7 @@ PROFILE_ENTITY = {
     "immobilier": "groupe",
     "cabinet": "cabinet",
     "associe": "cabinet",
+    "lecteur": "cabinet",
     "porteur": "cabinet",
 }
 
