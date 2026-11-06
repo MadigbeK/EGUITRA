@@ -64,10 +64,10 @@ OTF-EGUITRA-2026-37 du 29 septembre 2026 ; support de la réunion de cadrage du 
 | N° | Élément | Première demande | Sources | Statut | Reçu le | Observation |
 |---|---|---|---|---|---|---|
 | E1 | Identité des sociétés : raison sociale, adresse, NIF, RCCM, reprises sur les factures | 14/10/2026 | `ETAT.md` ; questionnaire finance (q. 8) | en attente | | À saisir dans Administration > Sociétés dès réception. |
-| E2 | Destinations des alertes de supervision | 14/10/2026 | `ETAT.md` (chapitre 7) | en attente | | Alertes inscrites au seul journal du serveur en attendant. |
-| E3 | Serveur d'envoi de courriel (relances, comptes rendus) | 14/10/2026 | `ETAT.md` ; dossier de conception (point à valider 7) | en attente | | Sans serveur, les relances s'impriment. |
+| E2 | Destinations des alertes de supervision | 14/10/2026 | `ETAT.md` (chapitre 7) | en attente | | Alertes inscrites au seul journal du serveur en attendant. Proposé le 06/11/2026 : application ntfy et sonde healthchecks.io, pose prête (`plan-mise-en-service.md`, 1.1 et 1.2). |
+| E3 | Serveur d'envoi de courriel (relances, comptes rendus) | 14/10/2026 | `ETAT.md` ; dossier de conception (point à valider 7) | en attente | | Sans serveur, les relances s'impriment. Proposé le 06/11/2026 : boîte OVH Zimbra Starter `notifications@nimova.cloud`, pose prête (`plan-mise-en-service.md`, 1.4). |
 | E4 | Téléphones des agents du parc, avec une application d'authentification (Rotations) | 14/10/2026 | dossier de conception (point à valider 6) ; `ETAT.md`, chapitre 8 | à confirmer | à confirmer | |
-| E5 | Fournisseur de stockage hors site (second hébergeur) | 14/10/2026 | dossier de conception (point à valider 7) | non souscrit | | Compris dans l'hébergement de l'offre (5.1) : la souscription revient au prestataire ; ce n'est pas un prérequis du client. |
+| E5 | Fournisseur de stockage hors site (second hébergeur) | 14/10/2026 | dossier de conception (point à valider 7) | non souscrit | | Compris dans l'hébergement de l'offre (5.1) : la souscription revient au prestataire ; ce n'est pas un prérequis du client. Proposé le 06/11/2026 : Backblaze B2, région EU Central (accord de confidentialité, article 5.1) ; chaîne de copie essayée le même jour vers un dossier jetable (`plan-mise-en-service.md`, 1.3). |
 
 ## 4. Questionnaires de paramétrage
 

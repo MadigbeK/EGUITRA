@@ -202,6 +202,16 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 6 novembre 2026, soir : nom nu en service, plan de mise en service, proposition du lien unique
+
+- `nimova.cloud` et `www` pointés vers 178.33.206.212 dans OVH (à la demande du gérant), puis `infra/domaines.sh appliquer nimova.cloud` : certificats obtenus, redirection 302 vers `finance.nimova.cloud`, chemin conservé. `finance`, `axispro`, `portail`, `recette` à 200, `noyau` à 403. La ligne « À faire par le gérant » sur le DNS, plus bas, est faite.
+- Plan des gestes restants : `docs/projet/plan-mise-en-service.md`. Projets à compléter : `Avenant_offre.docx`, `Avenant_confidentialite.docx`, `Comite_de_pilotage_01.docx` (rendu contrôlé ; charges, montants et T0 restent au gérant, rien n'a été envoyé au client).
+- `infra/poser-secrets.sh` : pose masquée des secrets par le gérant (`alerte`, `sonde`, `courriel`, `ia`, `hors-site`). Essais sur fichiers jetables réussis ; rien de réel n'est posé : aucun canal d'alerte, sonde, serveur de courriel, clé d'IA ni stockage hors site à ce jour. Refus du contrôle automatique sur l'envoi vers `ntfy.sh` depuis le serveur : non contourné, d'où le geste du gérant.
+- Copie hors site essayée vers un dossier jetable : chiffrement, envoi, relecture déchiffrée identique, 64 fichiers sur 64. Reste à la jouer vers le vrai stockage, puis restauration d'essai.
+- NIMOVA Terrain : adresses de la recette et de la production ajoutées aux profils de construction (sans adresse, l'application refusait de démarrer) ; dépendances alignées sur le SDK 58 (19 mises à jour de correction) ; types, 79 tests sur 79, `expo-doctor` 20 sur 20, export Android : tout passe. Construction de l'APK : attend `eas login` par le gérant.
+- Lien unique, demande du gérant : un seul lien, une seule page de connexion, un accueil limité aux modules du compte. Proposition faite : `https://nimova.cloud` ; une tuile par module sur l'accueil (2 à 8 modules selon le compte, au lieu de 11 à 94 écrans), recherche des écrans conservée ; anciennes adresses en redirection ; `/portail` et `/espace-client` gardent leur page de connexion à leurs couleurs ; recette à part, réservée aux testeurs. Décision attendue, rien de codé.
+- Reste, côté gérant : décision du lien unique ; étapes 1 et 2 du plan ; comité n° 1, T0, avenants et registre avec le client (semaine du 9 novembre) ; ensuite clé Anthropic, WhatsApp, reprise des données, double authentification avant les données réelles.
+
 ### 6 novembre 2026, 16 h 54 : AxisPro V2.0 en production, domaine nimova.cloud, décisions de simplicité (version 20261106-1654)
 
 - En production : version 20261106-1654 (code d55c0eca01), sauvegarde prise avant. Politique en vigueur : « Outil de scoring MB AxisPro Consulting (SC-01 V2.0) », méthode `sc01_v2`, 111 critères, 15 domaines, 8 gates, 9 knock-out, 42 pièces. Aucun dossier en production : aucune bascule nécessaire. Aucun compte de test. Double authentification toujours coupée (`mfa_required` = 0).
