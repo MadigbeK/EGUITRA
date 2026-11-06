@@ -65,6 +65,12 @@ function numeroWhatsApp(phone: string | null): string | null {
  * message préparé (modifiable, à copier, à ouvrir dans la messagerie ou WhatsApp, ou à envoyer par le
  * portail), relance enregistrée, historique. Le message ne cite jamais l'intitulé d'un critère : le
  * cabinet voit les codes des critères à côté de chaque pièce, le porteur ne les lit pas.
+ *
+ * Ouvrir le message dans la messagerie ou WhatsApp enregistre aussitôt la relance (même route que
+ * « Enregistrer la relance », canal correspondant) : pas de second formulaire. Le noyau n'a pas de route
+ * pour retirer une relance : le retour ne propose donc pas d'« Annuler ». Un dossier clos ou suspendu ne
+ * se relance pas : les commandes d'envoi disparaissent et l'écran dit pourquoi ; sans accès du porteur
+ * au portail, l'envoi par le portail disparaît aussi, avec sa raison.
  */
 export function Relances({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
   const { data, error, mutate } = useApi<Donnees>(`/axispro/dossiers/${d.id}/relances`);
@@ -82,6 +88,8 @@ function Contenu({ d, r, relire }: { d: DossierDetail; r: Donnees; relire: () =>
   const [contact, setContact] = useState({ name: d.contact?.name ?? "", email: d.contact?.email ?? "", phone: d.contact?.phone ?? "" });
   const [saisie, setSaisie] = useState({ date: AUJOURDHUI(), channel: "email", note: "" });
   const [copie, setCopie] = useState(false);
+  // Retour affiché près de la commande qui l'a produit : en tête pour le contact, sous le message pour une relance.
+  const [ou, setOu] = useState<"haut" | "message">("haut");
   // Message proposé renouvelé (pièces reçues, contact changé) : la saisie suit tant qu'elle n'a pas été retouchée.
   const [propose, setPropose] = useState(r.message);
   useEffect(() => {
@@ -98,8 +106,13 @@ function Contenu({ d, r, relire }: { d: DossierDetail; r: Donnees; relire: () =>
   const whatsapp = numeroWhatsApp(r.contact.phone);
   const contactModifie = contact.name !== (d.contact?.name ?? "") || contact.email !== (d.contact?.email ?? "") || contact.phone !== (d.contact?.phone ?? "");
   const aujourdhui = AUJOURDHUI();
+  // Relance possible : profil cabinet, dossier en cours (un dossier clos est refusé par le noyau, un
+  // dossier suspendu sort du suivi des relances).
+  const relancable = cabinet && d.state === "open";
+  const arret = d.state === "closed" ? "Dossier clos : rouvrez-le pour relancer le porteur." : d.state === "on_hold" ? "Dossier suspendu : reprenez-le pour relancer le porteur." : null;
 
   async function enregistrerContact() {
+    setOu("haut");
     const ok = await envoyer(
       () => apiSend("PATCH", `/axispro/dossiers/${d.id}`, { contact_name: contact.name, contact_email: contact.email, contact_phone: contact.phone }),
       "Contact du promoteur enregistré.",
@@ -108,11 +121,12 @@ function Contenu({ d, r, relire }: { d: DossierDetail; r: Donnees; relire: () =>
     if (ok !== undefined) relire();
   }
 
-  async function relancer(channel: string) {
+  async function relancer(channel: string, retour?: string) {
+    setOu("message");
     const ok = await envoyer(
       () => apiSend("POST", `/axispro/dossiers/${d.id}/relances`, { ...saisie, channel, body: message }),
-      channel === "portal" ? "Message envoyé au porteur sur le portail, relance enregistrée." : "Relance enregistrée.",
-      channel === "portal" ? "portail" : "relance",
+      retour ?? (channel === "portal" ? "Message envoyé au porteur sur le portail, relance enregistrée." : "Relance enregistrée."),
+      channel === "portal" ? "portail" : retour ? "ouverture" : "relance",
     );
     if (ok !== undefined) {
       setSaisie({ date: AUJOURDHUI(), channel: saisie.channel, note: "" });
@@ -132,7 +146,7 @@ function Contenu({ d, r, relire }: { d: DossierDetail; r: Donnees; relire: () =>
 
   return (
     <div className="space-y-5">
-      {bandeau}
+      {ou === "haut" && bandeau}
       <Card title="Suivi du porteur">
         <div className="flex flex-wrap items-center gap-3">
           <Badge tone={suivi.tone}>{suivi.label}</Badge>
@@ -198,33 +212,48 @@ function Contenu({ d, r, relire }: { d: DossierDetail; r: Donnees; relire: () =>
 
       <Card title="Message de relance">
         <Textarea rows={16} value={message} disabled={!cabinet} onChange={(e) => setMessage(e.target.value)} aria-label="Message de relance" className="font-mono text-[13px]" />
+        {cabinet && arret && <div className="mt-3"><Notice tone="neutral">{arret}</Notice></div>}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button onClick={() => void copier()}><Copy className="h-4 w-4" /> {copie ? "Copié" : "Copier"}</Button>
-          {email && (
-            <a className={classesBouton()} href={`mailto:${email}?subject=${encodeURIComponent(objet)}&body=${encodeURIComponent(corps)}`} onClick={() => setSaisie({ ...saisie, channel: "email" })}>
+          {/* Ouvrir le message enregistre la relance du canal (profil cabinet, dossier en cours). */}
+          {email && !arret && (
+            <a
+              className={classesBouton()}
+              href={`mailto:${email}?subject=${encodeURIComponent(objet)}&body=${encodeURIComponent(corps)}`}
+              onClick={() => relancable && void relancer("email", "Relance par courriel enregistrée.")}
+            >
               <Mail className="h-4 w-4" /> Ouvrir dans la messagerie
             </a>
           )}
-          {whatsapp && (
-            <a className={classesBouton()} href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(message)}`} target="_blank" rel="noopener noreferrer" onClick={() => setSaisie({ ...saisie, channel: "whatsapp" })}>
+          {whatsapp && !arret && (
+            <a
+              className={classesBouton()}
+              href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(message)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => relancable && void relancer("whatsapp", "Relance WhatsApp enregistrée.")}
+            >
               <Smartphone className="h-4 w-4" /> WhatsApp
             </a>
           )}
           {message !== r.message && cabinet && (
             <Button variant="ghost" onClick={() => setMessage(r.message)}><RotateCcw className="h-4 w-4" /> Message proposé</Button>
           )}
-          {cabinet && r.portal && (
+          {relancable && r.portal && (
             <Button variant="primary" className="ml-auto" disabled={!message.trim() || occupe} loading={enCours === "portail"} onClick={() => void relancer("portal")}>
               <Send className="h-4 w-4" /> Envoyer par le portail
             </Button>
           )}
         </div>
-        <p className="mt-2 text-xs text-muted">
-          {r.portal
-            ? "L'envoi par le portail notifie le porteur et enregistre la relance. Par courriel, téléphone ou WhatsApp, enregistrez la relance ci-dessous une fois le message envoyé."
-            : "Le porteur n'a pas encore d'accès au portail. Copiez le message ou ouvrez-le dans votre messagerie, puis enregistrez la relance ci-dessous."}
-        </p>
-        {cabinet && (
+        {ou === "message" && bandeau && <div className="mt-3">{bandeau}</div>}
+        {cabinet && !arret && (
+          <p className="mt-2 text-xs text-muted">
+            {r.portal
+              ? "L'envoi par le portail notifie le porteur et enregistre la relance. Ouvrir le message dans la messagerie ou WhatsApp enregistre aussi la relance ; par téléphone, réunion ou courrier, enregistrez-la ci-dessous."
+              : "Envoi par le portail indisponible : le porteur n'a pas encore d'accès. Ouvrez-le dans la synthèse (« Équipe et accès du porteur au portail »). En attendant, ouvrir le message dans la messagerie ou WhatsApp enregistre la relance ; par téléphone, réunion ou courrier, enregistrez-la ci-dessous."}
+          </p>
+        )}
+        {relancable && (
           <fieldset disabled={occupe} className="mt-4 grid min-w-0 grid-cols-1 gap-3 border-t border-line pt-4 md:grid-cols-12">
             <Field label="Date" className="md:col-span-3"><Input type="date" max={aujourdhui} value={saisie.date} onChange={(e) => setSaisie({ ...saisie, date: e.target.value })} /></Field>
             <Field label="Canal" className="md:col-span-3">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
-import { Notice, cx, demanderConfirmation } from "@/components/ui";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { MoreHorizontal } from "@/components/icons";
+import { Button, Notice, PANNEAU, cx, demanderConfirmation } from "@/components/ui";
 import { ETATS } from "@/lib/couleurs";
 import { useMoi, type MoiAxispro } from "@/components/axispro/moi";
 import { messageErreur as messageSocle } from "@/lib/api-client";
@@ -81,6 +82,35 @@ export function PuceCompartiment({ code, nom, className }: { code: string; nom?:
     <span title={nom ? `${code} ${nom}` : undefined} className={cx("inline-flex flex-none items-center rounded-md border border-accent/25 bg-accent-doux px-1.5 py-px font-mono text-[11.5px] font-bold leading-4 text-accent", className)}>
       {code}
     </span>
+  );
+}
+
+/**
+ * Commandes techniques rarement utiles au quotidien (export JSON, import d'un export JSON), repliées
+ * sous « Plus » : rien n'est retiré, tout reste à deux clics. Échap ou un clic ailleurs referme.
+ */
+export function MenuPlus({ children, label = "Plus" }: { children: ReactNode; label?: string }) {
+  const [ouvert, setOuvert] = useState(false);
+  const boite = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!ouvert) return;
+    const touche = (e: KeyboardEvent) => e.key === "Escape" && setOuvert(false);
+    const clic = (e: MouseEvent) => boite.current && !boite.current.contains(e.target as Node) && setOuvert(false);
+    window.addEventListener("keydown", touche);
+    window.addEventListener("mousedown", clic);
+    return () => {
+      window.removeEventListener("keydown", touche);
+      window.removeEventListener("mousedown", clic);
+    };
+  }, [ouvert]);
+  return (
+    <div ref={boite} className="relative">
+      <Button aria-expanded={ouvert} aria-controls={id} onClick={() => setOuvert((v) => !v)}>
+        <MoreHorizontal className="h-4 w-4" /> {label}
+      </Button>
+      {ouvert && <div id={id} className={cx(PANNEAU, "n-surgir absolute right-0 top-full z-30 mt-2 flex w-64 flex-col items-stretch gap-1.5 p-2")}>{children}</div>}
+    </div>
   );
 }
 

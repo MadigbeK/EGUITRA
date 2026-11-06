@@ -1,13 +1,16 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ChevronDown, ChevronRight, Download, FileUp, Search, ShieldAlert, Target, TrendingUp, Users, X } from "@/components/icons";
 import { Badge, Button, Card, DataTable, ErrorBox, Etat, FEUILLE, FileButton, Input, Modal, Notice, Segmented, Select, Tag, Textarea, cx } from "@/components/ui";
 import { apiDownload, apiSend, apiUpload, useApi } from "@/lib/api-client";
 import { REQUIREMENT, STATUS_LABELS, STATUS_SHORT, type CriterionEval, type DocFile, type DossierDetail, type ImportResult, type Status } from "@/lib/axispro-types";
 import { INSECABLE, fmtDate, fmtDateTime, fmtDec, fmtInt, fmtPct, fmtShort, pluriel } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { LectureSeuleCabinet, PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, messageErreur, scoreEcrit, useCabinet, useRetour } from "./commun";
+import { LectureSeuleCabinet, MenuPlus, PRIORITE_TON, PuceCompartiment, arrondi, couleurScore, messageErreur, scoreEcrit, useCabinet, useRetour } from "./commun";
+
+/** Pause sans clic après laquelle les critères et le dossier (scores, synthèse) sont relus, une seule fois. */
+const PAUSE_RELECTURE = 2000;
 
 /** Couleur de la puce d'état choisie. */
 const ETAT: Record<Status, string> = {
@@ -35,11 +38,18 @@ const FOCUS: Array<{ value: Focus; label: string }> = [
 /**
  * Check-list d'évaluation, par domaine : statut saisi, statut retenu par la méthode (requalification
  * sans toucher la saisie), preuves déposées sur le critère et leur validité, livrable, responsable,
- * échéance, observation. Saisie guidée : les critères des gates atteints, non évalués d'abord. Pour une
- * grille à compartiments, chaque domaine porte le code de son compartiment et son consultant ; un filtre
- * isole un compartiment, et « Mes compartiments » ne garde que ceux confiés à l'utilisateur (mine=1).
+ * échéance, observation. Saisie guidée : les critères des gates atteints, non évalués d'abord, sans
+ * codes, poids ni priorité chiffrée (la grille complète les montre). Pour une grille à compartiments,
+ * chaque domaine porte le code de son compartiment et son consultant ; un filtre isole un compartiment
+ * (ouvert d'emblée depuis une carte de la synthèse), et « Mes compartiments » ne garde que ceux confiés
+ * à l'utilisateur (mine=1).
+ *
+ * Saisie rapide : la pastille cliquée se colore aussitôt (refusée, elle revient à l'état d'avant, motif
+ * sur la ligne) ; la liste garde son ordre et ses lignes jusqu'au prochain changement de filtre, pour que
+ * la ligne suivante ne glisse jamais sous le curseur ; critères et dossier ne sont relus qu'une fois,
+ * après une pause de deux secondes sans clic (ou en quittant l'onglet).
  */
-export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
+export function CheckList({ d, onChanged, compartimentInitial }: { d: DossierDetail; onChanged: () => void; compartimentInitial?: number | null }) {
   const compartiments = d.scoring.compartments ?? [];
   const [miens, setMiens] = useState(false);
   const { moi, cabinet } = useCabinet();
@@ -47,7 +57,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const { data: room, mutate: mutateRoom } = useApi<{ files: DocFile[] }>(`/axispro/dossiers/${d.id}/documents`);
   const [mode, setMode] = useState<"guidee" | "complete">(d.progress.assessed < d.progress.criteria ? "guidee" : "complete");
   const [q, setQ] = useState("");
-  const [compartiment, setCompartiment] = useState("");
+  const [compartiment, setCompartiment] = useState(compartimentInitial ? String(compartimentInitial) : "");
   const [domain, setDomain] = useState("");
   const [gate, setGate] = useState("");
   const [focus, setFocus] = useState<Focus>("");
@@ -64,17 +74,67 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const verrou = d.locked || !cabinet;
   const gateIndex = new Map(d.gates.map((g, i) => [g.code, i]));
   const courant = d.current_gate ? (gateIndex.get(d.current_gate.code) ?? 0) : 0;
+  const detaille = mode === "complete";
+
+  // Statut cliqué, affiché aussitôt, en attendant la relecture des critères ; `accepte` garde le dernier
+  // statut que le noyau a enregistré, pour y revenir si un clic suivant est refusé.
+  const [optimiste, setOptimiste] = useState<Record<number, Status>>({});
+  const accepte = useRef<Record<number, Status>>({});
+  const statut = (c: CriterionEval): Status => optimiste[c.id] ?? c.status;
+  // Ordre et lignes de la liste, figés entre deux changements de filtre (ou de la liste des critères).
+  const fige = useRef<{ cle: string; signature: string; ids: number[] } | null>(null);
+  // Enregistrements d'un même critère l'un après l'autre (deux clics rapides arrivent dans l'ordre),
+  // nombre d'enregistrements en cours et relecture différée.
+  const file = useRef(new Map<number, Promise<unknown>>());
+  const enVol = useRef(0);
+  const minuterie = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const relire = useRef(() => {});
+  useEffect(() => {
+    relire.current = () => {
+      void mutate();
+      onChanged();
+    };
+  });
+  // Onglet quitté avant la relecture : elle part dès la fin des enregistrements en cours (synthèse et scores à jour).
+  useEffect(() => () => {
+    if (minuterie.current === null) return;
+    clearTimeout(minuterie.current);
+    minuterie.current = null;
+    void Promise.all(file.current.values()).then(() => relire.current());
+  }, []);
+  // Relecture arrivée : les statuts qu'elle confirme n'ont plus besoin de l'affichage anticipé.
+  useEffect(() => {
+    if (!criteria) return;
+    setOptimiste((o) => {
+      let n = o;
+      for (const c of criteria) {
+        if (o[c.id] !== undefined && o[c.id] === c.status) {
+          if (n === o) n = { ...o };
+          delete n[c.id];
+          delete accepte.current[c.id];
+        }
+      }
+      return n;
+    });
+  }, [criteria]);
 
   const lignes = useMemo(() => {
-    let rows = criteria ?? [];
-    if (mode === "guidee") rows = rows.filter((c) => (gateIndex.get(c.gate) ?? 0) <= courant);
+    const toutes = criteria ?? [];
     const t = q.trim().toLowerCase();
+    const cle = [mode, t, compartiment, domain, gate, focus, courant].join("|");
+    const signature = toutes.map((c) => c.id).join(",");
+    if (fige.current && fige.current.cle === cle && fige.current.signature === signature) {
+      const parId = new Map(toutes.map((c) => [c.id, c]));
+      return fige.current.ids.map((id) => parId.get(id)).filter((c): c is CriterionEval => c !== undefined);
+    }
+    let rows = toutes;
+    if (mode === "guidee") rows = rows.filter((c) => (gateIndex.get(c.gate) ?? 0) <= courant);
     if (t) rows = rows.filter((c) => `${c.code} ${c.name} ${c.comment ?? ""}`.toLowerCase().includes(t));
     if (compartiment) rows = rows.filter((c) => String(c.compartment_id) === compartiment);
     if (domain) rows = rows.filter((c) => String(c.domain_id) === domain);
     if (gate) rows = rows.filter((c) => c.gate === gate);
     const f: Record<Exclude<Focus, "">, (c: CriterionEval) => boolean> = {
-      pending: (c) => c.status === "not_assessed",
+      pending: (c) => statut(c) === "not_assessed",
       gaps: (c) => c.retained === "partial" || c.retained === "not_met",
       ko: (c) => c.knockout,
       critical: (c) => c.critical,
@@ -84,9 +144,10 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
       noproof: (c) => c.documents.length === 0,
     };
     if (focus) rows = rows.filter(f[focus]);
-    if (mode === "guidee") rows = [...rows].sort((a, b) => Number(a.status !== "not_assessed") - Number(b.status !== "not_assessed"));
+    if (mode === "guidee") rows = [...rows].sort((a, b) => Number(statut(a) !== "not_assessed") - Number(statut(b) !== "not_assessed"));
+    fige.current = { cle, signature, ids: rows.map((c) => c.id) };
     return rows;
-    // gateIndex et courant dérivent de d.
+    // gateIndex, courant et statut dérivent de d et de l'état ; un clic ne retrie jamais la liste.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [criteria, mode, q, compartiment, domain, gate, focus, d.current_gate?.code]);
 
@@ -98,25 +159,62 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
       return n;
     });
   }
-  /** Enregistre un champ du critère ; rend faux si le noyau refuse (le motif s'affiche sur la ligne). */
+  /** Relit critères et dossier une seule fois, après une pause sans clic et la fin des enregistrements en cours. */
+  function relireApresPause() {
+    if (minuterie.current !== null) clearTimeout(minuterie.current);
+    const attendre = () => {
+      if (enVol.current > 0) {
+        minuterie.current = setTimeout(attendre, 400);
+        return;
+      }
+      minuterie.current = null;
+      relire.current();
+    };
+    minuterie.current = setTimeout(attendre, PAUSE_RELECTURE);
+  }
+  /** Envoi après ceux déjà partis pour le même critère. */
+  function enFile<T>(id: number, appel: () => Promise<T>): Promise<T> {
+    const suite = (file.current.get(id) ?? Promise.resolve()).then(appel);
+    file.current.set(id, suite.catch(() => undefined));
+    return suite;
+  }
+  /**
+   * Enregistre un champ du critère ; rend faux si le noyau refuse (le motif s'affiche sur la ligne). Un
+   * statut s'affiche avant la réponse et revient au dernier statut enregistré en cas de refus.
+   */
   async function save(c: CriterionEval, patch: Record<string, unknown>): Promise<boolean> {
     noterRefus(c.id, null);
+    const clique = typeof patch.status === "string" ? (patch.status as Status) : null;
+    if (clique) setOptimiste((o) => ({ ...o, [c.id]: clique }));
+    enVol.current += 1;
     try {
-      await apiSend("PATCH", `/axispro/evaluations/${c.id}`, patch);
-      void mutate();
-      onChanged();
+      await enFile(c.id, () => apiSend("PATCH", `/axispro/evaluations/${c.id}`, patch));
+      if (clique) accepte.current[c.id] = clique;
+      // Preuve rattachée ou retirée : la ligne la montre tout de suite.
+      if ("document_ids" in patch) void mutate();
+      relireApresPause();
       return true;
     } catch (e) {
-      noterRefus(c.id, messageErreur(e, "Enregistrement impossible."));
+      if (clique) {
+        setOptimiste((o) => {
+          const n = { ...o };
+          const avant = accepte.current[c.id];
+          if (avant) n[c.id] = avant;
+          else delete n[c.id];
+          return n;
+        });
+      }
+      noterRefus(c.id, clique ? `${messageErreur(e, "Statut non enregistré.")} Le statut revient à l'état précédent.` : messageErreur(e, "Enregistrement impossible."));
       return false;
+    } finally {
+      enVol.current -= 1;
     }
   }
   async function validite(c: CriterionEval, docId: number, value: string): Promise<boolean> {
     noterRefus(c.id, null);
     try {
       await apiSend("PATCH", `/axispro/documents/${docId}`, { validity_date: value || null });
-      void mutate();
-      onChanged();
+      relireApresPause();
       return true;
     } catch (e) {
       noterRefus(c.id, messageErreur(e, "Validité non enregistrée."));
@@ -163,7 +261,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
   const parDomaine = d.scoring.domains
     .map((dom) => ({ dom, rows: lignes.filter((c) => c.domain_id === dom.domain_id) }))
     .filter((x) => x.rows.length > 0);
-  const restant = criteria.filter((c) => c.status === "not_assessed" && (gateIndex.get(c.gate) ?? 0) <= courant).length;
+  const restant = criteria.filter((c) => statut(c) === "not_assessed" && (gateIndex.get(c.gate) ?? 0) <= courant).length;
   const mesCodes = compartiments.filter((c) => moi && c.owner?.id === moi.id).map((c) => c.code);
   const domainesVisibles = compartiment ? d.scoring.domains.filter((x) => criteria.some((c) => c.domain_id === x.domain_id && String(c.compartment_id) === compartiment)) : d.scoring.domains;
 
@@ -191,7 +289,13 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
           <Button loading={enCours === "fiche"} disabled={occupe} onClick={() => void envoyer(() => apiDownload(`/axispro/dossiers/${d.id}/evaluation.xlsx`, `${d.reference}_fiche_evaluation.xlsx`), undefined, "fiche")}>
             <Download className="h-4 w-4" /> Fiche d&apos;évaluation
           </Button>
-          {!verrou && <FileButton label="Importer une fiche" accept=".xlsx,.csv,.json" onFile={previsualiser} />}
+          {!verrou && <FileButton label="Importer une fiche" accept=".xlsx,.csv" onFile={previsualiser} />}
+          {/* Import d'un export JSON (échange technique) : replié sous « Plus », même aperçu avant d'appliquer. */}
+          {!verrou && (
+            <MenuPlus>
+              <FileButton label="Importer un export JSON" accept=".json" onFile={previsualiser} />
+            </MenuPlus>
+          )}
         </div>
         <div className={cx("mt-3 grid grid-cols-1 gap-2", compartiments.length ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
           {compartiments.length > 0 && (
@@ -235,7 +339,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
             >
               {ferme ? <ChevronRight className="h-4 w-4 text-muted" /> : <ChevronDown className="h-4 w-4 text-muted" />}
               {tete?.compartment && <PuceCompartiment code={tete.compartment} nom={`${tete.compartment_name ?? ""}, ${tete.owner ? `confié à ${tete.owner}` : "non affecté"}`} />}
-              <span className="font-mono text-[12px] text-muted">{dom.code}</span>
+              {detaille && <span className="font-mono text-[12px] text-muted">{dom.code}</span>}
               <span className="min-w-0 flex-1 truncate font-semibold text-ink">{dom.name}</span>
               {tete?.compartment && (
                 <span className={cx("hidden max-w-[180px] items-center gap-1 truncate text-[12px] sm:inline-flex", tete.owner ? "text-ink-2" : "italic text-muted")} title={tete.owner ? `Compartiment confié à ${tete.owner}` : "Compartiment non affecté"}>
@@ -256,7 +360,7 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
             {!ferme && (
               <ul className="divide-y divide-line border-t border-line">
                 {rows.map((c) => (
-                  <Critere key={c.id} c={c} files={files} verrou={verrou || !c.editable_by_me} erreur={refus[c.id] ?? null} depot={enCours === `preuve-${c.id}`} ouvert={ouvert === c.id} onToggle={() => setOuvert(ouvert === c.id ? null : c.id)} onSave={(p) => save(c, p)} onDeposer={(f, v) => deposer(c, f, v)} onValidite={(docId, v) => validite(c, docId, v)} onTelecharger={(doc) => void agir(() => apiDownload(`/axispro/documents/${doc.id}/download`, doc.name))} />
+                  <Critere key={c.id} c={c} statut={statut(c)} detaille={detaille} files={files} verrou={verrou || !c.editable_by_me} erreur={refus[c.id] ?? null} depot={enCours === `preuve-${c.id}`} ouvert={ouvert === c.id} onToggle={() => setOuvert(ouvert === c.id ? null : c.id)} onSave={(p) => save(c, p)} onDeposer={(f, v) => deposer(c, f, v)} onValidite={(docId, v) => validite(c, docId, v)} onTelecharger={(doc) => void agir(() => apiDownload(`/axispro/documents/${doc.id}/download`, doc.name))} />
                 ))}
               </ul>
             )}
@@ -301,8 +405,12 @@ export function CheckList({ d, onChanged }: { d: DossierDetail; onChanged: () =>
 
 const CHAMPS: Record<string, string> = { status: "statut", comment: "observation", deliverable: "livrable", responsible: "responsable", due_date: "échéance" };
 
-function Critere({ c, files, verrou, erreur, depot, ouvert, onToggle, onSave, onDeposer, onValidite, onTelecharger }: {
+function Critere({ c, statut, detaille, files, verrou, erreur, depot, ouvert, onToggle, onSave, onDeposer, onValidite, onTelecharger }: {
   c: CriterionEval;
+  /** Statut affiché : celui cliqué, avant même la réponse du noyau. */
+  statut: Status;
+  /** Grille complète : code du critère, poids et priorité chiffrée affichés (en infobulle sinon). */
+  detaille: boolean;
   files: DocFile[];
   verrou: boolean;
   /** Refus du dernier enregistrement de ce critère, affiché sur sa ligne. */
@@ -325,26 +433,28 @@ function Critere({ c, files, verrou, erreur, depot, ouvert, onToggle, onSave, on
     };
   }
   const [validite, setValidite] = useState("");
-  const requalifie = c.status !== "not_assessed" && c.retained !== c.status;
+  // Requalification lue du noyau : masquée tant qu'un statut cliqué attend la relecture.
+  const requalifie = statut === c.status && c.status !== "not_assessed" && c.retained !== c.status;
   const autres = files.filter((f) => !c.documents.some((x) => x.id === f.id) && f.state !== "rejected");
+  const technique = `${c.code} · poids ${fmtDec(c.weight)}${c.priority !== null ? ` · priorité ${arrondi(c.priority, 2)}` : ""}`;
   return (
     <li className={cx("px-4 py-3", c.knockout && (c.retained === "not_met" || c.retained === "partial") && "bg-danger-doux/30")}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5 text-sm">
-            <span className="font-mono text-xs text-muted">{c.code}</span>
-            <span className="font-medium text-ink">{c.name}</span>
+            {detaille && <span className="font-mono text-xs text-muted">{c.code}</span>}
+            <span className="font-medium text-ink" title={detaille ? undefined : technique}>{c.name}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {c.knockout && <Badge tone="danger">Knock-out</Badge>}
             {c.critical && <Badge tone="warn">Critique</Badge>}
             <Tag>{REQUIREMENT[c.requirement]}</Tag>
             <Tag>{c.gate}</Tag>
-            <Tag>Poids {fmtDec(c.weight)}</Tag>
+            {detaille && <Tag>Poids {fmtDec(c.weight)}</Tag>}
             {c.bankability && <Tag>Bancabilité</Tag>}
             {c.evidence_required && <Tag>Preuve exigée</Tag>}
             {c.documents.length > 0 && <Badge tone="ok">{c.documents.length} preuve{c.documents.length > 1 ? "s" : ""}</Badge>}
-            {c.priority !== null && <span className="text-[11.5px] font-semibold text-muted">priorité {arrondi(c.priority, 2)}</span>}
+            {detaille && c.priority !== null && <span className="text-[11.5px] font-semibold text-muted">priorité {arrondi(c.priority, 2)}</span>}
           </div>
           {/* Ligne figée : seul le consultant à qui le compartiment est confié (ou le responsable du dossier) l'évalue. */}
           {!c.editable_by_me && c.owner && (
@@ -353,9 +463,9 @@ function Critere({ c, files, verrou, erreur, depot, ouvert, onToggle, onSave, on
             </div>
           )}
         </div>
-        <div role="group" aria-label={`Statut du critère ${c.code}`} className="flex flex-wrap gap-1.5">
+        <div role="group" aria-label={`Statut du critère ${c.code} ${c.name}`} className="flex flex-wrap gap-1.5">
           {ORDRE.map((value) => {
-            const actif = c.status === value;
+            const actif = statut === value;
             return (
               <button
                 key={value}
@@ -379,7 +489,7 @@ function Critere({ c, files, verrou, erreur, depot, ouvert, onToggle, onSave, on
           <span>Retenu <b>{STATUS_LABELS[c.retained].toLowerCase()}</b> par la politique : {c.alerts.join(" ; ")}.</span>
         </div>
       )}
-      {c.suggestion && <Suggestion c={c} verrou={verrou} onApply={(status) => void onSave({ status, comment: c.comment || `Statut suggéré par le modèle financier : ${c.suggestion?.label} ${valeurIndicateur(c.suggestion?.value ?? null, c.suggestion?.unit ?? "")}.` })} />}
+      {c.suggestion && <Suggestion c={c} statut={statut} verrou={verrou} onApply={(status) => void onSave({ status, comment: c.comment || `Statut suggéré par le modèle financier : ${c.suggestion?.label} ${valeurIndicateur(c.suggestion?.value ?? null, c.suggestion?.unit ?? "")}.` })} />}
       <button type="button" onClick={onToggle} aria-expanded={ouvert} className="mt-2 inline-flex items-center gap-1 text-[12.5px] font-semibold text-accent hover:underline">
         {ouvert ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         Détails, preuves et suivi{c.responsible ? ` · ${c.responsible}` : ""}{c.due_date ? ` · échéance ${fmtDate(c.due_date)}` : ""}
@@ -460,7 +570,7 @@ export function valeurIndicateur(v: number | null, unite: string) {
 }
 
 /** Statut suggéré pour un critère adossé à un indicateur du modèle financier. */
-function Suggestion({ c, verrou, onApply }: { c: CriterionEval; verrou: boolean; onApply: (status: Status) => void }) {
+function Suggestion({ c, statut, verrou, onApply }: { c: CriterionEval; statut: Status; verrou: boolean; onApply: (status: Status) => void }) {
   const s = c.suggestion!;
   const seuil = `${s.higher ? "au moins" : "au plus"} ${valeurIndicateur(s.threshold, s.unit)}${s.partial !== null ? `, incomplet à ${valeurIndicateur(s.partial, s.unit)}` : ""}`;
   return (
@@ -473,7 +583,7 @@ function Suggestion({ c, verrou, onApply }: { c: CriterionEval; verrou: boolean;
         <>
           <span className="text-muted">Statut suggéré :</span>
           <b>{STATUS_LABELS[s.status]}</b>
-          {c.status !== s.status && !verrou && (
+          {statut !== s.status && !verrou && (
             <Button size="sm" className="ml-auto" onClick={() => onApply(s.status!)}>
               <Target className="h-3.5 w-3.5" /> Appliquer
             </Button>

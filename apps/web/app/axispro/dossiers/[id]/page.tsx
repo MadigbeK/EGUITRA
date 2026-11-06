@@ -48,6 +48,8 @@ export default function DossierPage({ params }: { params: Promise<{ id: string }
 
 function Dossier({ d, relire }: { d: DossierDetail; relire: () => void }) {
   const [tab, setTab] = useState<Tab>("synthese");
+  // Compartiment choisi sur une carte de la synthèse : l'évaluation s'ouvre filtrée sur lui.
+  const [compartiment, setCompartiment] = useState<number | null>(null);
   // État du dossier : profil cabinet (PATCH /axispro/dossiers/<id>). Nouvelle révision : associé du cabinet
   // ou direction, autre que celui qui a verrouillé (POST /axispro/dossiers/<id>/new-revision, décision du
   // gérant du 22 octobre 2026). L'administration consulte.
@@ -180,10 +182,13 @@ function Dossier({ d, relire }: { d: DossierDetail; relire: () => void }) {
           { key: "temps", label: "Temps" },
         ]}
         value={tab}
-        onChange={setTab}
+        onChange={(t) => {
+          setCompartiment(null);
+          setTab(t);
+        }}
       />
-      {tab === "synthese" && <Synthese d={d} onChanged={relire} />}
-      {tab === "evaluation" && <CheckList d={d} onChanged={relire} />}
+      {tab === "synthese" && <Synthese d={d} onChanged={relire} onEvaluer={(id) => { setCompartiment(id); setTab("evaluation"); }} />}
+      {tab === "evaluation" && <CheckList key={compartiment ?? "tous"} d={d} onChanged={relire} compartimentInitial={compartiment} />}
       {tab === "gates" && <Gates d={d} onChanged={relire} />}
       {tab === "modele" && <ModeleFinancier dossierId={d.id} reference={d.reference} locked={d.locked} devise={d.currency?.name} onChanged={relire} />}
       {tab === "risques" && <Risques dossierId={d.id} onChanged={relire} />}

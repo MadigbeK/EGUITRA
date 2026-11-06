@@ -8,7 +8,7 @@ import { apiDownload, useApi } from "@/lib/api-client";
 import { ACTION_STATE, FUNDING_STATE, GATE_DECISION, INSTRUMENTS, RECO, RISK_LEVEL, STATUS_LABELS, type ActionState, type DossierDetail, type FundingState, type Indicators, type JournalEntry, type RiskLevel, type StandardDoc } from "@/lib/axispro-types";
 import { INSECABLE, fmtDate, fmtDateTime, fmtDec, fmtInt, fmtPct, fmtRatio } from "@/lib/format";
 import { annees, ratio } from "@/components/axispro/cellules";
-import { PuceCompartiment, montant, scoreEcrit, useRetour } from "./commun";
+import { MenuPlus, PuceCompartiment, montant, scoreEcrit, useRetour } from "./commun";
 
 /** Plafond de lecture du journal : les 500 dernières inscriptions, puis jusqu'à 2 000 à la demande. */
 const JOURNAL_COURT = 500;
@@ -92,9 +92,12 @@ export function Rapport({ d }: { d: DossierDetail }) {
       <div className="no-print flex flex-wrap gap-2">
         <Button variant="primary" loading={enCours === "pdf"} disabled={occupe} onClick={() => telecharger("pdf", `/axispro/dossiers/${d.id}/report.pdf`, `${ref}_rapport_comite.pdf`)}><FileText className="h-4 w-4" /> Rapport du comité (PDF)</Button>
         <Button loading={enCours === "xlsx"} disabled={occupe} onClick={() => telecharger("xlsx", `/axispro/dossiers/${d.id}/report.xlsx`, `${ref}_evaluation.xlsx`)}><FileSpreadsheet className="h-4 w-4" /> Classeur d&apos;évaluation</Button>
-        <Button loading={enCours === "json"} disabled={occupe} onClick={() => telecharger("json", `/axispro/dossiers/${d.id}/export.json`, `${ref}_evaluation.json`)}><Download className="h-4 w-4" /> Export JSON</Button>
         <Button loading={enCours === "pieces"} disabled={occupe} onClick={() => telecharger("pieces", `/axispro/dossiers/${d.id}/pieces.pdf`, `${ref}_pieces_a_fournir.pdf`)}><ScrollText className="h-4 w-4" /> Pièces à fournir (PDF)</Button>
         <Button onClick={() => window.print()}><Printer className="h-4 w-4" /> Imprimer l&apos;aperçu</Button>
+        {/* Export technique (échange avec un autre outil) : replié sous « Plus ». */}
+        <MenuPlus>
+          <Button loading={enCours === "json"} disabled={occupe} onClick={() => telecharger("json", `/axispro/dossiers/${d.id}/export.json`, `${ref}_evaluation.json`)}><Download className="h-4 w-4" /> Export JSON</Button>
+        </MenuPlus>
       </div>
       <Card title="Rapport de décision pour le comité">
         <div className="space-y-4 text-sm">

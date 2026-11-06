@@ -20,8 +20,8 @@ const PRIORITE_MOT: Partial<Record<NonNullable<DomainScore["priority"]>, string>
 
 /** « Où en est le dossier » : trois scores, classification, recommandation, ce qui bloque le
  * prochain gate et les cinq actions prioritaires, puis anomalies, domaines, fiche projet et
- * hypothèses de décision. */
-export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => void }) {
+ * hypothèses de décision. `onEvaluer` : une carte de compartiment ouvre l'évaluation filtrée sur lui. */
+export function Synthese({ d, onChanged, onEvaluer }: { d: DossierDetail; onChanged: () => void; onEvaluer?: (compartmentId: number) => void }) {
   const s = d.scoring;
   const t = s.thresholds;
   const scores = [
@@ -86,7 +86,7 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
         <Kpi label="Complétude de la data room" value={fmtPct(s.dataroom_completeness, 0)} hint={pluriel(s.documents_missing, "pièce non disponible", "pièces non disponibles")} />
       </div>
 
-      <SuiviCompartiments d={d} />
+      <SuiviCompartiments d={d} onEvaluer={onEvaluer} />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card title="Les actions prioritaires">
@@ -95,12 +95,12 @@ export function Synthese({ d, onChanged }: { d: DossierDetail; onChanged: () => 
               {d.gaps.map((g, i) => (
                 <li key={g.criterion_id} className={cx("rounded-xl border bg-panel px-3.5 py-3 text-sm", g.knockout ? "border-danger/30 bg-danger-doux/40" : "border-line")}>
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <span className="bg-accent grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
+                    {/* Rang de priorité ; la priorité chiffrée de la méthode reste en infobulle. */}
+                    <span title={`Priorité ${arrondi(g.priority, 2)}`} className="bg-accent grid h-6 min-w-6 place-items-center rounded-full px-1 text-[12px] font-bold text-white">{i + 1}</span>
                     {g.compartment && <PuceCompartiment code={g.compartment} nom={g.compartment_name} />}
                     <span className="font-medium">{g.code} {g.name}</span>
                     {g.knockout && <Badge tone="danger">Knock-out</Badge>}
                     {g.critical && <Badge tone={tonEtat("Critique")}>Critique</Badge>}
-                    <span className="ml-auto text-[11.5px] font-semibold text-muted">priorité {arrondi(g.priority, 2)}</span>
                   </div>
                   <div className="mt-1.5 pl-[34px] text-[12.5px] leading-snug text-ink-2">{g.action}</div>
                   <div className="mt-1 pl-[34px] text-[12px] text-muted">
@@ -408,9 +408,10 @@ function initiales(nom: string) {
  * confié. Le responsable du dossier (can_assign) affecte, reprend ou retire un consultant sur place ; un
  * autre consultant du cabinet ne peut que prendre en charge un compartiment libre (POST
  * /axispro/dossiers/<id>/assignments avec son propre identifiant) ; la direction et l'administration lisent.
- * Rien ne s'affiche pour une grille sans compartiments.
+ * Rien ne s'affiche pour une grille sans compartiments. Le nom d'un compartiment (toute la carte, hors
+ * affectation) ouvre l'onglet Évaluation filtré sur lui.
  */
-function SuiviCompartiments({ d }: { d: DossierDetail }) {
+function SuiviCompartiments({ d, onEvaluer }: { d: DossierDetail; onEvaluer?: (compartmentId: number) => void }) {
   const compartiments = d.scoring.compartments ?? [];
   const { cabinet, moi } = useCabinet();
   const affecte = cabinet && d.can_assign;
@@ -444,11 +445,23 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
           const options = [...(consultants ?? [])];
           if (c.owner && !options.some((u) => u.id === c.owner?.id)) options.unshift(c.owner);
           return (
-            <li key={c.compartment_id} className={cx("flex min-w-0 flex-col rounded-xl border p-3.5 transition-colors", c.knockouts ? "border-danger/35 bg-danger-doux/25" : "border-line bg-panel hover:border-line-strong")}>
+            <li key={c.compartment_id} className={cx("relative flex min-w-0 flex-col rounded-xl border p-3.5 transition-colors", c.knockouts ? "border-danger/35 bg-danger-doux/25" : "border-line bg-panel hover:border-line-strong")}>
               <div className="flex items-start gap-2.5">
                 <PuceCompartiment code={c.code} nom={c.name} className="mt-0.5" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-semibold leading-snug text-ink">{c.name}</div>
+                  {onEvaluer ? (
+                    // Lien étendu à la carte (pseudo-élément) ; la ligne d'affectation reste au-dessus.
+                    <button
+                      type="button"
+                      onClick={() => onEvaluer(c.compartment_id)}
+                      title={`Évaluer les critères du compartiment ${c.code}`}
+                      className="text-left text-[13.5px] font-semibold leading-snug text-ink after:absolute after:inset-0 after:rounded-xl after:content-[''] hover:text-accent hover:underline focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-accent-vif"
+                    >
+                      {c.name}
+                    </button>
+                  ) : (
+                    <div className="text-[13.5px] font-semibold leading-snug text-ink">{c.name}</div>
+                  )}
                   <div className="mt-0.5 line-clamp-2 text-[11.5px] leading-snug text-muted" title={c.domains.join(", ")}>{c.domains.join(" · ") || "Aucun domaine"}</div>
                 </div>
                 <div className="flex-none text-right">
@@ -466,7 +479,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
                 <Chiffre titre="Études à produire renseignées" court="Études" valeur={c.studies} />
                 <Chiffre titre="Knock-outs actifs" court="KO" valeur={c.knockouts} ton={c.knockouts ? "text-danger" : undefined} />
               </dl>
-              <div className="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
+              <div className="relative z-[1] mt-3 flex items-center gap-2 border-t border-line pt-2.5">
                 <span aria-hidden className={cx("grid h-7 w-7 flex-none place-items-center rounded-full text-[11px] font-bold", c.owner ? "bg-accent text-white" : "border border-dashed border-line-strong text-muted")}>
                   {c.owner ? initiales(c.owner.name) : "?"}
                 </span>
@@ -496,7 +509,7 @@ function SuiviCompartiments({ d }: { d: DossierDetail }) {
         })}
       </ul>
       <p className="mt-3 text-[12px] text-muted">
-        Un compartiment regroupe des domaines de la grille. Le consultant qui le reçoit retrouve ses critères par « Mes compartiments » dans l&apos;évaluation ; le score se lit comme celui d&apos;un domaine (repères 30, 50 et 65).
+        Un compartiment regroupe des domaines de la grille. Cliquez sur son nom pour évaluer ses critères ; le consultant qui le reçoit les retrouve aussi par « Mes compartiments » dans l&apos;évaluation. Le score se lit comme celui d&apos;un domaine (repères 30, 50 et 65).
       </p>
     </Card>
   );
