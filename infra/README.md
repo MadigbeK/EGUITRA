@@ -174,9 +174,11 @@ au client par un moyen sûr, puis l'effacer du serveur.
   un nom en `.localhost` (jamais joignable) : la production reste fermée tant qu'ils ne sont pas définis.
 - Domaine officiel : `nimova.cloud`, enregistré le 6 novembre 2026 chez OVH (zone DNS gérée dans
   l'espace client OVH), en service depuis ce jour : `finance`, `axispro`, `portail`, `recette` et
-  `noyau`. `nimova.cloud` et `www` gardent la page d'attente d'OVH. Pour rejouer une bascule :
+  `noyau`. `nimova.cloud` et `www` gardent la page d'attente d'OVH tant que leurs enregistrements A ne
+  visent pas le serveur ; le proxy est prêt à les renvoyer vers `finance` (302), une fois ces deux
+  enregistrements posés et `infra/domaines.sh appliquer nimova.cloud` rejoué. Pour rejouer une bascule :
   1. dans la zone DNS, enregistrements A vers l'adresse du serveur pour `finance`, `axispro`,
-     `portail` (ou le nom choisi pour le portail), `recette` et `noyau` ;
+     `portail` (ou le nom choisi pour le portail), `recette`, `noyau`, `www` et le nom nu ;
   2. `infra/domaines.sh verifier nimova.cloud` : chaque nom doit pointer vers le serveur ;
   3. `infra/domaines.sh appliquer nimova.cloud [nom-du-portail]` : copie de `.env`, noms inscrits, proxy
      recréé, certificats obtenus, chaque adresse contrôlée en HTTPS (le noyau répond 403 hors des

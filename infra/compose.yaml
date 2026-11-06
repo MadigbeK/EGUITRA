@@ -256,6 +256,8 @@ services:
       PORTAIL_DOMAIN: ${PORTAIL_DOMAIN:-portail.localhost}
       RECETTE_DOMAIN: ${RECETTE_DOMAIN:-recette.localhost}
       CORE_DOMAIN: ${CORE_DOMAIN:-noyau.localhost}
+      APEX_DOMAIN: ${APEX_DOMAIN:-apex.localhost}
+      WWW_DOMAIN: ${WWW_DOMAIN:-www.localhost}
       ADMIN_IPS: ${ADMIN_IPS:-127.0.0.1/32}
     ports:
       - "80:80"

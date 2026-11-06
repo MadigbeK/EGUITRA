@@ -50,6 +50,12 @@
 }
 
 # Noyau de production : administration technique seulement, depuis les adresses autorisées.
+# Nom nu du domaine et www : renvoi vers l'accueil de l'application (302, l'adresse peut encore changer).
+{$APEX_DOMAIN:apex.localhost}, {$WWW_DOMAIN:www.localhost} {
+	import commun
+	redir https://{$FINANCE_DOMAIN:finance.localhost}{uri} 302
+}
+
 {$CORE_DOMAIN:noyau.localhost} {
 	import commun
 	@admin remote_ip {$ADMIN_IPS}
