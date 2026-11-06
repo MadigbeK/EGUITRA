@@ -202,14 +202,15 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
-### 6 novembre 2026, nuit : lien unique validé en recette, production à lancer
+### 6 novembre 2026, nuit : lien unique en production (version 20261106-2350)
 
 - Décision du gérant : `https://nimova.cloud` seul lien de la production, carte blanche. L'accueil garde une tuile par écran : le regroupement par module proposé plus bas n'est pas retenu.
 - Code (commit 4e56beca) : le nom nu sert les applications ; `www`, `finance` et `axispro` renvoient vers lui en 302, chemin conservé ; `portail` renvoie vers `/portail`. Une seule page de connexion pour les espaces internes, à la marque, sans nom de module ; le portail, l'espace client et Rotations gardent la leur. NIMOVA Terrain vise la nouvelle adresse. La recette reste à part.
 - Vérifié sur la recette : types, construction de l'image, renvois de la racine, de `/accueil` et de chaque espace, rendu de la page de connexion. Connexion de 14 comptes de test depuis la nouvelle page : 10 comptes internes à l'accueil de leur profil, le porteur au portail, les 2 clients à l'espace client. `test.conducteur` reçoit `app_forbidden` : son profil n'ouvre que NIMOVA Terrain, comportement inchangé.
 - Répétition sur une copie de la production : 16 modules à jour, grille chargée, copie supprimée. Aucun module n'a changé depuis la version 20261106-1654.
-- Production non faite : le contrôle automatique de la session a refusé la mise en production, non contourné. Elle tourne encore en version 20261106-1654, avec les anciennes adresses. Le `Caddyfile` déjà copié sur le serveur n'est lu qu'à la recréation du proxy.
-- Reste pour basculer, dans cet ordre : poser `eguitra_service_client.public_url` à `https://nimova.cloud`, `infra/release.sh`, `infra/domaines.sh appliquer nimova.cloud`, puis contrôler les adresses et une connexion réelle. Rotations déjà installé sous `finance` est à réinstaller depuis le lien unique.
+- Production basculée sur ordre explicite du gérant, après un premier refus du contrôle automatique de la session : `eguitra_service_client.public_url` à `https://nimova.cloud`, `infra/release.sh` (version 20261106-2350, sauvegarde prise avant), `infra/domaines.sh appliquer nimova.cloud`. Coupure non annoncée, inscrite dans `logs/interventions.txt`.
+- Contrôlé en production, sans connexion : `nimova.cloud` à 200 après renvois vers `/login`, certificat obtenu ; `www`, `finance` et `axispro` en 302 vers le lien unique, chemin et paramètres conservés ; `portail` en 302 vers `/portail` ; `/portail`, `/espace-client` et `/mobile` sur leur page de connexion ; `recette` à 200, `noyau` à 403 ; contrôle d'origine de la connexion accepté sur le nouveau nom (400 sur une requête vide) ; aucune erreur dans les journaux.
+- Reste au gérant : essayer une vraie connexion sur `https://nimova.cloud`, aucun compte de production n'étant utilisé par la session. Rotations déjà installé sous `finance` est à réinstaller depuis le lien unique. Le contrôle externe (geste 1.2 du plan) doit viser `https://nimova.cloud`.
 
 ### 6 novembre 2026, soir : nom nu en service, plan de mise en service, proposition du lien unique
 

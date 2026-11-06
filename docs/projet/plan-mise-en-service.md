@@ -115,8 +115,8 @@ Conditions de feu vert : `plan-de-bascule.md`, chapitre 1. La reprise se déroul
   Types, 79 tests sur 79, `expo-doctor` 20 sur 20, export Android : tout passe.
 - `infra/poser-secrets.sh` : pose masquée des secrets.
 - Projets des deux avenants et du comité n° 1, rendu contrôlé.
-- Lien unique `https://nimova.cloud` décidé par le gérant, codé, validé en recette et répété sur une copie
-  de la production. Bascule en production encore à lancer (voir `ETAT.md`, chapitre 7).
+- Lien unique `https://nimova.cloud` en production (version 20261106-2350) : `www`, `finance`, `axispro`
+  et `portail` y renvoient en 302. Reste une vraie connexion à essayer par le gérant (voir `ETAT.md`, chapitre 7).
 
 Le canal d'alerte n'a pas pu être créé par la session de travail : le contrôle automatique de
 l'environnement a refusé l'envoi vers `ntfy.sh` depuis le serveur. D'où le geste 1.1.
