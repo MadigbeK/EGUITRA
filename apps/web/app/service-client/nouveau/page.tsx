@@ -154,7 +154,7 @@ export default function NouveauDossierPage() {
               <Select value={f.channel} onChange={set("channel")} options={CANAUX.map((c) => ({ value: c.value, label: c.label }))} />
             </Field>
             <Field label="Catégorie">
-              <Select value={f.category_id} onChange={set("category_id")} options={[{ value: "", label: "À choisir" }, ...(ctx?.categories ?? []).filter((c) => c.active).map((c) => ({ value: c.id, label: c.name }))]} />
+              <Select value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value, kind: ctx?.categories.find((c) => String(c.id) === e.target.value)?.kind ?? f.kind })} options={[{ value: "", label: "À choisir" }, ...(ctx?.categories ?? []).filter((c) => c.active).map((c) => ({ value: c.id, label: c.name }))]} />
             </Field>
             <Field label="Type" hint="Une catégorie de réclamation propose le type « Réclamation ».">
               <Select value={f.kind} onChange={set("kind")} options={TYPES.map((t) => ({ value: t.value, label: t.label }))} />
