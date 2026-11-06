@@ -94,13 +94,13 @@ function ScoreParDomaine({ domaines }: { domaines: Resultats["domains"] }) {
         {domaines.map((x) => {
           const { priorite, classes } = apparenceDomaine(x);
           return (
-            <li key={x.domain_id} className="grid grid-cols-[minmax(0,1fr)_2.25rem_4.75rem] items-center gap-x-2 gap-y-1 text-[13.5px] sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_2.25rem_4.75rem]">
+            <li key={x.domain_id} className="grid grid-cols-[minmax(0,1fr)_2.25rem_6.75rem] items-center gap-x-2 gap-y-1 text-[13.5px] sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)_2.25rem_6.75rem]">
               <span className="col-span-3 min-w-0 text-ink-2 sm:col-span-1">{x.name}</span>
               <span className="block h-2.5 overflow-hidden rounded bg-panel-3" aria-hidden>
                 <span className={cx("block h-full rounded", classes.barre)} style={{ width: `${Math.max(0, Math.min(100, x.score ?? 0))}%` }} />
               </span>
               <span className="text-right font-semibold tabular text-ink">{x.score === null ? "-" : fmtFixe(x.score, 0)}</span>
-              <span className={cx("text-[12px] font-bold", classes.texte)}>{priorite ?? "-"}</span>
+              <span className={cx("text-[12px] font-bold", classes.texte)}>{priorite ? `Priorité ${priorite.toLowerCase()}` : "-"}</span>
             </li>
           );
         })}
