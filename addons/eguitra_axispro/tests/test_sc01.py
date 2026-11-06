@@ -345,9 +345,25 @@ class TestDossierSc01(ApiCase):
         self.assertEqual(status, 400)
 
     def test_pilotage_500_dossiers_en_moins_de_deux_secondes(self):
+        # Charge créée en SQL à partir d'un dossier réel : 500 dossiers et leurs critères, par l'ORM et le module d'audit,
+        # dépassent la mémoire allouée au processus de test.
         promoter = self.env["res.partner"].create({"name": "Promoteur de charge"})
-        self.env["axispro.dossier"].create([{"name": f"Charge {n}", "promoter_id": promoter.id, "company_id": self.cabinet.id}
-                                            for n in range(500)])
+        modele = self.env["axispro.dossier"].create({"name": "Charge", "promoter_id": promoter.id, "company_id": self.cabinet.id})
+        self.env.flush_all()
+        cr = self.env.cr
+        cr.execute("""SELECT column_name FROM information_schema.columns
+                       WHERE table_name = 'axispro_dossier' AND column_name NOT IN ('id', 'name', 'reference')""")
+        colonnes = ", ".join(f'"{row[0]}"' for row in cr.fetchall())
+        cr.execute(f"""INSERT INTO axispro_dossier (name, reference, {colonnes})
+                       SELECT 'Charge ' || n, 'MBAP-2099-' || lpad(n::text, 3, '0'), {colonnes}
+                         FROM axispro_dossier, generate_series(1, 500) AS n WHERE id = %s RETURNING id""", (modele.id,))
+        copies = [row[0] for row in cr.fetchall()]
+        cr.execute("""SELECT column_name FROM information_schema.columns
+                       WHERE table_name = 'axispro_evaluation' AND column_name NOT IN ('id', 'dossier_id')""")
+        colonnes = ", ".join(f'"{row[0]}"' for row in cr.fetchall())
+        cr.execute(f"""INSERT INTO axispro_evaluation (dossier_id, {colonnes})
+                       SELECT d, {colonnes} FROM axispro_evaluation, unnest(%s) AS d WHERE dossier_id = %s""",
+                   (copies, modele.id))
         token = self.lecteur  # Session ouverte avant la mesure.
         self.env.flush_all()
         self.env.invalidate_all()
