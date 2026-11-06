@@ -719,9 +719,9 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                  trend=[monthly[k]["XD"] for k in last12], status="bad" if xd < 0 else None,
                  definition="Valeur ajoutée moins charges de personnel (rubrique XD) : ce que l'exploitation dégage "
                             "avant amortissements, frais financiers et impôt."),
-            _kpi("ebe_margin", "Taux d'EBE", _pct_of(xd, xb), "pct", previous=_pct_of(prev["XD"], prev["XB"]),
+            _kpi("ebe_margin", "Taux d'excédent brut d'exploitation", _pct_of(xd, xb), "pct", previous=_pct_of(prev["XD"], prev["XB"]),
                  trend=[_pct_of(monthly[k]["XD"], monthly[k]["XB"]) for k in last12],
-                 definition="EBE / chiffre d'affaires."),
+                 definition="Excédent brut d'exploitation / chiffre d'affaires."),
             _kpi("net_result", "Résultat net", xi, "gnf", previous=prev["XI"], trend=[monthly[k]["XI"] for k in last12],
                  status="bad" if xi < 0 else None,
                  definition="Produits moins charges de toutes natures (rubrique XI), après impôt sur le résultat."),
@@ -733,7 +733,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                  trend=[p["bfr_days"] for p in positions], inverse=True,
                  definition="(Créances clients + stocks - dettes fournisseurs) / ventes TTC de la période × jours ; "
                             "tendance sur les ventes des trois mois glissants."),
-            _kpi("dso", "Délai moyen de recouvrement (DSO)", wc["dso"], "days", previous=wc_prev["dso"],
+            _kpi("dso", "Délai moyen d'encaissement des clients", wc["dso"], "days", previous=wc_prev["dso"],
                  target=th["dso_target_days"], trend=[p["dso"] for p in positions], inverse=True,
                  definition="Créances clients TTC / ventes TTC de la période × nombre de jours ; cible fixée par la "
                             "direction."),
@@ -741,9 +741,9 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                  target=th["transport_margin_min"], trend=transport_trend,
                  definition="Marge directe des rotations validées / montant facturable (prix du transport) ; cible : "
                             "marge transport minimale."),
-            _kpi("dscr", "Couverture du service de la dette (DSCR)", dscr, "ratio", previous=dscr_prev,
+            _kpi("dscr", "Couverture du service de la dette", dscr, "ratio", previous=dscr_prev,
                  target=th["dscr_min"], trend=self._dscr_trend(ctx, monthly),
-                 definition="EBE des douze derniers mois / service de la dette (capital et intérêts) des douze "
+                 definition="Excédent brut d'exploitation des douze derniers mois / service de la dette (capital et intérêts) des douze "
                             "derniers mois, à défaut des douze prochains."),
         ]
         health = self._health(ctx, pl, wc, th, cash, transport_margin)
@@ -859,19 +859,19 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             },
             "rentabilite": {
                 "score": stats.linear_score(ebe_rate, 0, 25), "label": "Rentabilité", "value": ebe_rate, "unit": "pct",
-                "comment": f"Taux d'EBE de {pct(ebe_rate)} (0 % = 0, 25 % et plus = 100).",
+                "comment": f"Taux d'excédent brut d'exploitation de {pct(ebe_rate)} (0 % = 0, 25 % et plus = 100).",
             },
             "solvabilite": {
                 "score": leverage_score, "label": "Solvabilité", "value": leverage, "unit": "ratio",
                 "comment": ("Pas de dette financière nette." if net_debt <= 0 else
                             f"Dette financière nette de {gnf(net_debt)}, soit {_num(leverage, 1)} {'année' if leverage < 2 else 'années'} d'EBE "
                             "(4 ans et plus = 0, 1 an et moins = 100)." if leverage is not None else
-                            f"Dette financière nette de {gnf(net_debt)} pour un EBE nul ou négatif sur douze mois."),
+                            f"Dette financière nette de {gnf(net_debt)} pour un excédent brut d'exploitation nul ou négatif sur douze mois."),
             },
             "recouvrement": {
                 "score": stats.linear_score(dso, 2 * target, target), "label": "Recouvrement", "value": dso,
                 "unit": "days",
-                "comment": (f"DSO de {_days(dso)} pour une cible de {_days(target)} (cible et moins = 100, double de la "
+                "comment": (f"Délai moyen d'encaissement de {_days(dso)} pour une cible de {_days(target)} (cible et moins = 100, double de la "
                             "cible = 0).") if dso is not None else "Aucune vente TTC sur la période.",
             },
             "exploitation": exploitation,
@@ -1068,7 +1068,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         acts = self._activities(ctx) or {}
         transport_id = acts.get("transport")
         effects = self._transport_effects(ctx)
-        steps = [{"key": "ebe_previous", "label": "EBE N-1", "value": prev["XD"], "kind": "total"}]
+        steps = [{"key": "ebe_previous", "label": "Excédent brut d'exploitation N-1", "value": prev["XD"], "kind": "total"}]
 
         def margin(rows, account_id):
             row = rows.get(account_id)
@@ -1090,8 +1090,8 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         if effects and not transport_done and (effects["revenue_delta"] or effects["margin_delta"]):
             steps += self._transport_steps(effects, effects["margin_delta"])
             explained += effects["margin_delta"]
-        steps.append(_step("other", "Hors activités et éléments hors EBE", (pl["XD"] - prev["XD"]) - explained))
-        steps.append({"key": "ebe", "label": "EBE N", "value": pl["XD"], "kind": "total"})
+        steps.append(_step("other", "Hors activités et hors excédent brut d'exploitation", (pl["XD"] - prev["XD"]) - explained))
+        steps.append({"key": "ebe", "label": "Excédent brut d'exploitation N", "value": pl["XD"], "kind": "total"})
         return steps, effects
 
     @staticmethod
@@ -1335,14 +1335,14 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         moves = [s for s in bridge if s["kind"] != "total" and s["key"] != "other"]
         if change is None or abs(change) < 5 or not moves:
             return []
-        method = ("Pont d'EBE : variation de la marge analytique de chaque activité ; transport décomposé en effets "
+        method = ("Pont de l'excédent brut d'exploitation : variation de la marge analytique de chaque activité ; transport décomposé en effets "
                   "volume (Δ m³ × tarif N-1), prix (Δ tarif par route × m³ N) et mix.")
-        metric = _metric("EBE", end, "gnf", start, "EBE N-1")
+        metric = _metric("Excédent brut d'exploitation", end, "gnf", start, "N-1")
         if end < start:
             worst = min(moves, key=lambda s: s["value"])
             return [insight(
                 "rentabilite.ebe_recul", "rentabilite", "high" if change <= -20 else "medium",
-                f"L'EBE recule de {pct(abs(change))} sur un an",
+                f"L'excédent brut d'exploitation recule de {pct(abs(change))} sur un an",
                 f"L'excédent brut d'exploitation passe de {gnf(start)} sur la même période de l'an dernier à {gnf(end)}. "
                 f"Premier facteur de recul : « {worst['label']} » ({gnf(worst['value'])}).",
                 metric=metric, impact_gnf=start - end, confidence=0.8, method=method,
@@ -1351,7 +1351,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 link="/analyse/rentabilite")]
         best = max(moves, key=lambda s: s["value"])
         return [insight(
-            "rentabilite.ebe_progression", "rentabilite", "positive", f"L'EBE progresse de {pct(change)} sur un an",
+            "rentabilite.ebe_progression", "rentabilite", "positive", f"L'excédent brut d'exploitation progresse de {pct(change)} sur un an",
             f"L'excédent brut d'exploitation passe de {gnf(start)} sur la même période de l'an dernier à {gnf(end)} ; "
             f"premier moteur : « {best['label']} » ({gnf(best['value'])}).", metric=metric, impact_gnf=end - start, confidence=0.8, method=method,
             evidence={"type": "bars", "data": {"steps": bridge}}, link="/analyse/rentabilite")]
@@ -1476,7 +1476,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         sim = self._cash_simulation(ctx)
         positions = self._position_months(ctx, 12)
         cycle = {"months": [p["month"] for p in positions], "series": [
-            {"key": "dso", "label": "Délai clients (DSO)", "unit": "days", "values": [p["dso"] for p in positions]},
+            {"key": "dso", "label": "Délai d'encaissement des clients", "unit": "days", "values": [p["dso"] for p in positions]},
             {"key": "dpo", "label": "Délai fournisseurs (DPO)", "unit": "days", "values": [p["dpo"] for p in positions]},
             {"key": "dio", "label": "Rotation des stocks (DIO)", "unit": "days", "values": [p["dio"] for p in positions]},
             {"key": "cycle", "label": "Cycle de conversion", "unit": "days", "values": [p["cycle"] for p in positions]},
@@ -1732,11 +1732,11 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                 items.append(insight(
                     "tresorerie.dso_degradation", "tresorerie", "medium",
                     f"Le délai de recouvrement s'allonge de {_days(fit['slope'])} par mois",
-                    f"Sur les {len(dso)} derniers mois, le DSO passe de {_days(dso[0][1])} à {_days(dso[-1][1])} (tendance "
+                    f"Sur les {len(dso)} derniers mois, le délai moyen d'encaissement passe de {_days(dso[0][1])} à {_days(dso[-1][1])} (tendance "
                     f"significative, R² {_num(fit['r2'], 2)}) ; chaque jour de délai immobilise environ {gnf(daily)}.",
-                    metric=_metric("DSO", dso[-1][1], "days", self._thresholds(ctx)["dso_target_days"], "Cible"),
+                    metric=_metric("Délai moyen d'encaissement", dso[-1][1], "days", self._thresholds(ctx)["dso_target_days"], "Cible"),
                     impact_gnf=fit["slope"] * 6 * daily, confidence=min(0.9, fit["r2"] or 0.5),
-                    method="Régression linéaire du DSO mensuel (soldes de fin de mois, ventes TTC des trois mois glissants).",
+                    method="Régression linéaire du délai moyen d'encaissement mensuel (soldes de fin de mois, ventes TTC des trois mois glissants).",
                     evidence={"type": "series", "data": {"months": [positions[i]["month"] for i, _v in dso],
                                                          "values": [v for _i, v in dso]}},
                     action="Relance systématique à l'échéance et conditions de paiement revues pour les clients en retard.",
@@ -2780,7 +2780,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
         }
         base = {"revenue_12m": revenue, "transport_revenue_12m": transport_revenue, "ebe_12m": ebe, "fuel_12m": fuel,
                 "payroll_12m": payroll, "variable_rate_pct": variable * 100 if variable is not None else None,
-                "variable_source": source, "unit": "GNF d'EBE annuel pour une hausse de 1 %"}
+                "variable_source": source, "unit": "GNF d'excédent brut d'exploitation annuel pour une hausse de 1 %"}
         return sensitivities, base
 
     def _forecast_insights(self, ctx, results, landing):
@@ -2819,9 +2819,9 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
                     confidence=confidence, method=method, evidence=evidence, link="/analyse/previsions"))
         if ebe["estimate"] < 0 and results["ebe"]["history_months"] >= 3:
             items.append(insight(
-                "previsions.ebe_negatif", "previsions", "critical", "L'exercice finirait avec un EBE négatif",
-                f"EBE estimé de l'exercice : {gnf(ebe['estimate'])} (fourchette {gnf(ebe['low'])} à {gnf(ebe['high'])}).",
-                metric=_metric("EBE estimé", ebe["estimate"], "gnf", 0, "Équilibre"), impact_gnf=-ebe["estimate"],
+                "previsions.ebe_negatif", "previsions", "critical", "L'exercice finirait avec un excédent brut d'exploitation négatif",
+                f"Excédent brut d'exploitation estimé de l'exercice : {gnf(ebe['estimate'])} (fourchette {gnf(ebe['low'])} à {gnf(ebe['high'])}).",
+                metric=_metric("Excédent brut d'exploitation estimé", ebe["estimate"], "gnf", 0, "Équilibre"), impact_gnf=-ebe["estimate"],
                 confidence=confidence, method=method,
                 action="Plan de redressement : tarifs, charges fixes, activités déficitaires.", link="/analyse/rentabilite"))
         change = revenue["vs_previous_pct"]

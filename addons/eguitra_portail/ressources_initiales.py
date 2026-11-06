@@ -5,7 +5,7 @@ Mise en forme simple du texte : # titre, **gras**, *italique*, - liste, 1. liste
 """
 
 RUBRIQUES = [
-    ("Préparer son dossier", "Pièces, data room et passage en comité", "FileCheck2", "azur"),
+    ("Préparer son dossier", "Pièces du dossier et passage en comité", "FileCheck2", "azur"),
     ("Financer son projet", "Banques, bailleurs, garanties et offres de prêt", "Landmark", "or"),
     ("Business plan et prévisions", "Chiffrer son projet de façon crédible", "TrendingUp", "lagon"),
     ("Juridique et fiscalité", "Société, contrats, obligations déclaratives", "Scale", "violet"),

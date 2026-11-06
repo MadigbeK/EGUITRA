@@ -809,10 +809,10 @@ class EguitraFinancePilotage(models.AbstractModel):
         absorbed = (xd - result) / xd * 100 if xd > 0 else None
         reading = f"Marge nette de {_num(net_pct)} %." if net_pct is not None else "Aucun chiffre d'affaires sur l'exercice."
         if xd > 0 and xb:
-            reading += (f" L'EBE représente {_num(xd / xb * 100)} % du chiffre d'affaires ; dotations, charges "
+            reading += (f" L'excédent brut d'exploitation représente {_num(xd / xb * 100)} % du chiffre d'affaires ; dotations, charges "
                         f"financières et impôts en absorbent {_num(absorbed)} %.")
         elif xb:
-            reading += " L'EBE est négatif : l'exploitation ne couvre pas ses charges courantes."
+            reading += " L'excédent brut d'exploitation est négatif : l'exploitation ne couvre pas ses charges courantes."
         q("result", "Combien l'entreprise a-t-elle gagné depuis le début de l'exercice ?", _money(result),
           "red" if result <= 0 else "green" if (net_pct or 0) >= 5 else "orange", reading)
 
@@ -873,7 +873,7 @@ class EguitraFinancePilotage(models.AbstractModel):
         debt = d["debt"]
         q("dscr", "Puis-je honorer mes échéances bancaires ?", "–" if dscr is None else _num(dscr, 2),
           "grey" if dscr is None or not minimum else "red" if dscr < 1 else "orange" if dscr < minimum else "green",
-          (f"L'EBE des douze derniers mois couvre {_num(dscr, 2)} fois le service de la dette. "
+          (f"L'excédent brut d'exploitation des douze derniers mois couvre {_num(dscr, 2)} fois le service de la dette. "
            + (f"Minimum fixé : {_num(minimum, 2)}." if minimum else "Minimum : seuil non fixé.")
            + (f" Prochaine échéance le {debt['next_due_date']:%d/%m/%Y} : {_money(debt['next_due_amount'])}."
               if debt.get("next_due_date") else ""))
@@ -1016,7 +1016,7 @@ class EguitraFinancePilotage(models.AbstractModel):
         if net_pct is not None:
             text += f", soit une marge nette de {_num(net_pct)} %"
             ebe = income["XD"]["ytd"]
-            text += f" pour un EBE de {_num(ebe / ca['ytd'] * 100)} % du chiffre d'affaires."
+            text += f" pour un excédent brut d'exploitation de {_num(ebe / ca['ytd'] * 100)} % du chiffre d'affaires."
         else:
             text += "."
         paragraphs.append(text)

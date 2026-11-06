@@ -32,7 +32,7 @@ ALERT_CODES = [
     ("dso_target_days", "Délai moyen de recouvrement cible (jours)"),
     ("client_concentration_pct", "Concentration maximale sur un client (% du chiffre d'affaires)"),
     ("payable_overdue_amount", "Dettes fournisseurs échues tolérées (GNF)"),
-    ("dscr_min", "Couverture minimale du service de la dette (DSCR)"),
+    ("dscr_min", "Couverture minimale du service de la dette"),
     ("net_result_negative", "Résultat net cumulé négatif"),
     ("close_delay_days", "Clôture mensuelle en retard de plus de (jours)"),
     ("transport_margin_min", "Marge transport minimale (%)"),
@@ -318,7 +318,7 @@ class EguitraAlertThreshold(models.Model):
                                       status="na"))
             else:
                 add(t, dso > t.value, "Délai de recouvrement au-delà de la cible", "Délai moyen de recouvrement",
-                    f"DSO de {_fr(dso)} jours pour une cible de {_fr(t.value, 0)} jours.", dso)
+                    f"Délai moyen d'encaissement de {_fr(dso)} jours pour une cible de {_fr(t.value, 0)} jours.", dso)
 
         t = on("client_concentration_pct")
         if t:
@@ -348,7 +348,7 @@ class EguitraAlertThreshold(models.Model):
             else:
                 add(t, dscr["dscr"] < t.value, "Couverture du service de la dette insuffisante",
                     "Couverture du service de la dette",
-                    f"DSCR de {_fr(dscr['dscr'], 2)} pour un minimum de {_fr(t.value, 2)}.", dscr["dscr"])
+                    f"Couverture de la dette de {_fr(dscr['dscr'], 2)} pour un minimum de {_fr(t.value, 2)}.", dscr["dscr"])
 
         # --- Rentabilité ---
         t = thresholds.get("net_result_negative")
