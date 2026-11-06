@@ -1052,7 +1052,7 @@ class EguitraFinancePilotage(models.AbstractModel):
                     f"de la dette de l'exercice atteint {_money(debt['service_fy'])}")
             if k["dscr"] is not None:
                 minimum = dash["thresholds"]["dscr_min"]
-                text += f", couvert {_num(k['dscr'], 2)} fois par l'EBE des douze derniers mois"
+                text += f", couvert {_num(k['dscr'], 2)} fois par l'excédent brut d'exploitation des douze derniers mois"
                 text += (f" ({'au-dessus' if k['dscr'] >= minimum else 'en dessous'} du minimum de {_num(minimum, 2)})"
                          if minimum else " (minimum : seuil non fixé)")
             paragraphs.append(text + ".")

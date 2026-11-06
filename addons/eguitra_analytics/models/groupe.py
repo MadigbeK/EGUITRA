@@ -864,7 +864,7 @@ class EguitraAnalyticsGroupe(models.AbstractModel):
             "solvabilite": {
                 "score": leverage_score, "label": "Solvabilité", "value": leverage, "unit": "ratio",
                 "comment": ("Pas de dette financière nette." if net_debt <= 0 else
-                            f"Dette financière nette de {gnf(net_debt)}, soit {_num(leverage, 1)} {'année' if leverage < 2 else 'années'} d'EBE "
+                            f"Dette financière nette de {gnf(net_debt)}, soit {_num(leverage, 1)} {'année' if leverage < 2 else 'années'} d'excédent brut d'exploitation "
                             "(4 ans et plus = 0, 1 an et moins = 100)." if leverage is not None else
                             f"Dette financière nette de {gnf(net_debt)} pour un excédent brut d'exploitation nul ou négatif sur douze mois."),
             },
