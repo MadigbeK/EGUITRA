@@ -125,12 +125,15 @@ export const NAV: Record<AppCode, NavSection[]> = {
     {
       label: "Cabinet",
       items: [
-        { href: "/axispro", label: "Dossiers", icon: "FolderKanban" },
+        { href: "/axispro", label: "Accueil", icon: "LayoutDashboard" },
+        { href: "/axispro/portefeuille", label: "Portefeuille", icon: "FolderKanban" },
+        { href: "/axispro/dossiers", label: "Dossiers, vue du cabinet", icon: "FileStack" },
         { href: "/axispro/actions", label: "Plan d'actions", icon: "ListChecks" },
         { href: "/axispro/financements", label: "Financements", icon: "HandCoins" },
         { href: "/axispro/comites", label: "Comités", icon: "Gavel" },
-        { href: "/axispro/temps", label: "Temps et facturation", icon: "Clock" },
-        { href: "/axispro/portail", label: "Portail des porteurs", icon: "Users" },
+        // Le lecteur ne lit ni les temps passés ni le portail (TIME_READ, eguitra_portail/controllers/cabinet.py).
+        { href: "/axispro/temps", label: "Temps et facturation", icon: "Clock", profiles: ["admin", "direction", "cabinet"] },
+        { href: "/axispro/portail", label: "Portail des porteurs", icon: "Users", profiles: ["admin", "direction", "cabinet"] },
       ],
     },
     {

@@ -8,12 +8,15 @@ import { createContext, useContext, type ReactNode } from "react";
  * cabinet : profil cabinet, seul à modifier un dossier (la direction et l'administration lisent).
  * scelle : associé du cabinet, ou direction sans profil d'administration : scelle la décision du comité, force le passage d'un gate,
  * ouvre une nouvelle révision (décision du gérant du 22 octobre 2026), toujours à deux personnes.
+ * associe : associé du cabinet, Administrateur du cahier des charges AxisPro : suppression d'un projet,
+ * validation d'un « Non applicable ».
  */
 export interface MoiAxispro {
   id: number;
   name: string;
   cabinet: boolean;
   scelle: boolean;
+  associe: boolean;
 }
 
 const Contexte = createContext<MoiAxispro | null>(null);

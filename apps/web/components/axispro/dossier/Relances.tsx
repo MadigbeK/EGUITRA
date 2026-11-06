@@ -47,14 +47,14 @@ const ETAT_PIECE: Record<RelanceItem["state"], { label: string; tone: "danger" |
 };
 
 /** Objet et corps du message préparé (première ligne « Objet : … »). */
-function decouper(message: string): { objet: string; corps: string } {
+export function decouper(message: string): { objet: string; corps: string } {
   const [premiere = "", ...reste] = message.split("\n");
   if (premiere.startsWith("Objet : ")) return { objet: premiere.slice(8), corps: reste.join("\n").replace(/^\n+/, "") };
   return { objet: "Pièces attendues", corps: message };
 }
 
 /** Numéro pour WhatsApp : chiffres seuls, indicatif de la Guinée ajouté à un numéro local de neuf chiffres. */
-function numeroWhatsApp(phone: string | null): string | null {
+export function numeroWhatsApp(phone: string | null): string | null {
   const chiffres = (phone ?? "").replace(/\D/g, "").replace(/^00/, "");
   if (chiffres.length === 9) return `224${chiffres}`;
   return chiffres.length >= 10 ? chiffres : null;

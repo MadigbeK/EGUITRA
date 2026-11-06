@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { DossierParcours } from "@/components/axispro/parcours/DossierParcours";
 
 export const metadata: Metadata = { title: "Dossier de projet" };
 
@@ -8,5 +9,5 @@ export const metadata: Metadata = { title: "Dossier de projet" };
 export default async function Layout({ children, params }: { children: ReactNode; params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!/^\d{1,9}$/.test(id)) notFound();
-  return children;
+  return <DossierParcours id={id}>{children}</DossierParcours>;
 }

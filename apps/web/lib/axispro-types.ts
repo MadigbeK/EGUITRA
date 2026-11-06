@@ -121,6 +121,8 @@ export interface DossierSummary {
   actions: ActionSummary;
   /** Relances du porteur. Absent des réponses antérieures au noyau qui le sert. */
   followup?: Followup;
+  /** Méthode de la grille du dossier : `sc01_v2` (référence) ou `platform` (ancienne). */
+  method?: MethodeEvaluation;
 }
 
 /**
@@ -139,19 +141,31 @@ export interface Followup {
   last_channel: string | null;
   next_date: string | null;
   delay_days: number;
+  /** Libellé et couleur du suivi tels que le noyau les établit (RG-02-03). */
+  label?: string;
+  tone?: TonSuivi;
 }
 
 /** Pièce ou document attendu du porteur ; `criteria` : codes des critères justifiés (cabinet seulement). */
 export interface RelanceItem {
   key: string;
   label: string;
-  category: string | null;
+  category?: string | null;
   state: "missing" | "partial" | "to_redo";
   priority: number;
   blocking: boolean;
   knockout: boolean;
   due_date: string | null;
   criteria: string[];
+  /** Grille SC-01 V2 : statut du critère, domaine, gate du knock-out, échéance dépassée. */
+  status?: string;
+  status_label?: string;
+  rank?: number;
+  domain?: string;
+  knockout_gate?: number | null;
+  overdue?: boolean;
+  observation?: string | null;
+  evaluation_id?: number | null;
 }
 
 export interface RelanceHistory {
@@ -169,6 +183,8 @@ export interface Relances {
   followup: Followup;
   contact: { name: string | null; email: string | null; phone: string | null };
   portal: boolean;
+  /** Un serveur d'envoi est paramétré : le noyau envoie la relance ; sinon, la messagerie du poste s'ouvre. */
+  email_ready?: boolean;
   items: RelanceItem[];
   message: string;
   channels: Array<{ key: string; label: string }>;
@@ -244,6 +260,8 @@ export interface DomainScore {
   weight: number;
   score: number | null;
   priority: "URGENTE" | "ÉLEVÉE" | "MOYENNE" | "FAIBLE" | null;
+  /** Couleur de la priorité (section 7.5), servie pour la grille SC-01 V2. */
+  color?: CouleurDomaine;
   assessed: number;
   criteria: number;
   gaps: number;
@@ -283,6 +301,12 @@ export interface Scoring {
   criteria: number;
   policy: { weighting: "flat" | "domain"; ko_partial_blocks: boolean; evidence_check: boolean; exclude_na: boolean; expiry_check: boolean };
   thresholds: { bankable: number; go: number; conditional: number; hold: number; dscr: number };
+  /** Grille SC-01 V2 : méthode, décision recommandée, critiques notés, « Non applicable » à valider. */
+  method?: MethodeEvaluation;
+  decision_label?: string | null;
+  ready_for_committee?: boolean;
+  critical_total?: number;
+  na_pending?: number;
 }
 
 export interface Review {
@@ -347,6 +371,12 @@ export interface DossierDetail extends DossierSummary {
   contact?: { name: string | null; email: string | null; phone: string | null };
   reviews: Review[];
   locked_review: { id: number; date: string; decision: Decision; fingerprint: string | null; locked_by: string | null } | null;
+  /** Recevabilité du Gate 0 : quatre conditions et décision « Projet recevable » (RG-05-03). */
+  admissibility?: Recevabilite;
+  /** DSCR saisi au Gate 3 (RG-08-02). */
+  dscr?: number | null;
+  /** États des 7 étapes (section 6.12) : grille SC-01 V2, vide sinon. */
+  steps?: EtapeNoyau[];
 }
 
 export interface CriterionEval {
@@ -390,6 +420,14 @@ export interface CriterionEval {
   assessed_at: string | null;
   indicator: string | null;
   suggestion: Suggestion | null;
+  /** Rang du critère dans la grille (0 à 110) et référence de la pièce qui le justifie. */
+  rank?: number;
+  reference?: string | null;
+  /** « Non applicable » en attente de validation : il compte comme « Non disponible » (RG-07-03). */
+  na_pending?: boolean;
+  na_validated?: boolean;
+  na_validated_by?: string | null;
+  na_validated_at?: string | null;
 }
 
 export interface JournalEntry {
@@ -834,3 +872,236 @@ export interface PieceStandard {
   /** Identifiants de ces critères (absents des réponses antérieures). */
   criterion_ids?: number[];
 }
+
+// ─── Parcours d'évaluation SC-01 V2 (cahier des charges V2.0 du cabinet, décision du gérant du 4 novembre) ───
+//
+// Formes du contrat des routes du noyau (référence, pilotage, pièces, résultats, comité). Les routes des
+// résultats et du comité ne répondent que sur un dossier `sc01_v2` : lib/axispro-parcours.ts établit la
+// même forme pour un dossier de l'ancienne méthode, l'écran n'a qu'un chemin. Pièces et exports d'un tel
+// dossier passent par ses anciennes routes (data room, dataroom.zip, report.xlsx).
+
+export type MethodeEvaluation = "sc01_v2" | "platform";
+export type TonSuivi = "rouge" | "orange" | "vert" | "neutre";
+export type CouleurDomaine = "rouge" | "orange" | "ocre" | "vert" | "gris";
+
+/** Gate tel que le servent le pilotage, les résultats et le comité. */
+export interface GateIndice { index: number; code: string; name: string }
+
+/** Listes des écrans (GET /axispro/reference). */
+export interface ReferenceAxispro {
+  policy: { id: number; name: string; version: number; method: MethodeEvaluation } | null;
+  sectors: string[];
+  gates: GateIndice[];
+  verifications: Array<{ key: VerificationPiece; label: string }>;
+  formats: string[];
+  max_file_mb: number;
+  relance_days: number;
+  rights: { create: boolean; evaluate: boolean; decide: boolean; validate_na: boolean; delete: boolean; read_only: boolean };
+}
+
+/** Ligne du portefeuille et des listes de l'accueil. */
+export interface LignePilotage {
+  id: number;
+  reference: string;
+  name: string | null;
+  promoter: string | { id: number; name: string } | null;
+  state: DossierSummary["state"];
+  consultant: string | null;
+  method: MethodeEvaluation;
+  admissible: boolean;
+  gate: GateIndice;
+  /** Indice du gate suivant, null au dernier. */
+  target_gate: number | null;
+  readiness: number;
+  apd: number;
+  bankability: number;
+  completeness: number;
+  knockouts: number;
+  knockouts_next: number;
+  classification: string;
+  decision: GateDecision | null;
+  decision_label: string | null;
+  pieces: number;
+  next_due: string | null;
+  next_due_overdue: boolean;
+  followup: Pick<Followup, "state" | "label" | "tone" | "due" | "missing" | "overdue" | "last_date" | "next_date" | "delay_days">;
+  updated_at: string | null;
+}
+
+/** Accueil et portefeuille (GET /axispro/pilotage) : listes entières, l'écran en montre six (RG-01-01). */
+export interface Pilotage {
+  today: string;
+  counters: { projects: number; to_chase: number; blocked: number; ready: number; apd_ready_plus: number };
+  to_chase: LignePilotage[];
+  ready: LignePilotage[];
+  blocked: LignePilotage[];
+  to_complete: Array<LignePilotage & { reason: string }>;
+  by_gate: Array<GateIndice & { count: number; pct: number }>;
+  recent: LignePilotage[];
+  rows: LignePilotage[];
+}
+
+export type CleRecevabilite = "rec_sector" | "rec_country" | "rec_size" | "rec_promoter";
+
+/** Recevabilité du Gate 0 : conditions cochées et décision « Projet recevable » (annexe C). */
+export interface Recevabilite {
+  conditions: Array<{ key: CleRecevabilite; label: string; checked: boolean }>;
+  admissible: boolean;
+  date: string | null;
+  by: string | null;
+}
+
+/** État d'une des 7 étapes du dossier (section 6.12). */
+export interface EtapeNoyau { step: number; name: string; state: string; done: boolean }
+
+/** État d'une condition de passage au gate suivant (section 7.6). */
+export type EtatCondition = "met" | "unmet" | "assess";
+export interface ConditionPassage { key: string; label: string; state: EtatCondition; state_label?: string }
+
+/** Passage au gate suivant : conditions et recommandation de l'outil. */
+export interface PassageGate {
+  from: number;
+  /** Gate visé ; null au dernier gate, sans passage à décider. */
+  to: number | null;
+  to_name: string | null;
+  conditions: ConditionPassage[];
+  /** Le passage est possible : aucune condition « Non remplie ». */
+  favorable: boolean;
+}
+
+/** Knock-out actif ou à lever. */
+export interface KoActif { code?: string; name: string; domain?: string; gate_index?: number }
+
+/** Résultats du dossier (EC-08, GET /axispro/dossiers/<id>/resultats). */
+export interface Resultats {
+  gate: GateIndice;
+  target_gate: GateIndice | null;
+  tiles: {
+    readiness: number;
+    apd: number;
+    bankability: number;
+    completeness: number;
+    critical_missing: number;
+    critical_total: number | null;
+    knockouts: number;
+    knockouts_next: number;
+    decision: GateDecision | null;
+    decision_label: string | null;
+    classification: string;
+  };
+  blocked: KoActif[];
+  to_lift: KoActif[];
+  domains: Array<Pick<DomainScore, "domain_id" | "code" | "name" | "score" | "priority" | "color">>;
+  passage: PassageGate | null;
+  dscr: number | null;
+  /** Versions figées, la plus récente d'abord ; null pour un dossier de l'ancienne méthode, qui n'en a pas. */
+  versions: VersionEvaluation[] | null;
+  next_version: number | string | null;
+}
+
+/** Version figée d'une évaluation (v1, v2…) : aucune route ne la modifie. */
+export interface VersionEvaluation {
+  id: number;
+  rank: number;
+  label: string;
+  date: string;
+  readiness: number;
+  apd: number;
+  bankability: number;
+  completeness: number;
+  knockouts: number;
+  knockouts_next: number;
+  gate: GateIndice;
+  classification: string;
+  decision: GateDecision | null;
+  decision_label: string | null;
+  user: string | null;
+}
+
+/** Décision de comité enregistrée (EC-10) : aucune route ne la modifie. */
+export interface DecisionComite {
+  id: number;
+  date: string;
+  /** Gate examiné : « 1 → 2 ». */
+  gate: string;
+  decision: GateDecision;
+  decision_label?: string;
+  readiness: number | null;
+  members: string | null;
+  motive: string | null;
+  conditions?: string | null;
+  by?: string | null;
+  locked_at?: string | null;
+  fingerprint?: string | null;
+  /** Procès-verbal en PDF : décision scellée de la méthode SC-01 V2. */
+  pv?: string | null;
+}
+
+/** Lien de dépôt du promoteur (AJ-02), sans son jeton, qui ne se relit pas. */
+export interface LienDepot {
+  id: number;
+  created_at: string;
+  created_by: string;
+  expires_at: string;
+  revoked_at: string | null;
+  valid: boolean;
+  pieces: number;
+}
+
+export interface LiensDepot {
+  links: LienDepot[];
+  default_days: number;
+  max_days: number;
+}
+
+/** Comité d'un dossier (EC-10, GET /axispro/dossiers/<id>/decisions). */
+export interface DecisionsDossier {
+  gate: GateIndice;
+  gates: Array<GateIndice & { reached: boolean }>;
+  passage: PassageGate | null;
+  to_lift: KoActif[];
+  /** HOLD présélectionné si les conditions ne sont pas remplies. */
+  preselected: "go" | "hold";
+  can_decide: boolean;
+  /** Motif en clair quand le compte ne peut pas décider (droit, RG-00-01, dossier clos, dernier gate). */
+  refusal: string | null;
+  decisions: DecisionComite[];
+}
+
+/** Vérification d'une pièce (annexe C). */
+export type VerificationPiece = "to_check" | "conforming" | "unsigned" | "expired" | "incomplete";
+
+/** Pièce déposée dans la data room (EC-06). */
+export interface Piece {
+  id: number;
+  name: string;
+  original_name: string;
+  category_letter: string | null;
+  category_rank: number | null;
+  size: number;
+  mimetype: string;
+  verification: VerificationPiece;
+  verification_label: string;
+  source: "team" | "portal";
+  uploaded_at: string;
+  uploaded_by: string;
+  criterion: { evaluation_id: number; criterion_id: number; rank: number; code: string; name: string } | null;
+  download: string;
+  /** Reçue après la décision scellée : elle reste modifiable. */
+  after_lock?: boolean;
+}
+
+/** Data room d'un dossier (GET /axispro/dossiers/<id>/pieces). */
+export interface PiecesDossier {
+  count: number;
+  formats: string[];
+  max_file_mb: number;
+  categories: Array<{ letter: string; name: string; folder: string; count: number; expected: Array<{ id: number; name: string; required: boolean }>; pieces: Piece[] }>;
+  /** Pièces sans catégorie : dépôts du portail sans pièce standard, anciennes pièces. */
+  others: Piece[];
+  /** Critères à rattacher, groupés par domaine. */
+  criteria: Array<{ domain: string; items: Array<{ evaluation_id: number; criterion_id: number; rank: number; code: string; name: string }> }>;
+}
+
+/** Résultat d'un dépôt : un fichier refusé n'empêche pas les autres. */
+export interface DepotPieces { pieces: Piece[]; errors: Array<{ file: string; message: string }> }
