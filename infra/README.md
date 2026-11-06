@@ -177,18 +177,22 @@ au client par un moyen sûr, puis l'effacer du serveur.
   obtenu par Caddy (`docker compose --profile proxy up -d caddy`). Les domaines non renseignés prennent
   un nom en `.localhost` (jamais joignable) : la production reste fermée tant qu'ils ne sont pas définis.
 - Domaine officiel : `nimova.cloud`, enregistré le 6 novembre 2026 chez OVH (zone DNS gérée dans
-  l'espace client OVH), en service depuis ce jour : `finance`, `axispro`, `portail`, `recette` et
-  `noyau`. `nimova.cloud` et `www` gardent la page d'attente d'OVH tant que leurs enregistrements A ne
-  visent pas le serveur ; le proxy est prêt à les renvoyer vers `finance` (302), une fois ces deux
-  enregistrements posés et `infra/domaines.sh appliquer nimova.cloud` rejoué. Pour rejouer une bascule :
-  1. dans la zone DNS, enregistrements A vers l'adresse du serveur pour `finance`, `axispro`,
-     `portail` (ou le nom choisi pour le portail), `recette`, `noyau`, `www` et le nom nu ;
+  l'espace client OVH). **Lien unique de la production : `https://nimova.cloud`** (décision du gérant du
+  6 novembre 2026), une seule connexion, puis l'accueil limité aux droits du compte. Les porteurs et les
+  clients reçoivent `https://nimova.cloud/portail` et `https://nimova.cloud/espace-client`, qui gardent
+  leur page de connexion. `www`, `finance` et `axispro` renvoient vers le lien unique, `portail` vers
+  `/portail`, en 302, chemin conservé. `recette` reste à part, pour les testeurs ; `noyau` reste fermé.
+  Pour rejouer une bascule :
+  1. dans la zone DNS, enregistrements A vers l'adresse du serveur pour le nom nu, `www`, `finance`,
+     `axispro`, `portail` (ou le nom choisi pour le portail), `recette` et `noyau` ;
   2. `infra/domaines.sh verifier nimova.cloud` : chaque nom doit pointer vers le serveur ;
   3. `infra/domaines.sh appliquer nimova.cloud [nom-du-portail]` : copie de `.env`, noms inscrits, proxy
      recréé, certificats obtenus, chaque adresse contrôlée en HTTPS (le noyau répond 403 hors des
      adresses `ADMIN_IPS`) ; l'ancien nom de la recette en `sslip.io` cesse de répondre ;
   4. vérifier `ACME_EMAIL` (adresse réelle) et `ADMIN_IPS` (adresses de l'équipe technique) dans
-     `.env` ;
+     `.env`, et poser le lien unique dans les liens envoyés par courriel (paramètres système
+     `eguitra_service_client.public_url` et, si les rendez-vous en ligne sont ouverts,
+     `eguitra_agenda.public_url`) ;
   5. rétablir la double authentification de la recette avant de communiquer son adresse
      (paramètre système `eguitra_api.mfa_required` = 1 dans la base de recette, puis
      `docker compose restart odoo-recette`).

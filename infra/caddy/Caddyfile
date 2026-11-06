@@ -1,7 +1,7 @@
 # Proxy d'entrée : TLS automatique (Let's Encrypt), en-têtes de sécurité, journal d'accès.
-# Les domaines viennent de infra/.env (FINANCE_DOMAIN, AXISPRO_DOMAIN, PORTAIL_DOMAIN, RECETTE_DOMAIN,
-# CORE_DOMAIN). Un domaine non renseigné prend un nom en .localhost, jamais joignable de l'extérieur :
-# on peut ainsi ouvrir la recette avant la production.
+# Les domaines viennent de infra/.env (APEX_DOMAIN, WWW_DOMAIN, FINANCE_DOMAIN, AXISPRO_DOMAIN,
+# PORTAIL_DOMAIN, RECETTE_DOMAIN, CORE_DOMAIN). Un domaine non renseigné prend un nom en .localhost, jamais
+# joignable de l'extérieur : on peut ainsi ouvrir la recette avant la production.
 # Seules les applications web sont publiques ; l'API du noyau ne l'est jamais (la passerelle Next
 # l'appelle sur le réseau Docker) et le client web du noyau n'est ouvert qu'aux adresses ADMIN_IPS.
 {
@@ -24,8 +24,9 @@
 	}
 }
 
-# EGUITRA Finance (et l'application mobile Rotations sous /mobile), AxisPro Suite, portail des porteurs.
-{$FINANCE_DOMAIN:finance.localhost}, {$AXISPRO_DOMAIN:axispro.localhost}, {$PORTAIL_DOMAIN:portail.localhost} {
+# Lien unique de la production : le nom nu du domaine sert toutes les applications (décision du gérant
+# du 6 novembre 2026). Une seule connexion, puis l'accueil limité aux droits du compte.
+{$APEX_DOMAIN:apex.localhost} {
 	import commun
 	request_body {
 		max_size 25MB
@@ -35,6 +36,20 @@
 	reverse_proxy web:3000 {
 		header_up X-Real-IP {remote_host}
 	}
+}
+
+# www et anciennes adresses : renvoi vers le lien unique, chemin conservé (favoris, liens déjà diffusés).
+# 302 : ces renvois ne se gravent pas dans les navigateurs.
+{$WWW_DOMAIN:www.localhost}, {$FINANCE_DOMAIN:finance.localhost}, {$AXISPRO_DOMAIN:axispro.localhost} {
+	import commun
+	redir https://{$APEX_DOMAIN:apex.localhost}{uri} 302
+}
+
+# Ancienne adresse du portail : sa racine mène au portail, à la page de connexion du cabinet.
+{$PORTAIL_DOMAIN:portail.localhost} {
+	import commun
+	redir / https://{$APEX_DOMAIN:apex.localhost}/portail 302
+	redir https://{$APEX_DOMAIN:apex.localhost}{uri} 302
 }
 
 # Recette : mêmes applications, environnement d'essai séparé (base, noyau et cookies distincts).
@@ -50,12 +65,6 @@
 }
 
 # Noyau de production : administration technique seulement, depuis les adresses autorisées.
-# Nom nu du domaine et www : renvoi vers l'accueil de l'application (302, l'adresse peut encore changer).
-{$APEX_DOMAIN:apex.localhost}, {$WWW_DOMAIN:www.localhost} {
-	import commun
-	redir https://{$FINANCE_DOMAIN:finance.localhost}{uri} 302
-}
-
 {$CORE_DOMAIN:noyau.localhost} {
 	import commun
 	@admin remote_ip {$ADMIN_IPS}

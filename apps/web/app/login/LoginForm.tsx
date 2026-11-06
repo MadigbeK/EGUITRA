@@ -24,9 +24,10 @@ async function post(url: string, body: unknown) {
   }
 }
 
-/** Phrase d'accueil : l'application ouverte, ou le cabinet pour les porteurs de projets. */
+/** Phrase d'accueil : la marque pour les espaces internes (page commune), le cabinet pour les porteurs de projets, sinon l'application ouverte. */
 function introduction(app: AppCode): string {
   if (app === "portail") return "Votre espace de porteur de projet chez MB AxisPro Consulting.";
+  if (isEspaceCode(app)) return "NIMOVA, votre système intégré de gestion.";
   const tagline = APPS[app].tagline;
   return `${APPS[app].name}, ${tagline.charAt(0).toLowerCase()}${tagline.slice(1)}.`;
 }

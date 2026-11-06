@@ -35,8 +35,8 @@ curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:8169/api/v1/health 2>/dev/
 curl -fsS --max-time 10 -o /dev/null http://127.0.0.1:3100/login 2>/dev/null || problems+=("recette : applications web sans réponse")
 # Accès publics par le proxy, en HTTPS : une panne du proxy, du pare-feu ou d'un certificat ne se voit
 # pas sur 127.0.0.1. Un certificat se renouvelle seul 30 jours avant son échéance : à moins de 14 jours,
-# le renouvellement échoue.
-for name in FINANCE_DOMAIN AXISPRO_DOMAIN PORTAIL_DOMAIN RECETTE_DOMAIN; do
+# le renouvellement échoue. Le lien unique répond 200, ses anciennes adresses 302 : curl -f accepte les deux.
+for name in APEX_DOMAIN WWW_DOMAIN FINANCE_DOMAIN AXISPRO_DOMAIN PORTAIL_DOMAIN RECETTE_DOMAIN; do
   domain=${!name:-}
   case "$domain" in "" | *.localhost) continue ;; esac
   env=production

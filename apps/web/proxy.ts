@@ -17,7 +17,7 @@ import {
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
 
-  // La racine ouvre l'accueil NIMOVA ; le domaine du portail garde son portail.
+  // La racine du lien unique ouvre l'accueil NIMOVA, limité aux droits du compte.
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   if (pathname === "/") {
     const app = appFromHost(host);
@@ -32,7 +32,9 @@ export async function proxy(req: NextRequest) {
   if (!app) return NextResponse.next();
 
   const refresh = req.cookies.get(COOKIES.refresh)?.value;
-  const loginUrl = new URL(`/login?app=${app}&next=${encodeURIComponent(pathname + search)}`, req.url);
+  // L'accueil, sans application mémorisée, mène à la page de connexion toute simple du lien unique.
+  const accueilSimple = pathname === "/accueil" && !search && app === appFromHost(host);
+  const loginUrl = new URL(accueilSimple ? "/login" : `/login?app=${app}&next=${encodeURIComponent(pathname + search)}`, req.url);
   if (!refresh) return NextResponse.redirect(loginUrl);
 
   if (!req.cookies.get(COOKIES.access)?.value || accessExpiring(req.cookies.get(COOKIES.expires)?.value)) {

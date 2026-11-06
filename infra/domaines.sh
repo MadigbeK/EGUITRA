@@ -3,9 +3,9 @@
 # dans infra/.env, recréation du proxy (certificats Let's Encrypt obtenus seuls), contrôle HTTPS.
 #   infra/domaines.sh verifier nimova.cloud                     noms attendus et leur adresse, rien ne change
 #   infra/domaines.sh appliquer nimova.cloud [nom-du-portail]  bascule (le portail : portail.<domaine> par défaut)
-# Noms : finance, axispro, portail, recette et noyau sous le domaine, plus le nom nu et www, renvoyés vers
-# finance. Le noyau ne répond qu'aux adresses ADMIN_IPS (403 ailleurs, y compris depuis le serveur lui-même :
-# c'est le signe que le proxy le sert).
+# Noms : le nom nu, lien unique de la production ; www, finance, axispro et portail, renvoyés vers lui ;
+# recette et noyau sous le domaine. Le noyau ne répond qu'aux adresses ADMIN_IPS (403 ailleurs, y compris
+# depuis le serveur lui-même : c'est le signe que le proxy le sert).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -19,7 +19,7 @@ declare -A NAMES=(
   [RECETTE_DOMAIN]="recette.$DOMAIN" [CORE_DOMAIN]="noyau.$DOMAIN"
   [APEX_DOMAIN]="$DOMAIN" [WWW_DOMAIN]="www.$DOMAIN"
 )
-ORDER=(FINANCE_DOMAIN AXISPRO_DOMAIN PORTAIL_DOMAIN RECETTE_DOMAIN CORE_DOMAIN APEX_DOMAIN WWW_DOMAIN)
+ORDER=(APEX_DOMAIN WWW_DOMAIN FINANCE_DOMAIN AXISPRO_DOMAIN PORTAIL_DOMAIN RECETTE_DOMAIN CORE_DOMAIN)
 SERVER_IP=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") print $(i + 1)}')
 
 resolve() { getent ahostsv4 "$1" | awk '{print $1; exit}'; }
@@ -73,7 +73,7 @@ case "$ACTION" in
       done
       expected="200, 307 ou 308"
       [ "$key" = CORE_DOMAIN ] && expected="403 hors des adresses ADMIN_IPS"
-      case "$key" in APEX_DOMAIN | WWW_DOMAIN) expected="302 vers finance" ;; esac
+      case "$key" in WWW_DOMAIN | FINANCE_DOMAIN | AXISPRO_DOMAIN | PORTAIL_DOMAIN) expected="302 vers $DOMAIN" ;; esac
       printf "  %-28s HTTPS %s (attendu : %s)\n" "$name" "$code" "$expected"
     done
     echo "Noms inscrits dans infra/.env (copie de l'ancien fichier : secrets/env.avant-domaines-*)."

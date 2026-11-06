@@ -23,7 +23,7 @@
     "production": {
       "android": { "buildType": "app-bundle" },
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://finance.nimova.cloud/api/natif" }
+      "env": { "EXPO_PUBLIC_API_URL": "https://nimova.cloud/api/natif" }
     }
   },
   "submit": {

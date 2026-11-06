@@ -113,7 +113,7 @@ Seul `apps/terrain` est envoyé à Expo (`.easignore` à la racine du dépôt).
 
 Les autres profils portent leur adresse dans `eas.json`, sans laquelle l'application refuse de
 démarrer : `recette` (APK sur `recette.nimova.cloud`) et `production` (paquet sur
-`finance.nimova.cloud`).
+`nimova.cloud`).
 
 ## Organisation
 
@@ -159,7 +159,7 @@ démarrer : `recette` (APK sur `recette.nimova.cloud`) et `production` (paquet s
   (`Authorization: Bearer`), sans cookie ; routes de session rendues avec leurs jetons ; seuls
   passent les codes `terrain` et `mobile` et les routes du compte, de `/transport/` et de `/hsseq/`.
   `EXPO_PUBLIC_API_URL` = `https://<adresse de l'application web>/api/natif` : en production
-  `https://finance.nimova.cloud/api/natif`, en recette `https://recette.nimova.cloud/api/natif`.
+  `https://nimova.cloud/api/natif`, en recette `https://recette.nimova.cloud/api/natif`.
 - Noyau : l'application `terrain` est déclarée par le module HSSEQ (`organisation.APPS`, branche
   `hsseq`) ; ses sessions sont bornées à leurs routes (`organisation.SESSION_ROUTES["terrain"]`),
   et sur une rotation à la seule action `depart`.

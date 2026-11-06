@@ -10,7 +10,7 @@ Le domaine officiel est nimova.cloud, enregistré le 6 novembre 2026. Il remplac
 faire : adresse d'expédition des courriels.
 
 Point à trancher avec le gérant : le portail des porteurs garde la marque MB AxisPro Consulting.
-L'adresse portail.nimova.cloud montre la marque interne aux clients du cabinet ; un domaine du
+Les adresses portail.nimova.cloud et nimova.cloud/portail montrent la marque interne aux clients du cabinet ; un domaine du
 cabinet conviendrait peut-être mieux (`infra/domaines.sh appliquer nimova.cloud <nom-du-portail>`).
 
 ## Polices : accès sortant pendant la construction de l'image web

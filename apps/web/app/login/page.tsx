@@ -58,9 +58,12 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const message = (params.error && MESSAGES[params.error]) || (params.message && MESSAGES[params.message]) || null;
   const portail = app === "portail";
   const client = app === "espace-client";
+  // Une seule page de connexion pour tous les espaces internes : la marque, sans nom de module, à la
+  // couleur de la racine. Le portail, l'espace client et Rotations gardent la leur.
+  const commune = isEspaceCode(app);
 
   return (
-    <div data-app={app} className="min-h-screen bg-panel text-ink lg:grid lg:grid-cols-[minmax(0,10fr)_minmax(0,13fr)]">
+    <div data-app={commune ? "finance" : app} className="min-h-screen bg-panel text-ink lg:grid lg:grid-cols-[minmax(0,10fr)_minmax(0,13fr)]">
       <main className="relative flex min-h-[560px] flex-col px-6 pb-8 pt-8 sm:px-12 lg:order-1 lg:min-h-screen lg:px-16 lg:py-12">
         <div className="n-entree" style={{ "--i": 0 } as CSSProperties}>
           {portail ? (
@@ -76,7 +79,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               <Monogramme tuile={false} className="h-11 w-11" />
               <span className="leading-none">
                 <span className="block font-display text-[21px] font-bold tracking-[0.06em] text-ink">NIMOVA</span>
-                <span className="mt-1 block text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>
+                {!commune && <span className="mt-1 block text-[12.5px] font-semibold text-accent">{moduleOf(app)}</span>}
               </span>
             </span>
           )}
