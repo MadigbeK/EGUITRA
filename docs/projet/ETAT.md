@@ -149,7 +149,7 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 - Accès : tunnel SSH `ssh -N -L 3000:127.0.0.1:3000 -L 3100:127.0.0.1:3100 eguitra-vps`, puis http://localhost:3000 (production) et http://localhost:3100 (recette), chemins /finance, /axispro, /portail, /mobile.
 
 ### Production
-- Version en service : 20261104-1552 (commit 47e978f), voir chapitre 7. Historique : 20261022-1935 (commit c5df60b), mise en production le 22 octobre à 19 h 37 à la
+- Version en service : 20261106-1340 (lot 1 de simplicité), voir chapitre 7. Version précédente : 20261104-1552 (commit 47e978f). Historique : 20261022-1935 (commit c5df60b), mise en production le 22 octobre à 19 h 37 à la
   demande du gérant, sauvegarde prise avant : application web seule, modules identiques à la 20261022-1445.
   **Sécurité : Next.js 16.4.2** (la 16.4.0 avait trois failles publiées, dont deux exécutions de code à
   distance sans authentification : GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr, GHSA-p3m5-59mp-jv5r ;
@@ -202,6 +202,14 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
 
 ## 7. Prochaines étapes
 
+### 6 novembre 2026, 13 h 40 : gains de simplicité en production (lot 1, version 20261106-1340) ; serveur redémarré
+
+- Retour du client : « on veut que le système soit le plus simple possible dans son utilisation ». Le gérant a donné carte blanche sur les gains rapides, sans changer les règles de gestion ni retirer de fonction. Audit : `docs/projet/audit-ux-2026-11-04.md`, ses décisions D1 à D7 restent au gérant.
+- En production : version 20261106-1340 (code fd8aff4ba0 : lot 1 au commit 68da4bb, plus la correction d'un test), sauvegarde prise avant (20261106T1340). Accueil par métier, navigation et connexion des comptes externes à l'adresse commune, carte de refus, approbations, saisie des factures, clôture, rotations guidées, sigles développés, portail du porteur, RH, demandes des clients. Contrôlé : noyau et web 200, aucune erreur au noyau ni dans la mise à jour des modules. Mise en production non annoncée 48 heures à l'avance.
+- Vérifications : série complète sans autre échec qu'un défaut de test (libellé du compte lu en anglais, corrigé, `eguitra_approval:TestApproval` 15/15) ; parcours dans un vrai navigateur sur la recette, ordinateur et téléphone (390 × 844), 24/24 : connexions, refus, onglet ouvert sous un autre compte, aucun débordement ; `npm audit --omit=dev` à 0 ; répétition sur une copie de la production réussie.
+- Serveur redémarré le 6 novembre à 13 h 23 (noyau 7.0.0-42, lancé par le gérant), sauvegarde prise avant (20261106T1317) : services revenus seuls, coupure inscrite dans `logs/interventions.txt`. L'image de conversion `gotenberg` n'est plus lancée : outil de vérification de documents, l'application n'en dépend pas.
+- Le gérant précise que le client ne travaille pas encore en production : redémarrages et mises en production possibles à tout moment, sans annonce, jusqu'à l'exploitation réelle.
+
 ### 4 novembre 2026, 15 h 52 : correctifs de l'audit complet du système en production (version 20261104-1552)
 
 - Audit complet du 4 novembre : `docs/projet/audit-systeme-2026-11-04.md` (infrastructure, finance, sécurité du noyau, application web ; chaque constat « corrigé », « à faire » ou « décision »).
@@ -211,7 +219,7 @@ Revues de sécurité : trois revues automatiques traitées. La troisième (14 oc
   - web : redirection après connexion fermée aux adresses externes et à l'API ; déconnexion qui dit quand elle échoue ; poids et nombres saisis avec virgule ; contrôles des réglages de numérotation et du courriel des relances ;
   - exploitation : purge du cache Docker après chaque mise en production ; export de réversibilité sans secrets.
 - Vérifications : série complète 1 120 tests, puis tests ciblés (axispro, commerce, approval) 199/199 ; recette à jour sans erreur ; santé de la recette 200/200 ; redirection vers un site externe refusée ; répétition sur une copie de la production réussie.
-- Reste de l'audit, à faire par le gérant : redémarrer le serveur (noyau Linux mis à jour) ; stockage hors site et alertes ; T0 et comité de pilotage ; avenant ; double authentification ; accord écrit du client pour l'IA et WhatsApp ; libérer le disque C: du poste local.
+- Reste de l'audit, à faire par le gérant : stockage hors site et alertes ; T0 et comité de pilotage ; avenant ; double authentification ; accord écrit du client pour l'IA et WhatsApp ; libérer le disque C: du poste local.
 - Audit d'ergonomie demandé ensuite par le gérant, après le retour du client (« on veut que le système soit le plus simple possible dans son utilisation ») : `docs/projet/audit-ux-2026-11-04.md`.
 
 ### 3 novembre 2026, 22 h 38 : souhaits du cabinet MB AxisPro Consulting en production, relances du porteur et lecture du business plan (version 20261103-2238)
